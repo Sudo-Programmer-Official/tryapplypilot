@@ -15,25 +15,41 @@ JUNIOR_LEVEL_MARKERS = (
 
 STAFF_LEVEL_MARKERS = (
     "staff",
-    "principal",
 )
 
 SENIOR_LEVEL_MARKERS = (
     "senior",
     " sr ",
     "sr.",
+)
+
+PRINCIPAL_LEVEL_MARKERS = (
+    "principal",
+)
+
+LEAD_LEVEL_MARKERS = (
     "lead",
+)
+
+ARCHITECT_LEVEL_MARKERS = (
+    "architect",
 )
 
 
 def _normalize_experience_level(value: str) -> str:
     normalized = value.strip().casefold()
     if normalized in {"mid", "mid-level", "mid level", "software engineer ii", "engineer ii"}:
-        return "mid-level"
-    if normalized in {"senior", "sr", "lead"}:
+        return "mid"
+    if normalized in {"senior", "sr"}:
         return "senior"
-    if normalized in {"staff", "principal"}:
+    if normalized == "staff":
         return "staff"
+    if normalized == "principal":
+        return "principal"
+    if normalized == "lead":
+        return "lead"
+    if normalized == "architect":
+        return "architect"
     return normalized
 
 
@@ -52,12 +68,18 @@ def _infer_experience_level(title: str) -> str | None:
     normalized_title = f" {title.strip().casefold()} "
     if any(marker in normalized_title for marker in JUNIOR_LEVEL_MARKERS):
         return "junior"
+    if any(marker in normalized_title for marker in PRINCIPAL_LEVEL_MARKERS):
+        return "principal"
+    if any(marker in normalized_title for marker in LEAD_LEVEL_MARKERS):
+        return "lead"
     if any(marker in normalized_title for marker in STAFF_LEVEL_MARKERS):
         return "staff"
     if any(marker in normalized_title for marker in SENIOR_LEVEL_MARKERS):
         return "senior"
-    if "engineer" in normalized_title or "architect" in normalized_title:
-        return "mid-level"
+    if any(marker in normalized_title for marker in ARCHITECT_LEVEL_MARKERS):
+        return "architect"
+    if "engineer" in normalized_title:
+        return "mid"
     return None
 
 

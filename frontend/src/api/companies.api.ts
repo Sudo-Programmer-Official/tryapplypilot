@@ -76,7 +76,6 @@ export function saveAdminPreferences(settings: ScoutSettings): Promise<{ item: S
       work_arrangements: settings.work_arrangements.filter((role) => role.enabled).map((role) => role.label),
       experience_levels: settings.experience_levels.filter((role) => role.enabled).map((role) => role.label),
       excluded_keywords: settings.excluded_keywords,
-      profile_text: settings.profile_text,
       resume_variants: settings.resume_variants,
       initial_alert_window_hours: settings.initial_alert_window_hours,
       initial_sync_openai_job_limit: settings.initial_sync_openai_job_limit,

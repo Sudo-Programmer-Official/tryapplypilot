@@ -17,6 +17,8 @@ from app.retry import RetryPolicy, retry_sync
 from app.scoring import score_job
 from app.user_matching import (
     alert_freshness_hours,
+    alert_rule_allows_job,
+    build_user_profile_text,
     build_user_matching_settings,
     filter_reason_for_user,
     minimum_match_score,
@@ -106,6 +108,7 @@ def _job_record_from_row(row) -> NormalizedJobRecord:
 async def sync_recent_jobs_for_user(user: UserAccount, settings: AppSettings | None = None) -> None:
     resolved_settings = settings or get_settings()
     matching_settings = build_user_matching_settings(resolved_settings, user)
+    matching_profile_text = build_user_profile_text(user, resolved_settings)
     freshness_hours = alert_freshness_hours(user, resolved_settings)
     threshold = minimum_match_score(user, resolved_settings)
     now = datetime.now(timezone.utc)
@@ -135,7 +138,7 @@ async def sync_recent_jobs_for_user(user: UserAccount, settings: AppSettings | N
             if skip_reason is not None:
                 continue
 
-            match = await score_job(job, matching_settings, prefer_openai=True)
+            match = await score_job(job, matching_settings, prefer_openai=True, profile_text=matching_profile_text)
             country_code = infer_country_code(job.location, job.description_text)
             match_id = str(uuid5(NAMESPACE_URL, f"{row['job_id']}:{user.id}"))
             await conn.execute(
@@ -184,6 +187,7 @@ async def sync_recent_jobs_for_user(user: UserAccount, settings: AppSettings | N
                 not telegram_connected(user)
                 or match.score < threshold
                 or published_at < now - timedelta(hours=freshness_hours)
+                or not alert_rule_allows_job(job, user)
                 or remaining_alert_budget <= 0
             ):
                 continue

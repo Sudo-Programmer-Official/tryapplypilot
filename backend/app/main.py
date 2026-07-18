@@ -103,7 +103,6 @@ class PreferencesPayload(BaseModel):
     work_arrangements: list[str] = Field(default_factory=list)
     experience_levels: list[str] = Field(default_factory=list)
     excluded_keywords: list[str] = Field(default_factory=list)
-    profile_text: str = ""
     resume_variants: list[str] = Field(default_factory=list)
     initial_alert_window_hours: int = Field(default=24, ge=1, le=24 * 14)
     initial_sync_openai_job_limit: int = Field(default=20, ge=0, le=500)
@@ -163,17 +162,37 @@ class UserProfilePayload(BaseModel):
     resume_uploaded: bool = False
 
 
+class SkillPriorityPayload(BaseModel):
+    skill: str = Field(min_length=1)
+    weight: int = Field(ge=1, le=5)
+
+
 class UserPreferencesPayload(BaseModel):
     country: str = "US"
     locations: list[str] = Field(default_factory=list)
     preferred_companies: list[str] = Field(default_factory=list)
+    company_priorities: dict[str, str] = Field(default_factory=dict)
     preferred_roles: list[str] = Field(default_factory=list)
     skills: list[str] = Field(default_factory=list)
+    skill_priorities: list[SkillPriorityPayload] = Field(default_factory=list)
     work_arrangements: list[str] = Field(default_factory=list)
     experience_levels: list[str] = Field(default_factory=list)
+    job_types: list[str] = Field(default_factory=list)
+    company_sizes: list[str] = Field(default_factory=list)
+    industries: list[str] = Field(default_factory=list)
+    minimum_salary: int | None = Field(default=None, ge=0)
+    desired_salary: int | None = Field(default=None, ge=0)
+    visa_status: str = ""
+    years_of_experience: int | None = Field(default=None, ge=0, le=60)
+    travel_preference: str = ""
+    remote_preference: str = ""
     freshness_hours: int = Field(default=6, ge=1, le=168)
     minimum_match_score: int = Field(default=90, ge=0, le=100)
     notification_frequency: str = "instant"
+    notification_rules: list[str] = Field(default_factory=list)
+    excluded_keywords: list[str] = Field(default_factory=list)
+    resume_strategy: str = "auto"
+    preferred_resume_variants: list[str] = Field(default_factory=list)
 
 
 class TelegramVerifyPayload(BaseModel):
@@ -516,6 +535,12 @@ async def current_user_preferences(user: UserAccount = Depends(_current_user)) -
     return {"item": user.preferences}
 
 
+@app.get("/api/auth/me/companies")
+async def current_user_companies(_: UserAccount = Depends(_current_user)) -> dict[str, object]:
+    companies = [company for company in await list_catalog_companies() if company.enabled]
+    return {"items": [company.to_dict() for company in companies]}
+
+
 @app.put("/api/auth/me/preferences")
 async def update_preferences_for_current_user(
     payload: UserPreferencesPayload,
@@ -677,10 +702,8 @@ async def settings(_: UserAccount = Depends(require_admin)) -> dict[str, object]
 
 
 @app.get("/api/catalog/companies")
-async def companies_catalog(user: UserAccount = Depends(_current_user)) -> dict[str, object]:
+async def companies_catalog(_: UserAccount = Depends(require_admin)) -> dict[str, object]:
     companies = await list_catalog_companies()
-    if not role_allows(user.role, "admin"):
-        companies = [company for company in companies if company.enabled]
     return {"items": [company.to_dict() for company in companies]}
 
 

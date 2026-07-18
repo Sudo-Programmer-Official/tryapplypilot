@@ -1,4 +1,4 @@
-import type { AlertEvent, AuthUser, CompanyRequest, JobOpportunity, SavedJobRecord, Watchlist } from "../types";
+import type { AlertEvent, AuthUser, CompanyPreference, CompanyRequest, JobOpportunity, SavedJobRecord, Watchlist } from "../types";
 import { requestJson } from "./client";
 
 export function fetchUserJobs(): Promise<{ items: JobOpportunity[] }> {
@@ -11,6 +11,10 @@ export function fetchUserAlerts(): Promise<{ items: AlertEvent[] }> {
 
 export function fetchUserCompanyRequests(): Promise<{ items: CompanyRequest[] }> {
   return requestJson<{ items: CompanyRequest[] }>("/api/auth/me/company-requests");
+}
+
+export function fetchUserCompanies(): Promise<{ items: CompanyPreference[] }> {
+  return requestJson<{ items: CompanyPreference[] }>("/api/auth/me/companies");
 }
 
 export function createUserCompanyRequest(payload: {

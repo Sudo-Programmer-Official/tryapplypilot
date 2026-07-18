@@ -23,13 +23,14 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
         enabled_names = {company.company for company in settings.companies if company.enabled}
         self.assertEqual(enabled_names, ENABLED_COMPANY_NAMES)
 
-    async def test_effective_settings_builds_greenhouse_boards_from_catalog(self) -> None:
+    async def test_effective_settings_builds_runtime_companies_from_catalog(self) -> None:
         with patch.dict(os.environ, {"JOB_RADAR_RUNTIME_MODE": "seed"}, clear=True):
             get_settings.cache_clear()
             effective = await build_effective_app_settings()
-        greenhouse_boards = {board.company: board.token for board in effective.radar.greenhouse_boards}
-        self.assertIn("Databricks", greenhouse_boards)
-        self.assertEqual(greenhouse_boards["Databricks"], "databricks")
+        runtime_companies = {company.company: company for company in effective.radar.companies}
+        self.assertIn("Databricks", runtime_companies)
+        self.assertEqual(runtime_companies["Databricks"].connector, "greenhouse")
+        self.assertEqual(runtime_companies["Databricks"].external_identifier, "databricks")
         self.assertEqual(effective.radar.selected_country, "US")
 
     async def test_effective_settings_derive_enabled_connectors_from_catalog_not_env(self) -> None:

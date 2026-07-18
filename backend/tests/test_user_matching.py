@@ -6,6 +6,7 @@ from app.connectors.base import NormalizedJobRecord
 from app.config import get_settings
 from app.domain import OnboardingStatus, UserAccount
 from app.user_matching import (
+    build_user_profile_text,
     build_user_matching_settings,
     filter_reason_for_user,
     minimum_match_score,
@@ -21,7 +22,21 @@ def _user(
     country: str = "US",
     skills: list[str] | None = None,
     profile: dict[str, object] | None = None,
+    preferences: dict[str, object] | None = None,
 ) -> UserAccount:
+    base_preferences: dict[str, object] = {
+        "country": country,
+        "locations": locations,
+        "preferred_companies": companies,
+        "preferred_roles": roles,
+        "work_arrangements": ["Remote", "Hybrid"],
+        "experience_levels": ["Senior", "Staff"],
+        "minimum_match_score": threshold,
+        "freshness_hours": 6,
+        "skills": skills if skills is not None else ["Python", "Distributed Systems"],
+    }
+    if preferences:
+        base_preferences.update(preferences)
     return UserAccount(
         id="user-1",
         email="user@example.com",
@@ -29,17 +44,7 @@ def _user(
         full_name="Abhishek",
         country=country,
         profile=profile or {},
-        preferences={
-            "country": country,
-            "locations": locations,
-            "preferred_companies": companies,
-            "preferred_roles": roles,
-            "work_arrangements": ["Remote", "Hybrid"],
-            "experience_levels": ["Senior", "Staff"],
-            "minimum_match_score": threshold,
-            "freshness_hours": 6,
-            "skills": skills if skills is not None else ["Python", "Distributed Systems"],
-        },
+        preferences=base_preferences,
         onboarding=OnboardingStatus(progress_percent=0, steps=[]),
     )
 
@@ -78,6 +83,30 @@ class UserMatchingTests(unittest.TestCase):
         self.assertEqual(minimum_match_score(user, settings), 82)
         self.assertEqual(matching_settings.radar.minimum_match_score, 82)
         self.assertEqual(matching_settings.radar.selected_country, "US")
+
+    def test_build_user_profile_text_uses_structured_preferences_and_resume_metadata(self) -> None:
+        settings = get_settings()
+        user = _user(
+            locations=["Seattle", "Remote"],
+            companies=["Microsoft", "OpenAI"],
+            roles=["Senior Backend Engineer", "AI Platform Engineer"],
+            skills=["Python", "FastAPI", "Distributed Systems"],
+            profile={
+                "years_of_experience": 7,
+                "resume_uploaded": True,
+                "resume_skill_keywords": ["RAG", "PostgreSQL", "Kubernetes"],
+                "resume_library": [{"role_focus": "AI Platform"}],
+                "linkedin_url": "https://linkedin.com/in/example",
+            },
+        )
+        profile_text = build_user_profile_text(user, settings)
+        self.assertIn("Preferred roles: Senior Backend Engineer, AI Platform Engineer.", profile_text)
+        self.assertIn("Preferred companies: Microsoft, OpenAI.", profile_text)
+        self.assertIn("Preferred locations: Seattle, Remote.", profile_text)
+        self.assertIn("Core skills: Python, FastAPI, Distributed Systems.", profile_text)
+        self.assertIn("Resume skill signals: RAG, PostgreSQL, Kubernetes.", profile_text)
+        self.assertIn("Resume role focus: AI Platform.", profile_text)
+        self.assertIn("Years of experience: 7.", profile_text)
 
     def test_filter_reason_for_user_respects_company_and_location(self) -> None:
         settings = get_settings()
@@ -141,6 +170,87 @@ class UserMatchingTests(unittest.TestCase):
                 settings,
             ),
             "domain_interest",
+        )
+
+    def test_company_priorities_drive_visible_company_scope(self) -> None:
+        settings = get_settings()
+        user = _user(
+            locations=["Remote"],
+            companies=[],
+            roles=["AI Engineer"],
+            preferences={
+                "company_priorities": {
+                    "Microsoft": "dream",
+                    "Databricks": "high",
+                    "Oracle": "hidden",
+                },
+            },
+        )
+        self.assertIsNone(filter_reason_for_user(_job(company="Microsoft", location="Remote - US"), user, settings))
+        self.assertEqual(filter_reason_for_user(_job(company="Oracle", location="Remote - US"), user, settings), "company")
+
+    def test_filter_reason_for_user_respects_job_type_preferences(self) -> None:
+        settings = get_settings()
+        user = _user(
+            locations=["Remote"],
+            companies=["Microsoft"],
+            roles=["Senior Software Engineer"],
+            preferences={"job_types": ["full_time"]},
+        )
+        self.assertEqual(
+            filter_reason_for_user(
+                _job(
+                    company="Microsoft",
+                    location="Remote - US",
+                    title="Contract Senior Software Engineer",
+                    description_text="12 month contract backend role with Python.",
+                ),
+                user,
+                settings,
+            ),
+            "job_type",
+        )
+
+    def test_filter_reason_for_user_respects_visa_constraints(self) -> None:
+        settings = get_settings()
+        user = _user(
+            locations=["Remote"],
+            companies=["Microsoft"],
+            roles=["Senior Software Engineer"],
+            preferences={"visa_status": "need_sponsorship"},
+        )
+        self.assertEqual(
+            filter_reason_for_user(
+                _job(
+                    company="Microsoft",
+                    location="Remote - US",
+                    description_text="US citizenship required. Security clearance preferred for this backend platform role.",
+                ),
+                user,
+                settings,
+            ),
+            "visa",
+        )
+
+    def test_filter_reason_for_user_respects_travel_preference(self) -> None:
+        settings = get_settings()
+        user = _user(
+            locations=["Remote"],
+            companies=["Microsoft"],
+            roles=["Senior Software Engineer"],
+            preferences={"travel_preference": "up_to_10"},
+        )
+        self.assertEqual(
+            filter_reason_for_user(
+                _job(
+                    company="Microsoft",
+                    location="Remote - US",
+                    description_text="Platform engineering role with up to 25% travel across customer sites.",
+                ),
+                user,
+                settings,
+            ),
+            "travel",
         )
 
     def test_filter_reason_for_user_rejects_missing_required_preferences(self) -> None:

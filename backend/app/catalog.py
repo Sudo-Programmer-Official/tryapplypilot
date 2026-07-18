@@ -5,7 +5,7 @@ import json
 from uuid import NAMESPACE_URL, uuid5
 
 from app.company_catalog_defaults import build_recommended_company_preferences, default_role_families_for_company
-from app.config import AppSettings, GreenhouseBoard, TargetCompany, get_settings
+from app.config import AppSettings, get_settings
 from app.db.client import connection
 from app.domain import CompanyPreference, NotificationChannel, RolePreference, ScoutSettings, Watchlist, WatchlistTerm
 from app.job_metadata import normalize_supported_country
@@ -37,7 +37,6 @@ PREFERENCE_DEFAULTS = (
     "work_arrangements",
     "experience_levels",
     "excluded_keywords",
-    "profile_text",
     "resume_variants",
     "initial_alert_window_hours",
     "initial_sync_openai_job_limit",
@@ -189,7 +188,6 @@ async def ensure_catalog_seeded(settings: AppSettings | None = None) -> None:
                 "work_arrangements": list(resolved_settings.radar.preferred_work_arrangements),
                 "experience_levels": list(resolved_settings.radar.preferred_experience_levels),
                 "excluded_keywords": list(resolved_settings.radar.excluded_keywords),
-                "profile_text": resolved_settings.radar.profile_text,
                 "resume_variants": list(resolved_settings.radar.resume_variants),
                 "initial_alert_window_hours": resolved_settings.radar.initial_alert_window_hours,
                 "initial_sync_openai_job_limit": resolved_settings.radar.initial_sync_openai_job_limit,
@@ -205,6 +203,7 @@ async def ensure_catalog_seeded(settings: AppSettings | None = None) -> None:
                     key,
                     json.dumps(defaults[key]),
                 )
+            await conn.execute("DELETE FROM user_preferences WHERE preference_key = 'profile_text'")
 
             watchlist_count = int(await conn.fetchval("SELECT COUNT(*) FROM watchlists") or 0)
             if watchlist_count == 0:
@@ -558,7 +557,6 @@ async def build_scout_settings(settings: AppSettings | None = None) -> ScoutSett
         selected_country=normalize_supported_country(str(values.get("selected_country", resolved_settings.radar.selected_country))),
         alert_freshness_hours=int(values.get("alert_freshness_hours", resolved_settings.radar.alert_freshness_hours)),
         dashboard_freshness_hours=int(values.get("dashboard_freshness_hours", resolved_settings.radar.dashboard_freshness_hours)),
-        profile_text=str(values.get("profile_text", resolved_settings.radar.profile_text)).strip(),
         resume_variants=_read_list(values.get("resume_variants"), resolved_settings.radar.resume_variants),
         initial_alert_window_hours=int(values.get("initial_alert_window_hours", resolved_settings.radar.initial_alert_window_hours)),
         initial_sync_openai_job_limit=int(values.get("initial_sync_openai_job_limit", resolved_settings.radar.initial_sync_openai_job_limit)),
@@ -591,7 +589,6 @@ async def update_preference_settings(
         "work_arrangements": [str(value).strip() for value in payload.get("work_arrangements", []) if str(value).strip()],
         "experience_levels": [str(value).strip() for value in payload.get("experience_levels", []) if str(value).strip()],
         "excluded_keywords": [str(value).strip() for value in payload.get("excluded_keywords", []) if str(value).strip()],
-        "profile_text": str(payload.get("profile_text", resolved_settings.radar.profile_text)).strip(),
         "resume_variants": [str(value).strip() for value in payload.get("resume_variants", []) if str(value).strip()],
         "initial_alert_window_hours": int(
             payload.get("initial_alert_window_hours", resolved_settings.radar.initial_alert_window_hours)
@@ -617,6 +614,7 @@ async def update_preference_settings(
                     key,
                     json.dumps(value),
                 )
+            await conn.execute("DELETE FROM user_preferences WHERE preference_key = 'profile_text'")
     return await build_scout_settings(resolved_settings)
 
 
@@ -624,27 +622,14 @@ async def build_effective_app_settings(settings: AppSettings | None = None) -> A
     resolved_settings = settings or get_settings()
     scout_settings = await build_scout_settings(resolved_settings)
     enabled_connectors = _enabled_connector_keys(scout_settings.companies, resolved_settings.radar.enabled_connectors)
-    target_companies = tuple(
-        TargetCompany(
-            name=company.company,
-            enabled=company.enabled,
-            tier=company.tier,
-            priority=company.priority,
-            connector=company.connector,
-            poll_interval_minutes=company.poll_interval_minutes,
-        )
-        for company in scout_settings.companies
-    )
-    greenhouse_boards = tuple(
-        GreenhouseBoard(company=company.company, token=company.external_identifier)
-        for company in scout_settings.companies
-        if company.enabled and company.connector == "greenhouse" and company.external_identifier
-    )
+    primary_connector = str(scout_settings.primary_connector).strip().casefold()
+    if enabled_connectors and primary_connector not in {connector.casefold() for connector in enabled_connectors}:
+        primary_connector = enabled_connectors[0]
     return replace(
         resolved_settings,
         radar=replace(
             resolved_settings.radar,
-            primary_connector=scout_settings.primary_connector,
+            primary_connector=primary_connector,
             enabled_connectors=enabled_connectors,
             polling_interval_minutes=scout_settings.polling_interval_minutes,
             minimum_match_score=scout_settings.minimum_match_score,
@@ -653,14 +638,12 @@ async def build_effective_app_settings(settings: AppSettings | None = None) -> A
             selected_country=scout_settings.selected_country,
             alert_freshness_hours=scout_settings.alert_freshness_hours,
             dashboard_freshness_hours=scout_settings.dashboard_freshness_hours,
-            target_companies=target_companies,
-            greenhouse_boards=greenhouse_boards,
+            companies=tuple(scout_settings.companies),
             target_roles=tuple(role.label for role in scout_settings.roles if role.enabled),
             role_families=tuple(role.label for role in scout_settings.role_families if role.enabled),
             preferred_work_arrangements=tuple(role.label for role in scout_settings.work_arrangements if role.enabled),
             preferred_experience_levels=tuple(role.label for role in scout_settings.experience_levels if role.enabled),
             excluded_keywords=tuple(scout_settings.excluded_keywords),
-            profile_text=scout_settings.profile_text,
             resume_variants=tuple(scout_settings.resume_variants),
             initial_alert_window_hours=scout_settings.initial_alert_window_hours,
             initial_sync_openai_job_limit=scout_settings.initial_sync_openai_job_limit,

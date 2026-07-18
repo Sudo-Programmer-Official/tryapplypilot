@@ -281,7 +281,6 @@ class ScoutSettings:
     selected_country: str = "US"
     alert_freshness_hours: int = 6
     dashboard_freshness_hours: int = 24
-    profile_text: str = ""
     resume_variants: list[str] = field(default_factory=list)
     initial_alert_window_hours: int = 24
     initial_sync_openai_job_limit: int = 20

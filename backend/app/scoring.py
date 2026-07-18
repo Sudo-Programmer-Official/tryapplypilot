@@ -133,8 +133,14 @@ def _normalize_resume_choice(choice: str, settings: AppSettings, fallback: str) 
     return fallback
 
 
-def _request_openai_match(job: NormalizedJobRecord, settings: AppSettings, heuristic: MatchResult) -> MatchResult:
-    profile_text = build_profile_text(settings)
+def _request_openai_match(
+    job: NormalizedJobRecord,
+    settings: AppSettings,
+    heuristic: MatchResult,
+    *,
+    profile_text: str | None = None,
+) -> MatchResult:
+    resolved_profile_text = (profile_text or "").strip() or build_profile_text(settings)
     body = {
         "model": settings.openai.model,
         "store": False,
@@ -157,7 +163,7 @@ def _request_openai_match(job: NormalizedJobRecord, settings: AppSettings, heuri
                     {
                         "type": "input_text",
                         "text": (
-                            f"Candidate profile:\n{profile_text}\n\n"
+                            f"Candidate profile:\n{resolved_profile_text}\n\n"
                             f"Preferred roles: {', '.join(settings.radar.target_roles)}\n"
                             f"Allowed resume variants: {', '.join(settings.radar.resume_variants)}\n\n"
                             f"Job company: {job.company}\n"
@@ -242,6 +248,7 @@ async def score_job(
     settings: AppSettings | None = None,
     *,
     prefer_openai: bool = True,
+    profile_text: str | None = None,
 ) -> MatchResult:
     resolved_settings = settings or get_settings()
     heuristic = heuristic_score_job(job, resolved_settings)
@@ -250,6 +257,12 @@ async def score_job(
         return heuristic
 
     try:
-        return await asyncio.to_thread(_request_openai_match, job, resolved_settings, heuristic)
+        return await asyncio.to_thread(
+            _request_openai_match,
+            job,
+            resolved_settings,
+            heuristic,
+            profile_text=profile_text,
+        )
     except Exception:  # noqa: BLE001
         return heuristic

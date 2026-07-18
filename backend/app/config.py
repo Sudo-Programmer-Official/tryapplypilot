@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit, urlunsplit
 
+from app.company_catalog_defaults import build_recommended_company_preferences, default_role_families_for_company
+from app.domain import CompanyPreference
 from app.job_metadata import normalize_supported_country
 
 RuntimeMode = Literal["seed", "postgres"]
@@ -96,35 +98,6 @@ DEFAULT_EXCLUDED_KEYWORDS = (
     "verification",
 )
 
-DEFAULT_TARGET_COMPANY_ROWS = (
-    ("Microsoft", 1, 1, "microsoft-careers"),
-    ("Google", 1, 2, "google-careers"),
-    ("Amazon", 1, 3, "company-api"),
-    ("Meta", 1, 4, "company-api"),
-    ("Apple", 1, 5, "company-api"),
-    ("NVIDIA", 1, 6, "company-api"),
-    ("OpenAI", 1, 7, "company-api"),
-    ("Anthropic", 1, 8, "company-api"),
-    ("Databricks", 1, 9, "company-api"),
-    ("Snowflake", 1, 10, "company-api"),
-    ("Cloudflare", 1, 11, "company-api"),
-    ("Stripe", 1, 12, "company-api"),
-    ("Twilio", 1, 13, "company-api"),
-    ("GitHub", 1, 14, "company-api"),
-    ("MongoDB", 1, 15, "company-api"),
-    ("Confluent", 1, 16, "company-api"),
-    ("Perplexity", 1, 17, "company-api"),
-    ("Scale AI", 1, 18, "company-api"),
-    ("Netflix", 2, 19, "company-api"),
-    ("Airbnb", 2, 20, "company-api"),
-    ("Uber", 2, 21, "company-api"),
-    ("Cursor", 3, 22, "company-api"),
-    ("Linear", 3, 23, "company-api"),
-    ("Ramp", 3, 24, "company-api"),
-    ("Rippling", 3, 25, "company-api"),
-)
-
-
 @dataclass(frozen=True)
 class DatabaseSettings:
     admin_dsn: str
@@ -153,16 +126,6 @@ class ConnectorSettings:
 class GreenhouseBoard:
     company: str
     token: str
-
-
-@dataclass(frozen=True)
-class TargetCompany:
-    name: str
-    enabled: bool
-    tier: int
-    priority: int
-    connector: str
-    poll_interval_minutes: int
 
 
 @dataclass(frozen=True)
@@ -221,14 +184,12 @@ class RadarSettings:
     alert_freshness_hours: int
     dashboard_freshness_hours: int
     alert_decisions: tuple[str, ...]
-    greenhouse_boards: tuple[GreenhouseBoard, ...]
-    target_companies: tuple[TargetCompany, ...]
+    companies: tuple[CompanyPreference, ...]
     role_families: tuple[str, ...]
     target_roles: tuple[str, ...]
     preferred_work_arrangements: tuple[str, ...]
     preferred_experience_levels: tuple[str, ...]
     excluded_keywords: tuple[str, ...]
-    profile_text: str
     resume_variants: tuple[str, ...]
     initial_alert_window_hours: int
     initial_sync_openai_job_limit: int
@@ -315,116 +276,6 @@ def _read_csv(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
 def _read_connector_keys(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(value.casefold() for value in _read_csv(name, default))
 
-
-def _read_greenhouse_boards(name: str) -> tuple[GreenhouseBoard, ...]:
-    raw_value = os.getenv(name)
-    if raw_value is None or not raw_value.strip():
-        return ()
-
-    boards: list[GreenhouseBoard] = []
-    for part in raw_value.split(","):
-        entry = part.strip()
-        if not entry or "=" not in entry:
-            continue
-        company, token = entry.split("=", 1)
-        company = company.strip()
-        token = token.strip()
-        if not company or not token:
-            continue
-        boards.append(GreenhouseBoard(company=company, token=token))
-    return tuple(boards)
-
-
-def _default_target_companies(polling_interval_minutes: int) -> tuple[TargetCompany, ...]:
-    return tuple(
-        TargetCompany(
-            name=name,
-            enabled=True,
-            tier=tier,
-            priority=priority,
-            connector=connector,
-            poll_interval_minutes=polling_interval_minutes,
-        )
-        for name, tier, priority, connector in DEFAULT_TARGET_COMPANY_ROWS
-    )
-
-
-def _read_target_companies(
-    name: str,
-    *,
-    default: tuple[TargetCompany, ...],
-    polling_interval_minutes: int,
-) -> tuple[TargetCompany, ...]:
-    raw_value = os.getenv(name)
-    if raw_value is None or not raw_value.strip():
-        return default
-
-    companies: list[TargetCompany] = []
-    for index, raw_entry in enumerate(raw_value.split(";"), start=1):
-        entry = raw_entry.strip()
-        if not entry:
-            continue
-        parts = [part.strip() for part in entry.split("|")]
-        if not parts or not parts[0]:
-            continue
-        tier = int(parts[2]) if len(parts) > 2 and parts[2] else 3
-        priority = int(parts[3]) if len(parts) > 3 and parts[3] else index
-        enabled = _parse_bool_value(parts[4], True) if len(parts) > 4 and parts[4] else True
-        poll_interval = int(parts[5]) if len(parts) > 5 and parts[5] else polling_interval_minutes
-        companies.append(
-            TargetCompany(
-                name=parts[0],
-                connector=parts[1] if len(parts) > 1 and parts[1] else "company-api",
-                tier=tier,
-                priority=priority,
-                enabled=enabled,
-                poll_interval_minutes=poll_interval,
-            )
-        )
-    return tuple(companies) or default
-
-
-def _merge_greenhouse_companies(
-    companies: tuple[TargetCompany, ...],
-    boards: tuple[GreenhouseBoard, ...],
-    *,
-    polling_interval_minutes: int,
-) -> tuple[TargetCompany, ...]:
-    ordered_companies = list(companies)
-    index_by_name = {
-        company.name.casefold(): position
-        for position, company in enumerate(ordered_companies)
-    }
-    next_priority = max((company.priority for company in ordered_companies), default=0) + 1
-
-    for board in boards:
-        key = board.company.casefold()
-        updated_company = TargetCompany(
-            name=board.company,
-            enabled=True,
-            tier=1,
-            priority=next_priority,
-            connector="greenhouse",
-            poll_interval_minutes=polling_interval_minutes,
-        )
-        if key in index_by_name:
-            current = ordered_companies[index_by_name[key]]
-            ordered_companies[index_by_name[key]] = TargetCompany(
-                name=current.name,
-                enabled=current.enabled,
-                tier=current.tier,
-                priority=current.priority,
-                connector="greenhouse",
-                poll_interval_minutes=current.poll_interval_minutes,
-            )
-            continue
-        ordered_companies.append(updated_company)
-        index_by_name[key] = len(ordered_companies) - 1
-        next_priority += 1
-
-    return tuple(ordered_companies)
-
-
 def _database_name_from_dsn(dsn: str) -> str:
     parsed = urlsplit(dsn)
     path = parsed.path.lstrip("/")
@@ -455,16 +306,17 @@ def get_settings() -> AppSettings:
     database_name = os.getenv("JOB_RADAR_DATABASE_NAME", "job_hunter_app")
     runtime_mode = _resolve_runtime_mode(explicit_dsn, template_dsn)
     polling_interval_minutes = _read_int("JOB_RADAR_POLLING_INTERVAL_MINUTES", 5)
-    greenhouse_boards = _read_greenhouse_boards("JOB_RADAR_GREENHOUSE_BOARDS")
-    target_companies = _merge_greenhouse_companies(
-        _read_target_companies(
-            "JOB_RADAR_TARGET_COMPANIES",
-            default=_default_target_companies(polling_interval_minutes),
-            polling_interval_minutes=polling_interval_minutes,
-        ),
-        greenhouse_boards,
-        polling_interval_minutes=polling_interval_minutes,
+    default_companies = tuple(build_recommended_company_preferences(default_role_families_for_company))
+    default_enabled_connectors = tuple(
+        sorted(
+            {
+                company.connector.casefold()
+                for company in default_companies
+                if company.enabled and company.connector.strip()
+            }
+        )
     )
+    default_primary_connector = default_enabled_connectors[0] if default_enabled_connectors else "greenhouse"
 
     if explicit_dsn is not None:
         resolved_dsn = explicit_dsn
@@ -525,8 +377,8 @@ def get_settings() -> AppSettings:
         ),
         radar=RadarSettings(
             mode=runtime_mode,
-            primary_connector=os.getenv("JOB_RADAR_PRIMARY_CONNECTOR", "Greenhouse"),
-            enabled_connectors=_read_connector_keys("JOB_RADAR_ENABLED_CONNECTORS", ("greenhouse",)),
+            primary_connector=os.getenv("JOB_RADAR_PRIMARY_CONNECTOR", default_primary_connector),
+            enabled_connectors=default_enabled_connectors,
             polling_interval_minutes=polling_interval_minutes,
             minimum_match_score=_read_int("JOB_RADAR_MINIMUM_MATCH_SCORE", 90),
             apply_now_threshold_score=_read_int("JOB_RADAR_APPLY_NOW_THRESHOLD", 90),
@@ -535,14 +387,12 @@ def get_settings() -> AppSettings:
             alert_freshness_hours=_read_int("JOB_RADAR_ALERT_FRESHNESS_HOURS", 6),
             dashboard_freshness_hours=_read_int("JOB_RADAR_DASHBOARD_FRESHNESS_HOURS", 24),
             alert_decisions=_read_csv("JOB_RADAR_ALERT_DECISIONS", ("APPLY_NOW",)),
-            greenhouse_boards=greenhouse_boards,
-            target_companies=target_companies,
+            companies=default_companies if runtime_mode == "seed" else (),
             role_families=_read_csv("JOB_RADAR_ROLE_FAMILIES", DEFAULT_ROLE_FAMILIES),
             target_roles=_read_csv("JOB_RADAR_TARGET_ROLES", DEFAULT_TARGET_ROLES),
             preferred_work_arrangements=_read_csv("JOB_RADAR_WORK_ARRANGEMENTS", DEFAULT_WORK_ARRANGEMENTS),
             preferred_experience_levels=_read_csv("JOB_RADAR_EXPERIENCE_LEVELS", DEFAULT_EXPERIENCE_LEVELS),
             excluded_keywords=_read_csv("JOB_RADAR_EXCLUDED_KEYWORDS", DEFAULT_EXCLUDED_KEYWORDS),
-            profile_text=os.getenv("JOB_RADAR_PROFILE_TEXT", "").strip(),
             resume_variants=_read_csv("JOB_RADAR_RESUME_VARIANTS", DEFAULT_RESUME_VARIANTS),
             initial_alert_window_hours=_read_int("JOB_RADAR_INITIAL_ALERT_WINDOW_HOURS", 24),
             initial_sync_openai_job_limit=_read_int("JOB_RADAR_INITIAL_SYNC_OPENAI_JOB_LIMIT", 20),

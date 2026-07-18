@@ -6,10 +6,7 @@ from app.job_metadata import country_display
 
 
 def build_profile_text(settings: AppSettings) -> str:
-    if settings.radar.profile_text:
-        return settings.radar.profile_text
-
-    enabled_companies = [company.name for company in settings.radar.target_companies if company.enabled]
+    enabled_companies = [company.company for company in settings.radar.companies if company.enabled]
     company_summary = ", ".join(enabled_companies[:10])
     if len(enabled_companies) > 10:
         company_summary = f"{company_summary}, and {len(enabled_companies) - 10} more"
@@ -35,17 +32,7 @@ def build_profile_text(settings: AppSettings) -> str:
 
 def build_scout_settings(settings: AppSettings) -> ScoutSettings:
     companies = sorted(
-        [
-            CompanyPreference(
-                company=company.name,
-                enabled=company.enabled,
-                tier=company.tier,
-                priority=company.priority,
-                connector=company.connector,
-                poll_interval_minutes=company.poll_interval_minutes,
-            )
-            for company in settings.radar.target_companies
-        ],
+        list(settings.radar.companies),
         key=lambda company: (company.tier, company.priority, company.company.casefold()),
     )
 
@@ -80,7 +67,6 @@ def build_scout_settings(settings: AppSettings) -> ScoutSettings:
         selected_country=settings.radar.selected_country,
         alert_freshness_hours=settings.radar.alert_freshness_hours,
         dashboard_freshness_hours=settings.radar.dashboard_freshness_hours,
-        profile_text=settings.radar.profile_text,
         resume_variants=list(settings.radar.resume_variants),
         initial_alert_window_hours=settings.radar.initial_alert_window_hours,
         initial_sync_openai_job_limit=settings.radar.initial_sync_openai_job_limit,

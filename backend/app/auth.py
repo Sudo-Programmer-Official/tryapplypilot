@@ -156,12 +156,63 @@ def extract_telegram_start_token(text: str | None) -> str | None:
     return token or None
 
 
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _resume_role_focuses(profile: dict[str, object]) -> list[str]:
+    resume_library = profile.get("resume_library")
+    if not isinstance(resume_library, list):
+        return []
+    return [
+        str(entry.get("role_focus", "")).strip()
+        for entry in resume_library
+        if isinstance(entry, dict) and str(entry.get("role_focus", "")).strip()
+    ]
+
+
+def _company_scope(preferences: dict[str, object]) -> list[str]:
+    preferred_companies = _string_list(preferences.get("preferred_companies"))
+    if preferred_companies:
+        return preferred_companies
+    company_priorities = preferences.get("company_priorities")
+    if not isinstance(company_priorities, dict):
+        return []
+    return [
+        company_name.strip()
+        for company_name, priority in company_priorities.items()
+        if company_name.strip() and str(priority).strip().casefold() != "hidden"
+    ]
+
+
+def _has_matching_signals(profile: dict[str, object], preferences: dict[str, object]) -> bool:
+    signals = (
+        _string_list(preferences.get("preferred_roles"))
+        + _string_list(preferences.get("skills"))
+        + [
+            str(entry.get("skill", "")).strip()
+            for entry in preferences.get("skill_priorities", [])
+            if isinstance(entry, dict) and str(entry.get("skill", "")).strip()
+        ]
+        + _string_list(preferences.get("watchlists"))
+        + _string_list(preferences.get("locations"))
+        + _string_list(preferences.get("work_arrangements"))
+        + _string_list(preferences.get("experience_levels"))
+        + _string_list(preferences.get("job_types"))
+        + _string_list(preferences.get("industries"))
+        + _string_list(preferences.get("company_sizes"))
+        + _string_list(profile.get("resume_skill_keywords"))
+        + _resume_role_focuses(profile)
+    )
+    return len(signals) > 0
+
+
 def onboarding_status_for_user(user: UserAccount) -> OnboardingStatus:
     profile = dict(user.profile)
     preferences = dict(user.preferences)
-    preference_locations = preferences.get("locations", [])
-    preferred_companies = preferences.get("preferred_companies", [])
-    preferred_roles = preferences.get("preferred_roles", [])
+    preferred_companies = _company_scope(preferences)
     steps = [
         OnboardingStep(id="account_created", label="Account Created", completed=True),
         OnboardingStep(id="resume_uploaded", label="Resume Uploaded", completed=bool(profile.get("resume_uploaded"))),
@@ -170,12 +221,8 @@ def onboarding_status_for_user(user: UserAccount) -> OnboardingStatus:
             label="Preferences Set",
             completed=bool(
                 normalize_supported_country(str(preferences.get("country", user.country)))
-                and isinstance(preference_locations, list)
-                and len(preference_locations) > 0
-                and isinstance(preferred_companies, list)
                 and len(preferred_companies) > 0
-                and isinstance(preferred_roles, list)
-                and len(preferred_roles) > 0
+                and _has_matching_signals(profile, preferences)
             ),
         ),
         OnboardingStep(id="telegram_connected", label="Telegram Connected", completed=bool(user.telegram_chat_id)),

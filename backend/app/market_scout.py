@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from html import escape
 import json
+from typing import Awaitable, Callable
 from uuid import uuid4, uuid5, NAMESPACE_URL
 
 from app.audit_logs import record_audit_event
@@ -14,7 +15,7 @@ from app.config import AppSettings, GreenhouseBoard, get_settings
 from app.connectors.base import ConnectorCursor, NormalizedJobRecord
 from app.connectors.greenhouse import GreenhouseJobConnector
 from app.db.client import connection
-from app.domain import UserAccount
+from app.domain import CompanyPreference, UserAccount
 from app.job_metadata import (
     country_display,
     freshness_label,
@@ -28,6 +29,8 @@ from app.scoring import MatchResult, heuristic_score_job, score_job
 from app.user_accounts import list_users
 from app.user_matching import (
     alert_freshness_hours,
+    alert_rule_allows_job,
+    build_user_profile_text,
     build_user_matching_settings,
     filter_reason_for_user,
     minimum_match_score,
@@ -109,6 +112,7 @@ class MarketScoutRunSummary:
 class UserMatchContext:
     user: UserAccount
     settings: AppSettings
+    profile_text: str
     minimum_match_score: int
     freshness_hours: int
 
@@ -186,38 +190,67 @@ class MarketScoutAgent:
         )
         started_at = datetime.now(timezone.utc)
         runs: list[ConnectorRunSummary] = []
+        connector_groups = self._enabled_companies_by_connector()
         await record_audit_event(
             event_type="scheduler.started",
             subject_type="scheduler",
             subject_id="market-scout",
             message="Market Scout scheduler cycle started.",
-            metadata={"enabled_connectors": list(self.settings.radar.enabled_connectors)},
+            metadata={"enabled_connectors": list(connector_groups)},
             settings=self.settings,
         )
         self.logger.info(
             "Starting market scout cycle",
             extra={
                 "operation_name": "market_scout.run.start",
-                "connector_key": ",".join(self.settings.radar.enabled_connectors),
+                "connector_key": ",".join(connector_groups),
             },
         )
         try:
-            if self.settings.radar.is_connector_enabled("greenhouse"):
-                for board in self.settings.radar.greenhouse_boards:
+            for connector_key, companies in connector_groups.items():
+                runner = self._connector_runner(connector_key)
+                if runner is None:
+                    self.logger.warning(
+                        "Skipping configured connector because no collector implementation exists yet",
+                        extra={
+                            "operation_name": "market_scout.connector.not_implemented",
+                            "connector_key": connector_key,
+                            "company_count": len(companies),
+                        },
+                    )
+                    runs.extend(
+                        [
+                            ConnectorRunSummary(
+                                connector_key=f"{connector_key}:{company.external_identifier or company.company.casefold().replace(' ', '-')}",
+                                company=company.company,
+                                jobs_fetched=0,
+                                jobs_inserted=0,
+                                jobs_matched=0,
+                                alerts_sent=0,
+                                alerts_failed=0,
+                                error_message="Collector not implemented for this connector.",
+                            )
+                            for company in companies
+                        ]
+                    )
+                    continue
+
+                for company in companies:
+                    connector_run_key = f"{connector_key}:{company.external_identifier or company.company.casefold().replace(' ', '-')}"
                     try:
-                        runs.append(await self._run_greenhouse_board(board))
+                        runs.append(await runner(company))
                     except Exception as exc:  # noqa: BLE001
                         self.logger.exception(
                             "Connector sync failed; scheduler will continue with the next connector",
                             extra={
                                 "operation_name": "market_scout.connector.failure_continued",
-                                "connector_key": f"greenhouse:{board.token}",
+                                "connector_key": connector_run_key,
                             },
                         )
                         runs.append(
                             ConnectorRunSummary(
-                                connector_key=f"greenhouse:{board.token}",
-                                company=board.company,
+                                connector_key=connector_run_key,
+                                company=company.company,
                                 jobs_fetched=0,
                                 jobs_inserted=0,
                                 jobs_matched=0,
@@ -232,7 +265,7 @@ class MarketScoutAgent:
                 "Finished market scout cycle",
                 extra={
                     "operation_name": "market_scout.run.finish",
-                    "connector_key": ",".join(self.settings.radar.enabled_connectors),
+                    "connector_key": ",".join(connector_groups),
                     "runs": [run.to_dict() for run in runs],
                 },
             )
@@ -265,18 +298,50 @@ class MarketScoutAgent:
             await self.run_once()
             await asyncio.sleep(self.settings.radar.polling_interval_minutes * 60)
 
+    def _enabled_companies_by_connector(self) -> dict[str, list[CompanyPreference]]:
+        groups: dict[str, list[CompanyPreference]] = {}
+        for company in sorted(
+            self.settings.radar.companies,
+            key=lambda item: (item.tier, item.priority, item.company.casefold()),
+        ):
+            connector_key = company.connector.strip().casefold()
+            if not company.enabled or not connector_key:
+                continue
+            if connector_key == "greenhouse" and not company.external_identifier.strip():
+                self.logger.warning(
+                    "Skipping enabled greenhouse company without external identifier",
+                    extra={
+                        "operation_name": "market_scout.company.invalid",
+                        "connector_key": connector_key,
+                        "company": company.company,
+                    },
+                )
+                continue
+            groups.setdefault(connector_key, []).append(company)
+        return groups
+
+    def _connector_runner(
+        self,
+        connector_key: str,
+    ) -> Callable[[CompanyPreference], Awaitable[ConnectorRunSummary]] | None:
+        if connector_key == "greenhouse":
+            return self._run_greenhouse_company
+        return None
+
     async def _active_user_contexts(self) -> list[UserMatchContext]:
         return [
             UserMatchContext(
                 user=user,
                 settings=build_user_matching_settings(self.settings, user),
+                profile_text=build_user_profile_text(user, self.settings),
                 minimum_match_score=minimum_match_score(user, self.settings),
                 freshness_hours=alert_freshness_hours(user, self.settings),
             )
             for user in await list_users(self.settings)
         ]
 
-    async def _run_greenhouse_board(self, board: GreenhouseBoard) -> ConnectorRunSummary:
+    async def _run_greenhouse_company(self, company: CompanyPreference) -> ConnectorRunSummary:
+        board = GreenhouseBoard(company=company.company, token=company.external_identifier.strip())
         connector_key = f"greenhouse:{board.token}"
         run_id = str(uuid4())
         cursor_before: str | None = None
@@ -337,7 +402,7 @@ class MarketScoutAgent:
                 },
             )
             summary = await self._persist_greenhouse_result(
-                board=board,
+                company=company,
                 connector_key=connector_key,
                 run_id=run_id,
                 last_successful_sync=last_successful_sync,
@@ -380,7 +445,7 @@ class MarketScoutAgent:
     async def _persist_greenhouse_result(
         self,
         *,
-        board: GreenhouseBoard,
+        company: CompanyPreference,
         connector_key: str,
         run_id: str,
         last_successful_sync: datetime | None,
@@ -465,7 +530,12 @@ class MarketScoutAgent:
                             remaining_initial_openai_budget > 0
                             and published_at >= initial_sync_window_start
                         )
-                    match = await score_job(job, user_context.settings, prefer_openai=allow_openai)
+                    match = await score_job(
+                        job,
+                        user_context.settings,
+                        prefer_openai=allow_openai,
+                        profile_text=user_context.profile_text,
+                    )
                     if initial_sync and allow_openai and match.provider == "openai":
                         remaining_initial_openai_budget -= 1
                     user_matches.append((user_context, match))
@@ -596,6 +666,7 @@ class MarketScoutAgent:
                     )
 
                     if not self._should_alert_for_user(
+                        job=job,
                         match=match,
                         user_context=user_context,
                         published_at=published_at,
@@ -732,7 +803,7 @@ class MarketScoutAgent:
 
         return ConnectorRunSummary(
             connector_key=connector_key,
-            company=board.company,
+            company=company.company,
             jobs_fetched=len(jobs),
             jobs_inserted=jobs_inserted,
             jobs_matched=jobs_matched,
@@ -743,6 +814,7 @@ class MarketScoutAgent:
     def _should_alert_for_user(
         self,
         *,
+        job: NormalizedJobRecord,
         match: MatchResult,
         user_context: UserMatchContext,
         published_at: datetime,
@@ -755,6 +827,8 @@ class MarketScoutAgent:
         if match.score < user_context.minimum_match_score:
             return False
         if published_at < now - timedelta(hours=user_context.freshness_hours):
+            return False
+        if not alert_rule_allows_job(job, user_context.user):
             return False
         if not initial_sync:
             return True

@@ -18,7 +18,21 @@ from app.config import get_settings
 from app.domain import OnboardingStatus, UserAccount
 
 
-def _user(*, role: str = "user", telegram_chat_id: str | None = None, resume_uploaded: bool = False) -> UserAccount:
+def _user(
+    *,
+    role: str = "user",
+    telegram_chat_id: str | None = None,
+    resume_uploaded: bool = False,
+    preferences: dict[str, object] | None = None,
+) -> UserAccount:
+    resolved_preferences = {
+        "country": "US",
+        "locations": [],
+        "preferred_companies": ["Microsoft"],
+        "preferred_roles": [],
+    }
+    if preferences:
+        resolved_preferences.update(preferences)
     return UserAccount(
         id="user-1",
         email="user@example.com",
@@ -28,13 +42,10 @@ def _user(*, role: str = "user", telegram_chat_id: str | None = None, resume_upl
         country="US",
         profile={
             "resume_uploaded": resume_uploaded,
+            "resume_skill_keywords": ["Python", "Distributed Systems"] if resume_uploaded else [],
+            "resume_library": [{"role_focus": "Platform"}] if resume_uploaded else [],
         },
-        preferences={
-            "country": "US",
-            "locations": ["Seattle"],
-            "preferred_companies": ["Microsoft"],
-            "preferred_roles": ["Backend Engineer"],
-        },
+        preferences=resolved_preferences,
         onboarding=OnboardingStatus(progress_percent=0, steps=[]),
     )
 
@@ -78,6 +89,37 @@ class AuthTests(unittest.TestCase):
         onboarding = onboarding_status_for_user(_user(telegram_chat_id="123", resume_uploaded=True))
         self.assertEqual(onboarding.progress_percent, 100)
         self.assertTrue(all(step.completed for step in onboarding.steps))
+
+    def test_onboarding_preferences_can_complete_from_resume_signals(self) -> None:
+        onboarding = onboarding_status_for_user(_user(resume_uploaded=True))
+        preferences_step = next(step for step in onboarding.steps if step.id == "preferences_set")
+        self.assertTrue(preferences_step.completed)
+
+    def test_onboarding_preferences_can_complete_from_company_priorities(self) -> None:
+        onboarding = onboarding_status_for_user(
+            _user(
+                preferences={
+                    "preferred_companies": [],
+                    "company_priorities": {"OpenAI": "dream", "Oracle": "hidden"},
+                    "skills": ["Python"],
+                }
+            )
+        )
+        preferences_step = next(step for step in onboarding.steps if step.id == "preferences_set")
+        self.assertTrue(preferences_step.completed)
+
+    def test_onboarding_preferences_require_visible_company_scope(self) -> None:
+        onboarding = onboarding_status_for_user(
+            _user(
+                preferences={
+                    "preferred_companies": [],
+                    "company_priorities": {"Oracle": "hidden"},
+                    "skills": ["Python"],
+                }
+            )
+        )
+        preferences_step = next(step for step in onboarding.steps if step.id == "preferences_set")
+        self.assertFalse(preferences_step.completed)
 
     def test_role_allows_respects_hierarchy(self) -> None:
         self.assertTrue(role_allows("super_admin", "admin"))

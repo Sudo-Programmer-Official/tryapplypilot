@@ -401,11 +401,11 @@ class AggregatedSourcesRepository:
         )
 
         enabled = any(
-            company.enabled and company.connector == definition.key
-            for company in settings.radar.target_companies
+            company.enabled
+            and company.connector == definition.key
+            and (definition.key != "greenhouse" or bool(company.external_identifier.strip()))
+            for company in settings.radar.companies
         )
-        if definition.key == "greenhouse" and not settings.radar.greenhouse_boards:
-            enabled = False
         now = datetime.now(timezone.utc)
         last_run_at = aggregate["last_run_at"] if aggregate is not None else None
         last_successful_sync = aggregate["last_successful_sync"] if aggregate is not None else None

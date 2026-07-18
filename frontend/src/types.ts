@@ -5,6 +5,20 @@ export type ThemeMode = "system" | "light" | "dark";
 export type ResolvedTheme = "light" | "dark";
 export type StatusTone = "healthy" | "warning" | "failed" | "inactive" | "info";
 export type ToastTone = "success" | "error" | "info";
+export type CompanyPriorityLevel = "dream" | "high" | "normal" | "hidden";
+
+export interface SkillPriority {
+  skill: string;
+  weight: number;
+}
+
+export interface ResumeProfileSummary {
+  resume_id?: string;
+  display_name?: string;
+  skills?: string[];
+  role_focus?: string;
+  created_at?: string | null;
+}
 
 export interface JobOpportunity {
   id: string;
@@ -89,19 +103,36 @@ export interface UserProfileRecord {
   visa_status?: string;
   work_authorization?: string;
   resume_uploaded?: boolean;
+  resume_library?: ResumeProfileSummary[];
+  resume_skill_keywords?: string[];
 }
 
 export interface UserPreferencesRecord {
   country?: string;
   locations?: string[];
   preferred_companies?: string[];
+  company_priorities?: Record<string, CompanyPriorityLevel>;
   preferred_roles?: string[];
   skills?: string[];
+  skill_priorities?: SkillPriority[];
   work_arrangements?: string[];
   experience_levels?: string[];
+  job_types?: string[];
+  company_sizes?: string[];
+  industries?: string[];
+  minimum_salary?: number | null;
+  desired_salary?: number | null;
+  visa_status?: string;
+  years_of_experience?: number | null;
+  travel_preference?: string;
+  remote_preference?: string;
   freshness_hours?: number;
   minimum_match_score?: number;
   notification_frequency?: string;
+  notification_rules?: string[];
+  excluded_keywords?: string[];
+  resume_strategy?: string;
+  preferred_resume_variants?: string[];
 }
 
 export interface AuthUser {
@@ -289,7 +320,6 @@ export interface ScoutSettings {
   selected_country: string;
   alert_freshness_hours: number;
   dashboard_freshness_hours: number;
-  profile_text: string;
   resume_variants: string[];
   initial_alert_window_hours: number;
   initial_sync_openai_job_limit: number;
@@ -383,11 +413,24 @@ export interface UserPreferenceDraft {
   country: string;
   locations: string[];
   preferred_companies: string[];
+  company_priorities: Record<string, CompanyPriorityLevel>;
   preferred_roles: string[];
   skills: string[];
+  skill_priorities: SkillPriority[];
   work_arrangements: string[];
   experience_levels: string[];
+  job_types: string[];
+  company_sizes: string[];
+  industries: string[];
+  minimum_salary: number | null;
+  desired_salary: number | null;
+  travel_preference: string;
+  remote_preference: string;
   freshness_hours: number;
   minimum_match_score: number;
   notification_frequency: string;
+  notification_rules: string[];
+  excluded_keywords: string[];
+  resume_strategy: string;
+  preferred_resume_variants: string[];
 }
