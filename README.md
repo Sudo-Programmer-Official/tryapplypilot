@@ -66,6 +66,16 @@ npm run dev
 
 The dashboard expects the backend at `http://localhost:8000` by default. Override with `VITE_API_BASE_URL`.
 
+### Deploy frontend on Vercel
+
+This frontend uses Vue Router history mode, so Vercel must rewrite deep links back to `index.html`.
+
+- `Root Directory`: `frontend`
+- `Framework Preset`: `Vite`
+- `Build Command`: `npm run build`
+- `Output Directory`: `dist`
+- `vercel.json`: committed in `frontend/` with an SPA rewrite for `/user/*`, `/admin/*`, and `/auth/*` refreshes
+
 ## Verify
 
 Backend unit tests:
