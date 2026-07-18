@@ -609,7 +609,10 @@ async def verify_telegram_connect_session(
         "connected": False,
         "chat_id": user.telegram_chat_id,
         "delivery_chat_id": await resolve_delivery_telegram_chat_id(settings),
-        "message": "Telegram bot has not received the start command yet.",
+        "message": (
+            "Telegram bot has not received the /start connect command yet. "
+            "Open the exact bot link from this page and press Start in Telegram; sending a normal message like 'hi' will not connect the chat."
+        ),
         "user": user.to_dict(),
     }
 

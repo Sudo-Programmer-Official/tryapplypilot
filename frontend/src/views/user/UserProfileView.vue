@@ -35,7 +35,11 @@ async function startTelegramConnect(): Promise<void> {
   connecting.value = true;
   try {
     connectSession.value = await createTelegramConnectSession();
-    pushToast("Telegram session created", "Open the bot link, press Start, then verify the connection here.", "info");
+    pushToast(
+      "Telegram session created",
+      "Open the exact bot link, press Start in Telegram, then verify here. Sending a normal message like 'hi' will not connect the chat.",
+      "info",
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to create Telegram session.";
     pushToast("Telegram setup failed", message, "error");
@@ -59,7 +63,7 @@ async function verifyTelegram(): Promise<void> {
     }
     pushToast(
       "Telegram still pending",
-      payload.message ?? "Press Start in Telegram, then verify the connection again.",
+      payload.message ?? "Open the exact bot link, press Start in Telegram, then verify the connection again.",
       "info",
     );
   } catch (err) {
@@ -119,7 +123,7 @@ async function verifyTelegram(): Promise<void> {
             v-if="connectSession"
             :model-value="connectSession.connect_url"
             label="Bot link"
-            hint="Open this link, press Start in Telegram, then return here and click verify."
+            hint="Open this exact link, press Start in Telegram, then return here and click verify. A normal message like 'hi' will not complete the connection."
             :rows="3"
             @update:model-value="() => undefined"
           />

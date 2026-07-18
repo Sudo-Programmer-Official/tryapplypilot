@@ -41,10 +41,26 @@ DEFAULT_RESUME_VARIANTS = (
 )
 
 DEFAULT_ROLE_FAMILIES = (
-    "Core Engineering",
-    "Backend",
-    "AI",
-    "Customer-Facing Engineering",
+    "Backend Engineering",
+    "AI Platform",
+    "AI Infrastructure",
+    "Distributed Systems",
+    "Platform Engineering",
+    "Cloud Infrastructure",
+    "Developer Experience",
+    "Infrastructure",
+    "Data Platform",
+    "Machine Learning Platform",
+    "Search",
+    "Identity",
+    "Storage",
+    "Networking",
+    "Reliability",
+    "Observability",
+    "Internal Tools",
+    "Product Engineering",
+    "Full Stack",
+    "Forward Deployed Engineering",
 )
 
 DEFAULT_WORK_ARRANGEMENTS = (

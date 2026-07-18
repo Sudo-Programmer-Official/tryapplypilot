@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from app.catalog import build_effective_app_settings, build_scout_settings
-from app.company_catalog_defaults import ENABLED_COMPANY_NAMES
+from app.company_catalog_defaults import ENABLED_COMPANY_NAMES, RECOMMENDED_COMPANY_DEFAULTS
 from app.config import get_settings
 
 
@@ -17,7 +17,7 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
         with patch.dict(os.environ, {"JOB_RADAR_RUNTIME_MODE": "seed"}, clear=True):
             get_settings.cache_clear()
             settings = await build_scout_settings()
-        self.assertEqual(len(settings.companies), 24)
+        self.assertEqual(len(settings.companies), len(RECOMMENDED_COMPANY_DEFAULTS))
         self.assertGreater(len(settings.watchlists), 0)
         self.assertEqual(settings.watchlists[0].name, "Priority Teams")
         enabled_names = {company.company for company in settings.companies if company.enabled}
@@ -44,7 +44,7 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
             get_settings.cache_clear()
             effective = await build_effective_app_settings()
         self.assertIn("greenhouse", effective.radar.enabled_connectors)
-        self.assertIn("microsoft-careers", effective.radar.enabled_connectors)
+        self.assertNotIn("microsoft-careers", effective.radar.enabled_connectors)
         self.assertNotIn("company-api", effective.radar.enabled_connectors)
         self.assertNotIn("google-careers", effective.radar.enabled_connectors)
         self.assertNotIn("workday", effective.radar.enabled_connectors)
