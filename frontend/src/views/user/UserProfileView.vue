@@ -37,7 +37,7 @@ async function startTelegramConnect(): Promise<void> {
     connectSession.value = await createTelegramConnectSession();
     pushToast(
       "Telegram session created",
-      "Open the exact bot link, press Start in Telegram, then verify here. Sending a normal message like 'hi' will not connect the chat.",
+      "Open the exact bot link, press Start in Telegram, then verify here. If the bot chat already existed, paste the manual /start command shown below. Sending a normal message like 'hi' will not connect the chat.",
       "info",
     );
   } catch (err) {
@@ -123,8 +123,16 @@ async function verifyTelegram(): Promise<void> {
             v-if="connectSession"
             :model-value="connectSession.connect_url"
             label="Bot link"
-            hint="Open this exact link, press Start in Telegram, then return here and click verify. A normal message like 'hi' will not complete the connection."
+            hint="Open this exact link, press Start in Telegram, then return here and click verify. If the bot chat was already open before, use the manual command below instead."
             :rows="3"
+            @update:model-value="() => undefined"
+          />
+          <AppTextArea
+            v-if="connectSession?.connect_command"
+            :model-value="connectSession.connect_command"
+            label="Manual connect command"
+            hint="If Telegram opens an existing chat and does not trigger the deep link, send this exact command to the bot, then click verify."
+            :rows="2"
             @update:model-value="() => undefined"
           />
         </AppCard>

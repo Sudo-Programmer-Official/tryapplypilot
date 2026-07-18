@@ -129,6 +129,7 @@ export interface AuthTokens {
 export interface TelegramConnectSession {
   connect_token: string;
   connect_url: string;
+  connect_command?: string;
   bot_username: string;
   expires_in_seconds: number;
   already_connected: boolean;

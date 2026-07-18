@@ -552,6 +552,7 @@ async def create_telegram_connect_session(user: UserAccount = Depends(_current_u
     return {
         "connect_token": connect_token,
         "connect_url": f"https://t.me/{settings.telegram.bot_username}?start={connect_token}",
+        "connect_command": f"/start {connect_token}",
         "bot_username": settings.telegram.bot_username,
         "expires_in_seconds": expires_in_seconds,
         "already_connected": bool(user.telegram_chat_id),
@@ -611,7 +612,9 @@ async def verify_telegram_connect_session(
         "delivery_chat_id": await resolve_delivery_telegram_chat_id(settings),
         "message": (
             "Telegram bot has not received the /start connect command yet. "
-            "Open the exact bot link from this page and press Start in Telegram; sending a normal message like 'hi' will not connect the chat."
+            "Open the exact bot link from this page and press Start in Telegram. "
+            "If you already had a chat open with the bot, paste the manual command from this page. "
+            "Sending a normal message like 'hi' will not connect the chat."
         ),
         "user": user.to_dict(),
     }
