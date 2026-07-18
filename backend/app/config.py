@@ -98,6 +98,13 @@ DEFAULT_EXCLUDED_KEYWORDS = (
     "verification",
 )
 
+DEFAULT_CORS_ORIGINS = (
+    "https://tryapplypilot.com",
+    "https://www.tryapplypilot.com",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+)
+
 @dataclass(frozen=True)
 class DatabaseSettings:
     admin_dsn: str
@@ -203,6 +210,7 @@ class RadarSettings:
 class AppSettings:
     environment: str
     log_level: str
+    cors_allowed_origins: tuple[str, ...]
     database: DatabaseSettings
     connectors: ConnectorSettings
     telegram: TelegramSettings
@@ -334,6 +342,7 @@ def get_settings() -> AppSettings:
     return AppSettings(
         environment=os.getenv("JOB_RADAR_ENV", "development"),
         log_level=os.getenv("JOB_RADAR_LOG_LEVEL", "INFO").upper(),
+        cors_allowed_origins=_read_csv("JOB_RADAR_CORS_ORIGINS", DEFAULT_CORS_ORIGINS),
         database=DatabaseSettings(
             admin_dsn=admin_dsn,
             dsn=resolved_dsn,

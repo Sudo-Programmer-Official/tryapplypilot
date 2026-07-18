@@ -83,6 +83,28 @@ class RuntimeInfrastructureTests(unittest.TestCase):
         self.assertEqual(definitions[0].admin_status, "live")
         self.assertEqual(definitions[0].rollout_stage, "live")
 
+    def test_default_cors_origins_include_production_domains(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            get_settings.cache_clear()
+            settings = get_settings()
+        self.assertIn("https://tryapplypilot.com", settings.cors_allowed_origins)
+        self.assertIn("https://www.tryapplypilot.com", settings.cors_allowed_origins)
+
+    def test_cors_origins_can_be_overridden(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "JOB_RADAR_CORS_ORIGINS": "https://www.tryapplypilot.com,https://admin.tryapplypilot.com",
+            },
+            clear=True,
+        ):
+            get_settings.cache_clear()
+            settings = get_settings()
+        self.assertEqual(
+            settings.cors_allowed_origins,
+            ("https://www.tryapplypilot.com", "https://admin.tryapplypilot.com"),
+        )
+
     def test_retry_sync_retries_before_succeeding(self) -> None:
         attempts = {"count": 0}
 

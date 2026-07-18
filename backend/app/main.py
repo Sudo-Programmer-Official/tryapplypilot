@@ -246,6 +246,8 @@ async def lifespan(app: FastAPI):
         await scheduler.stop()
         set_scheduler_service(None)
 
+app_settings = get_app_settings()
+
 app = FastAPI(
     title="AI Job Radar API",
     version="0.1.0",
@@ -255,7 +257,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=list(app_settings.cors_allowed_origins),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
