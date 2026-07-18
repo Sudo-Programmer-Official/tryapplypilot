@@ -677,8 +677,11 @@ async def settings(_: UserAccount = Depends(require_admin)) -> dict[str, object]
 
 
 @app.get("/api/catalog/companies")
-async def companies_catalog(_: UserAccount = Depends(require_admin)) -> dict[str, object]:
-    return {"items": [company.to_dict() for company in await list_catalog_companies()]}
+async def companies_catalog(user: UserAccount = Depends(_current_user)) -> dict[str, object]:
+    companies = await list_catalog_companies()
+    if not role_allows(user.role, "admin"):
+        companies = [company for company in companies if company.enabled]
+    return {"items": [company.to_dict() for company in companies]}
 
 
 @app.post("/api/catalog/companies/import-defaults")
