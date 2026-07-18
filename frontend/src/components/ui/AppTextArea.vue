@@ -31,7 +31,7 @@ defineEmits<{
 <style scoped>
 .app-field {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--field-gap);
 }
 
 .app-field__label {
@@ -48,13 +48,14 @@ defineEmits<{
 .app-textarea {
   width: 100%;
   min-height: 3.25rem;
-  padding: 0.875rem 1rem;
+  padding: var(--input-padding-y) var(--input-padding-x);
   border: 1px solid var(--color-border);
   border-radius: 1rem;
   background: var(--color-surface-elevated);
   color: var(--color-text);
   resize: vertical;
   font: inherit;
+  line-height: 1.6;
   transition:
     border-color var(--transition-fast),
     box-shadow var(--transition-fast),

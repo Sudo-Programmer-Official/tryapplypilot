@@ -10,6 +10,7 @@ import JobRow from "../../components/jobs/JobRow.vue";
 import AppGrid from "../../components/layout/AppGrid.vue";
 import AppPage from "../../components/layout/AppPage.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
+import PageSection from "../../components/layout/PageSection.vue";
 import AppButton from "../../components/ui/AppButton.vue";
 import AppCard from "../../components/ui/AppCard.vue";
 import AppEmptyState from "../../components/ui/AppEmptyState.vue";
@@ -90,76 +91,94 @@ onBeforeUnmount(() => {
       </template>
     </PageHeader>
 
-    <AppEmptyState v-if="dashboard.error.value" title="Dashboard unavailable" :description="dashboard.error.value" />
+    <PageSection v-if="dashboard.error.value">
+      <AppGrid columns="1">
+        <AppEmptyState title="Dashboard unavailable" :description="dashboard.error.value" />
+      </AppGrid>
+    </PageSection>
 
     <template v-else-if="dashboard.snapshot.value">
-      <AppGrid as="section" columns="4">
-        <MetricCard
-          icon="BriefcaseBusiness"
-          label="Jobs collected"
-          :value="scheduler?.jobs_collected ?? 0"
-          detail="Collected during the last completed poll cycle."
-          tone="primary"
-          :sparkline="jobSparkline"
-        />
-        <MetricCard
-          icon="Users"
-          label="Jobs matched"
-          :value="scheduler?.jobs_matched ?? 0"
-          detail="User-specific matches scored in the latest cycle."
-          tone="success"
-        />
-        <MetricCard
-          icon="Bell"
-          label="Telegram sent"
-          :value="scheduler?.notifications_sent ?? 0"
-          detail="Private alerts delivered in the latest cycle."
-          tone="warning"
-        />
-        <MetricCard
-          icon="Building2"
-          label="Errors"
-          :value="scheduler?.errors ?? 0"
-          detail="Connector and delivery errors recorded in the latest cycle."
-          tone="info"
-        />
-      </AppGrid>
-
-      <AppGrid as="section" columns="2">
-        <StatusCard
-          title="Scheduler"
-          :value="scheduler?.running ? 'Running' : 'Stopped'"
-          :tone="dashboard.snapshot.value.agent.state === 'healthy' ? 'healthy' : dashboard.snapshot.value.agent.state === 'lagging' ? 'warning' : 'failed'"
-          :detail="`Last poll ${formatDateTime(scheduler?.last_run)} · next poll ${formatDateTime(scheduler?.next_run)}`"
-        />
-        <StatusCard
-          title="Connector"
-          :value="scheduler?.current_connector ?? dashboard.snapshot.value.agent.current_connector"
-          tone="info"
-          :detail="`Polling every ${dashboard.snapshot.value.agent.polling_interval_minutes} minutes · ${scheduler?.last_duration_seconds ? `${scheduler.last_duration_seconds.toFixed(1)} sec last cycle` : 'waiting for first completed cycle'}`"
-        />
-      </AppGrid>
-
-      <AppGrid as="section" columns="2">
-        <SystemStatus :snapshot="dashboard.snapshot.value.system_status" />
-        <AppCard title="Recent alerts" subtitle="The latest alert decisions the system sent downstream.">
-          <ActivityList :items="alertItems" />
-        </AppCard>
-      </AppGrid>
-
-      <ConnectorHealthTable :sources="dashboard.sources.value" />
-
-      <AppCard title="Recent jobs" subtitle="Fresh jobs currently visible to the admin workspace.">
-        <div class="app-stack app-stack--content">
-          <JobRow
-            v-for="job in dashboard.jobs.value.slice(0, 5)"
-            :key="job.id"
-            :job="job"
-            :saved="isSavedJob(job.id)"
-            @toggle-save="toggleSavedJob"
+      <PageSection>
+        <AppGrid columns="4">
+          <MetricCard
+            icon="BriefcaseBusiness"
+            label="Jobs collected"
+            :value="scheduler?.jobs_collected ?? 0"
+            detail="Collected during the last completed poll cycle."
+            tone="primary"
+            :sparkline="jobSparkline"
           />
-        </div>
-      </AppCard>
+          <MetricCard
+            icon="Users"
+            label="Jobs matched"
+            :value="scheduler?.jobs_matched ?? 0"
+            detail="User-specific matches scored in the latest cycle."
+            tone="success"
+          />
+          <MetricCard
+            icon="Bell"
+            label="Telegram sent"
+            :value="scheduler?.notifications_sent ?? 0"
+            detail="Private alerts delivered in the latest cycle."
+            tone="warning"
+          />
+          <MetricCard
+            icon="Building2"
+            label="Errors"
+            :value="scheduler?.errors ?? 0"
+            detail="Connector and delivery errors recorded in the latest cycle."
+            tone="info"
+          />
+        </AppGrid>
+      </PageSection>
+
+      <PageSection>
+        <AppGrid columns="2">
+          <StatusCard
+            title="Scheduler"
+            :value="scheduler?.running ? 'Running' : 'Stopped'"
+            :tone="dashboard.snapshot.value.agent.state === 'healthy' ? 'healthy' : dashboard.snapshot.value.agent.state === 'lagging' ? 'warning' : 'failed'"
+            :detail="`Last poll ${formatDateTime(scheduler?.last_run)} · next poll ${formatDateTime(scheduler?.next_run)}`"
+          />
+          <StatusCard
+            title="Connector"
+            :value="scheduler?.current_connector ?? dashboard.snapshot.value.agent.current_connector"
+            tone="info"
+            :detail="`Polling every ${dashboard.snapshot.value.agent.polling_interval_minutes} minutes · ${scheduler?.last_duration_seconds ? `${scheduler.last_duration_seconds.toFixed(1)} sec last cycle` : 'waiting for first completed cycle'}`"
+          />
+        </AppGrid>
+      </PageSection>
+
+      <PageSection>
+        <AppGrid columns="2">
+          <SystemStatus :snapshot="dashboard.snapshot.value.system_status" />
+          <AppCard title="Recent alerts" subtitle="The latest alert decisions the system sent downstream.">
+            <ActivityList :items="alertItems" />
+          </AppCard>
+        </AppGrid>
+      </PageSection>
+
+      <PageSection>
+        <AppGrid columns="1">
+          <ConnectorHealthTable :sources="dashboard.sources.value" />
+        </AppGrid>
+      </PageSection>
+
+      <PageSection>
+        <AppGrid columns="1">
+          <AppCard title="Recent jobs" subtitle="Fresh jobs currently visible to the admin workspace.">
+            <div class="app-stack app-stack--content">
+              <JobRow
+                v-for="job in dashboard.jobs.value.slice(0, 5)"
+                :key="job.id"
+                :job="job"
+                :saved="isSavedJob(job.id)"
+                @toggle-save="toggleSavedJob"
+              />
+            </div>
+          </AppCard>
+        </AppGrid>
+      </PageSection>
     </template>
   </AppPage>
 </template>

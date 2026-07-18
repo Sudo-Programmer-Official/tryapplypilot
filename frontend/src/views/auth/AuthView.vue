@@ -4,6 +4,7 @@ import { RouterLink, useRouter } from "vue-router";
 
 import AppGrid from "../../components/layout/AppGrid.vue";
 import AppPage from "../../components/layout/AppPage.vue";
+import PageSection from "../../components/layout/PageSection.vue";
 import AppBadge from "../../components/ui/AppBadge.vue";
 import AppButton from "../../components/ui/AppButton.vue";
 import AppCard from "../../components/ui/AppCard.vue";
@@ -143,58 +144,60 @@ async function handleSubmit(): Promise<void> {
 <template>
   <div class="auth">
     <AppPage class="auth__page" centered>
-      <AppGrid class="auth__panel" columns="2">
-        <section class="auth__intro" aria-label="Authentication overview">
-          <div class="auth__hero">
-            <RouterLink class="auth__brand" to="/">TryApplyPilot</RouterLink>
-            <AppBadge :tone="isAdmin ? 'warning' : 'primary'">
-              {{ isAdmin ? "Admin Portal" : "User Portal" }}
-            </AppBadge>
-            <div class="auth__headline">
-              <h1 class="type-display">{{ heading }}</h1>
-              <p class="type-body-lg">{{ description }}</p>
+      <PageSection>
+        <AppGrid class="auth__panel" columns="2">
+          <section class="auth__intro" aria-label="Authentication overview">
+            <div class="auth__hero">
+              <RouterLink class="auth__brand" to="/">TryApplyPilot</RouterLink>
+              <AppBadge :tone="isAdmin ? 'warning' : 'primary'">
+                {{ isAdmin ? "Admin Portal" : "User Portal" }}
+              </AppBadge>
+              <div class="auth__headline">
+                <h1 class="type-display">{{ heading }}</h1>
+                <p class="type-body-lg">{{ description }}</p>
+              </div>
             </div>
-          </div>
 
-          <ul class="auth__notes list-reset">
-            <li v-for="note in authNotes" :key="note.title">
-              <strong>{{ note.title }}</strong>
-              <p>{{ note.detail }}</p>
-            </li>
-          </ul>
-        </section>
+            <ul class="auth__notes list-reset">
+              <li v-for="note in authNotes" :key="note.title">
+                <strong>{{ note.title }}</strong>
+                <p>{{ note.detail }}</p>
+              </li>
+            </ul>
+          </section>
 
-        <AppCard class="auth__card" :title="cardTitle" :subtitle="cardSubtitle">
-          <form class="app-form-grid auth__form" @submit.prevent="handleSubmit">
-            <AppInput v-if="isSignup" v-model="fullName" label="Full name" placeholder="Abhishek Kumar Jha" />
-            <AppInput v-model="email" label="Email" type="email" placeholder="you@example.com" />
-            <AppInput v-if="!isForgot" v-model="password" label="Password" type="password" placeholder="••••••••" />
+          <AppCard class="auth__card" :title="cardTitle" :subtitle="cardSubtitle">
+            <form class="app-form-grid auth__form" @submit.prevent="handleSubmit">
+              <AppInput v-if="isSignup" v-model="fullName" label="Full name" placeholder="Abhishek Kumar Jha" />
+              <AppInput v-model="email" label="Email" type="email" placeholder="you@example.com" />
+              <AppInput v-if="!isForgot" v-model="password" label="Password" type="password" placeholder="••••••••" />
 
-            <p v-if="error" class="auth__error">{{ error }}</p>
-            <p v-if="resetNotice" class="auth__notice">{{ resetNotice }}</p>
+              <p v-if="error" class="auth__error">{{ error }}</p>
+              <p v-if="resetNotice" class="auth__notice">{{ resetNotice }}</p>
 
-            <AppButton :disabled="submitting" :block="true" type="submit">
-              {{ submitting ? "Working..." : submitLabel }}
-            </AppButton>
-          </form>
+              <AppButton :disabled="submitting" :block="true" type="submit">
+                {{ submitting ? "Working..." : submitLabel }}
+              </AppButton>
+            </form>
 
-          <div class="app-form-grid auth__links">
-            <template v-if="isLogin && !isAdmin">
-              <RouterLink to="/auth/forgot-password">Forgot password?</RouterLink>
-              <RouterLink to="/auth/signup">Create account</RouterLink>
-            </template>
-            <template v-else-if="isLogin && isAdmin">
-              <RouterLink to="/auth/login">Back to user login</RouterLink>
-            </template>
-            <template v-else-if="isSignup">
-              <RouterLink to="/auth/login">Already have an account?</RouterLink>
-            </template>
-            <template v-else>
-              <RouterLink to="/auth/login">Back to login</RouterLink>
-            </template>
-          </div>
-        </AppCard>
-      </AppGrid>
+            <div class="app-form-grid auth__links">
+              <template v-if="isLogin && !isAdmin">
+                <RouterLink to="/auth/forgot-password">Forgot password?</RouterLink>
+                <RouterLink to="/auth/signup">Create account</RouterLink>
+              </template>
+              <template v-else-if="isLogin && isAdmin">
+                <RouterLink to="/auth/login">Back to user login</RouterLink>
+              </template>
+              <template v-else-if="isSignup">
+                <RouterLink to="/auth/login">Already have an account?</RouterLink>
+              </template>
+              <template v-else>
+                <RouterLink to="/auth/login">Back to login</RouterLink>
+              </template>
+            </div>
+          </AppCard>
+        </AppGrid>
+      </PageSection>
     </AppPage>
   </div>
 </template>
@@ -213,7 +216,6 @@ async function handleSubmit(): Promise<void> {
 }
 
 .auth__panel {
-  --grid-gap: clamp(24px, 5vw, 48px);
   align-items: stretch;
   width: min(100%, 1160px);
   margin: 0 auto;
@@ -227,9 +229,9 @@ async function handleSubmit(): Promise<void> {
 
 .auth__intro {
   display: grid;
-  gap: clamp(24px, 4vw, 40px);
+  gap: var(--space-8);
   align-content: center;
-  padding: clamp(8px, 2vw, 20px) 0;
+  padding: 0;
 }
 
 .auth__hero {
@@ -327,7 +329,7 @@ async function handleSubmit(): Promise<void> {
 
 @media (max-width: 767px) {
   .auth__page {
-    padding-block: 24px 40px;
+    padding-block: var(--space-6) var(--space-8);
   }
 
   .auth__notes li {

@@ -28,7 +28,7 @@ defineEmits<{
 .app-checkbox {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-5);
   color: var(--color-text);
   font-size: var(--type-small);
   min-height: 2.75rem;

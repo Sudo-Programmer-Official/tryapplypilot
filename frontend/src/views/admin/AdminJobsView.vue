@@ -3,8 +3,10 @@ import { onMounted, ref } from "vue";
 
 import JobFilters from "../../components/jobs/JobFilters.vue";
 import JobRow from "../../components/jobs/JobRow.vue";
+import AppGrid from "../../components/layout/AppGrid.vue";
 import AppPage from "../../components/layout/AppPage.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
+import PageSection from "../../components/layout/PageSection.vue";
 import AppEmptyState from "../../components/ui/AppEmptyState.vue";
 import { fetchAdminJobs } from "../../api/jobs.api";
 import { useJobs } from "../../composables/useJobs";
@@ -39,30 +41,45 @@ onMounted(load);
       description="Inspect the shared opportunity pool across connectors, freshness windows, and recommendation decisions."
     />
 
-    <JobFilters
-      :query="query"
-      :decision="decision"
-      :min-score="minScore"
-      @update:query="query = $event"
-      @update:decision="decision = $event as 'all' | 'APPLY_NOW' | 'REVIEW' | 'IGNORE'"
-      @update:min-score="minScore = $event"
-    />
+    <PageSection>
+      <AppGrid columns="1">
+        <JobFilters
+          :query="query"
+          :decision="decision"
+          :min-score="minScore"
+          @update:query="query = $event"
+          @update:decision="decision = $event as 'all' | 'APPLY_NOW' | 'REVIEW' | 'IGNORE'"
+          @update:min-score="minScore = $event"
+        />
+      </AppGrid>
+    </PageSection>
 
-    <AppEmptyState v-if="error" title="Admin jobs unavailable" :description="error" />
-    <AppEmptyState
-      v-else-if="!loading && filteredJobs.length === 0"
-      title="No jobs match the current filters"
-      description="The connector pipeline may still be syncing or the filter is too narrow."
-    />
+    <PageSection v-if="error">
+      <AppGrid columns="1">
+        <AppEmptyState title="Admin jobs unavailable" :description="error" />
+      </AppGrid>
+    </PageSection>
+    <PageSection v-else-if="!loading && filteredJobs.length === 0">
+      <AppGrid columns="1">
+        <AppEmptyState
+          title="No jobs match the current filters"
+          description="The connector pipeline may still be syncing or the filter is too narrow."
+        />
+      </AppGrid>
+    </PageSection>
 
-    <div v-else class="app-stack app-stack--content">
-      <JobRow
-        v-for="job in filteredJobs"
-        :key="job.id"
-        :job="job"
-        :saved="isSavedJob(job.id)"
-        @toggle-save="toggleSavedJob"
-      />
-    </div>
+    <PageSection v-else>
+      <AppGrid columns="1">
+        <div class="app-stack app-stack--content">
+          <JobRow
+            v-for="job in filteredJobs"
+            :key="job.id"
+            :job="job"
+            :saved="isSavedJob(job.id)"
+            @toggle-save="toggleSavedJob"
+          />
+        </div>
+      </AppGrid>
+    </PageSection>
   </AppPage>
 </template>

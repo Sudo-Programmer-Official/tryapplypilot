@@ -66,7 +66,7 @@ const completedSteps = computed(() => props.steps.filter((step) => step.complete
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: var(--space-3);
-  padding: 0.9rem 1rem;
+  padding: var(--space-4);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-elevated);
@@ -84,7 +84,7 @@ const completedSteps = computed(() => props.steps.filter((step) => step.complete
   place-items: center;
   width: 1.5rem;
   height: 1.5rem;
-  margin-top: 0.1rem;
+  margin-top: 0;
   border-radius: 50%;
   color: var(--color-success);
   background: rgba(34, 179, 91, 0.12);

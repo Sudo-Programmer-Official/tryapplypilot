@@ -9,6 +9,7 @@ import AppGrid from "../../components/layout/AppGrid.vue";
 import AppPage from "../../components/layout/AppPage.vue";
 import JobCard from "../../components/jobs/JobCard.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
+import PageSection from "../../components/layout/PageSection.vue";
 import AppCard from "../../components/ui/AppCard.vue";
 import AppEmptyState from "../../components/ui/AppEmptyState.vue";
 import { fetchUserAlerts, fetchUserJobs } from "../../api/user.api";
@@ -73,116 +74,118 @@ onMounted(load);
 </script>
 
 <template>
-  <AppPage class="dashboard-page">
+  <AppPage>
     <PageHeader
       title="Your job radar"
       description="See what landed today, what deserves action now, and whether your alert pipeline is fully configured."
     />
 
-    <AppGrid as="section" columns="4" class="dashboard-metrics">
-      <MetricCard
-        icon="BriefcaseBusiness"
-        label="New jobs"
-        :value="jobs.length"
-        detail="Personalized opportunities available in your feed."
-        tone="primary"
-        :sparkline="sparkline"
-      />
-      <MetricCard
-        icon="Bell"
-        label="Apply now"
-        :value="applyNowCount"
-        detail="High-match jobs that crossed your current threshold."
-        tone="success"
-      />
-      <MetricCard
-        icon="Search"
-        label="Review queue"
-        :value="reviewCount"
-        detail="Roles worth checking without interrupting you."
-        tone="warning"
-      />
-      <MetricCard
-        icon="Send"
-        label="Saved jobs"
-        :value="savedJobs.length"
-        detail="Bookmarks synced to your account for your next pass."
-        tone="info"
-      />
-    </AppGrid>
-
-    <AppGrid as="section" columns="2" class="dashboard-overview">
-      <SetupProgress
-        :progress="auth.user.value?.onboarding.progress_percent ?? 0"
-        :steps="auth.user.value?.onboarding.steps ?? []"
-      />
-      <AppGrid columns="2" gap="content" class="dashboard-status-grid">
-        <StatusCard
-          title="Telegram"
-          :value="auth.user.value?.telegram_chat_id ? 'Connected' : 'Pending'"
-          :tone="auth.user.value?.telegram_chat_id ? 'healthy' : 'warning'"
-          :detail="auth.user.value?.telegram_chat_id ? 'Private alerts are enabled.' : 'Connect Telegram from Profile to receive notifications.'"
+    <PageSection>
+      <AppGrid columns="4" class="dashboard-metrics">
+        <MetricCard
+          icon="BriefcaseBusiness"
+          label="New jobs"
+          :value="jobs.length"
+          detail="Personalized opportunities available in your feed."
+          tone="primary"
+          :sparkline="sparkline"
         />
-        <StatusCard
-          title="Preferences"
-          :value="`${auth.user.value?.preferences.minimum_match_score ?? 90}% min match`"
+        <MetricCard
+          icon="Bell"
+          label="Apply now"
+          :value="applyNowCount"
+          detail="High-match jobs that crossed your current threshold."
+          tone="success"
+        />
+        <MetricCard
+          icon="Search"
+          label="Review queue"
+          :value="reviewCount"
+          detail="Roles worth checking without interrupting you."
+          tone="warning"
+        />
+        <MetricCard
+          icon="Send"
+          label="Saved jobs"
+          :value="savedJobs.length"
+          detail="Bookmarks synced to your account for your next pass."
           tone="info"
-          :detail="`${auth.user.value?.preferences.country ?? auth.user.value?.country ?? 'US'} · ${auth.user.value?.preferences.freshness_hours ?? 6} hour freshness window`"
         />
       </AppGrid>
-    </AppGrid>
+    </PageSection>
 
-    <AppGrid as="section" columns="2" class="dashboard-feed">
-      <AppCard
-        class="dashboard-panel"
-        title="Top opportunities"
-        subtitle="The highest scoring jobs currently in your personalized queue."
-      >
-        <AppEmptyState
-          v-if="!loading && topJobs.length === 0"
-          class="dashboard-empty"
-          title="No jobs yet"
-          description="Finish onboarding and wait for the next poll cycle to fill your dashboard."
+    <PageSection>
+      <AppGrid columns="2" class="dashboard-overview">
+        <SetupProgress
+          :progress="auth.user.value?.onboarding.progress_percent ?? 0"
+          :steps="auth.user.value?.onboarding.steps ?? []"
         />
-        <div v-else class="job-card-grid">
-          <JobCard
-            v-for="job in topJobs"
-            :key="job.id"
-            :job="job"
-            :saved="isSavedJob(job.id)"
-            @toggle-save="toggleSavedJob"
+        <AppGrid columns="2" gap="content" class="dashboard-status-grid">
+          <StatusCard
+            title="Telegram"
+            :value="auth.user.value?.telegram_chat_id ? 'Connected' : 'Pending'"
+            :tone="auth.user.value?.telegram_chat_id ? 'healthy' : 'warning'"
+            :detail="auth.user.value?.telegram_chat_id ? 'Private alerts are enabled.' : 'Connect Telegram from Profile to receive notifications.'"
           />
-        </div>
-      </AppCard>
+          <StatusCard
+            title="Preferences"
+            :value="`${auth.user.value?.preferences.minimum_match_score ?? 90}% min match`"
+            tone="info"
+            :detail="`${auth.user.value?.preferences.country ?? auth.user.value?.country ?? 'US'} · ${auth.user.value?.preferences.freshness_hours ?? 6} hour freshness window`"
+          />
+        </AppGrid>
+      </AppGrid>
+    </PageSection>
 
-      <AppCard
-        class="dashboard-panel"
-        title="Latest alerts"
-        subtitle="Recent notifications that were sent to your configured channels."
-      >
-        <AppEmptyState
-          v-if="!loading && activityItems.length === 0"
-          class="dashboard-empty"
-          title="No alerts sent yet"
-          description="Once a new high-match job lands, it will show up here and in Telegram."
-        />
-        <ActivityList v-else :items="activityItems" />
-      </AppCard>
-    </AppGrid>
+    <PageSection>
+      <AppGrid columns="2" class="dashboard-feed">
+        <AppCard
+          class="dashboard-panel"
+          title="Top opportunities"
+          subtitle="The highest scoring jobs currently in your personalized queue."
+        >
+          <AppEmptyState
+            v-if="!loading && topJobs.length === 0"
+            class="dashboard-empty"
+            title="No jobs yet"
+            description="Finish onboarding and wait for the next poll cycle to fill your dashboard."
+          />
+          <div v-else class="job-card-grid">
+            <JobCard
+              v-for="job in topJobs"
+              :key="job.id"
+              :job="job"
+              :saved="isSavedJob(job.id)"
+              @toggle-save="toggleSavedJob"
+            />
+          </div>
+        </AppCard>
 
-    <AppEmptyState
-      v-if="error"
-      title="Dashboard unavailable"
-      :description="error"
-    />
+        <AppCard
+          class="dashboard-panel"
+          title="Latest alerts"
+          subtitle="Recent notifications that were sent to your configured channels."
+        >
+          <AppEmptyState
+            v-if="!loading && activityItems.length === 0"
+            class="dashboard-empty"
+            title="No alerts sent yet"
+            description="Once a new high-match job lands, it will show up here and in Telegram."
+          />
+          <ActivityList v-else :items="activityItems" />
+        </AppCard>
+      </AppGrid>
+    </PageSection>
+
+    <PageSection v-if="error">
+      <AppGrid columns="1">
+        <AppEmptyState title="Dashboard unavailable" :description="error" />
+      </AppGrid>
+    </PageSection>
   </AppPage>
 </template>
 
 <style scoped>
-.dashboard-page {
-  --page-gap: 28px;
-}
-
 .dashboard-metrics,
 .dashboard-overview,
 .dashboard-feed {

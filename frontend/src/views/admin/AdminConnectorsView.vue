@@ -5,6 +5,7 @@ import ConnectorHealthTable from "../../components/admin/ConnectorHealthTable.vu
 import AppGrid from "../../components/layout/AppGrid.vue";
 import AppPage from "../../components/layout/AppPage.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
+import PageSection from "../../components/layout/PageSection.vue";
 import AppCard from "../../components/ui/AppCard.vue";
 import AppEmptyState from "../../components/ui/AppEmptyState.vue";
 import { fetchCatalogCompanies } from "../../api/companies.api";
@@ -60,38 +61,48 @@ onMounted(load);
       description="Track source health, cadence, and company coverage so expansion stays data-driven instead of hardcoded."
     />
 
-    <AppEmptyState v-if="error" title="Connector data unavailable" :description="error" />
+    <PageSection v-if="error">
+      <AppGrid columns="1">
+        <AppEmptyState title="Connector data unavailable" :description="error" />
+      </AppGrid>
+    </PageSection>
 
     <template v-else>
-      <AppGrid columns="4">
-        <AppCard
-          v-for="card in connectorCards"
-          :key="card.id"
-          :title="card.source"
-          :subtitle="`${card.enabledCompanies}/${card.allCompanies} enabled companies`"
-        >
-          <div class="connector-card__stats">
-            <div>
-              <span class="eyebrow">Last success</span>
-              <strong>{{ formatDateTime(card.lastSuccess) }}</strong>
+      <PageSection>
+        <AppGrid columns="4">
+          <AppCard
+            v-for="card in connectorCards"
+            :key="card.id"
+            :title="card.source"
+            :subtitle="`${card.enabledCompanies}/${card.allCompanies} enabled companies`"
+          >
+            <div class="connector-card__stats">
+              <div>
+                <span class="eyebrow">Last success</span>
+                <strong>{{ formatDateTime(card.lastSuccess) }}</strong>
+              </div>
+              <div>
+                <span class="eyebrow">Jobs collected</span>
+                <strong>{{ card.jobsCollected }}</strong>
+              </div>
+              <div>
+                <span class="eyebrow">Avg runtime</span>
+                <strong>{{ formatDurationSeconds(card.averageRuntime) }}</strong>
+              </div>
+              <div>
+                <span class="eyebrow">Next poll</span>
+                <strong>{{ formatDateTime(card.nextScheduledPoll) }}</strong>
+              </div>
             </div>
-            <div>
-              <span class="eyebrow">Jobs collected</span>
-              <strong>{{ card.jobsCollected }}</strong>
-            </div>
-            <div>
-              <span class="eyebrow">Avg runtime</span>
-              <strong>{{ formatDurationSeconds(card.averageRuntime) }}</strong>
-            </div>
-            <div>
-              <span class="eyebrow">Next poll</span>
-              <strong>{{ formatDateTime(card.nextScheduledPoll) }}</strong>
-            </div>
-          </div>
-        </AppCard>
-      </AppGrid>
+          </AppCard>
+        </AppGrid>
+      </PageSection>
 
-      <ConnectorHealthTable :sources="sources" />
+      <PageSection>
+        <AppGrid columns="1">
+          <ConnectorHealthTable :sources="sources" />
+        </AppGrid>
+      </PageSection>
     </template>
   </AppPage>
 </template>

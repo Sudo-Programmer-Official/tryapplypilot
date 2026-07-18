@@ -7,10 +7,12 @@ defineProps<{
 
 <template>
   <div class="page-header">
-    <div>
+    <div class="page-header__copy">
       <p class="eyebrow">TryApplyPilot</p>
-      <h1 class="type-heading">{{ title }}</h1>
-      <p class="type-small page-header__description">{{ description }}</p>
+      <div class="page-header__heading-group">
+        <h1 class="type-heading">{{ title }}</h1>
+        <p class="type-small page-header__description">{{ description }}</p>
+      </div>
     </div>
     <div v-if="$slots.actions">
       <slot name="actions" />
@@ -23,11 +25,21 @@ defineProps<{
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--content-gap);
+  gap: var(--page-section-gap);
+}
+
+.page-header__copy {
+  display: grid;
+  gap: var(--subtitle-gap);
+}
+
+.page-header__heading-group {
+  display: grid;
+  gap: var(--heading-gap);
 }
 
 .page-header__description {
-  margin-top: var(--space-2);
+  margin: 0;
   color: var(--color-text-muted);
 }
 

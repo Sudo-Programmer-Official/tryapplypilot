@@ -4,6 +4,7 @@ import { onMounted, ref } from "vue";
 import AppGrid from "../../components/layout/AppGrid.vue";
 import AppPage from "../../components/layout/AppPage.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
+import PageSection from "../../components/layout/PageSection.vue";
 import AppButton from "../../components/ui/AppButton.vue";
 import AppCard from "../../components/ui/AppCard.vue";
 import AppCheckbox from "../../components/ui/AppCheckbox.vue";
@@ -120,41 +121,50 @@ onMounted(load);
       </template>
     </PageHeader>
 
-    <AppEmptyState v-if="error" title="Watchlists unavailable" :description="error" />
-    <AppEmptyState
-      v-else-if="!loading && watchlists.length === 0"
-      title="No watchlists yet"
-      description="Create your first personal watchlist to monitor a narrow set of teams, skills, or companies."
-    />
+    <PageSection v-if="error">
+      <AppGrid columns="1">
+        <AppEmptyState title="Watchlists unavailable" :description="error" />
+      </AppGrid>
+    </PageSection>
+    <PageSection v-else-if="!loading && watchlists.length === 0">
+      <AppGrid columns="1">
+        <AppEmptyState
+          title="No watchlists yet"
+          description="Create your first personal watchlist to monitor a narrow set of teams, skills, or companies."
+        />
+      </AppGrid>
+    </PageSection>
 
-    <AppGrid v-else columns="3">
-      <AppCard
-        v-for="(watchlist, index) in watchlists"
-        :key="watchlist.id || `draft-${index}`"
-        :title="watchlist.name || 'New watchlist draft'"
-        :subtitle="`${watchlist.terms.length} terms`"
-      >
-        <div class="app-form-grid">
-          <AppInput v-model="watchlist.name" label="Watchlist name" placeholder="AI platform targets" />
-          <AppCheckbox :model-value="watchlist.enabled" label="Enabled" @update:model-value="watchlist.enabled = $event" />
-          <AppTextArea
-            :model-value="serializeTerms(watchlist)"
-            label="Terms"
-            placeholder="Databricks: Lakeflow&#10;OpenAI: Agents&#10;Platform"
-            hint="Use one term per line. Prefix with `Company:` when the term should apply only to a specific company."
-            :rows="5"
-            @update:model-value="watchlist.terms = parseTerms($event)"
-          />
-          <div class="app-actions-row">
-            <AppButton :disabled="savingWatchlistId === (watchlist.id || `draft-${index}`)" @click="persistWatchlist(index)">
-              {{ savingWatchlistId === (watchlist.id || `draft-${index}`) ? "Saving..." : "Save watchlist" }}
-            </AppButton>
-            <AppButton variant="secondary" :disabled="deletingWatchlistId === (watchlist.id || `draft-${index}`)" @click="removeWatchlist(index)">
-              {{ deletingWatchlistId === (watchlist.id || `draft-${index}`) ? "Deleting..." : "Delete" }}
-            </AppButton>
+    <PageSection v-else>
+      <AppGrid columns="3">
+        <AppCard
+          v-for="(watchlist, index) in watchlists"
+          :key="watchlist.id || `draft-${index}`"
+          :title="watchlist.name || 'New watchlist draft'"
+          :subtitle="`${watchlist.terms.length} terms`"
+        >
+          <div class="app-form-grid">
+            <AppInput v-model="watchlist.name" label="Watchlist name" placeholder="AI platform targets" />
+            <AppCheckbox :model-value="watchlist.enabled" label="Enabled" @update:model-value="watchlist.enabled = $event" />
+            <AppTextArea
+              :model-value="serializeTerms(watchlist)"
+              label="Terms"
+              placeholder="Databricks: Lakeflow&#10;OpenAI: Agents&#10;Platform"
+              hint="Use one term per line. Prefix with `Company:` when the term should apply only to a specific company."
+              :rows="5"
+              @update:model-value="watchlist.terms = parseTerms($event)"
+            />
+            <div class="app-actions-row">
+              <AppButton :disabled="savingWatchlistId === (watchlist.id || `draft-${index}`)" @click="persistWatchlist(index)">
+                {{ savingWatchlistId === (watchlist.id || `draft-${index}`) ? "Saving..." : "Save watchlist" }}
+              </AppButton>
+              <AppButton variant="secondary" :disabled="deletingWatchlistId === (watchlist.id || `draft-${index}`)" @click="removeWatchlist(index)">
+                {{ deletingWatchlistId === (watchlist.id || `draft-${index}`) ? "Deleting..." : "Delete" }}
+              </AppButton>
+            </div>
           </div>
-        </div>
-      </AppCard>
-    </AppGrid>
+        </AppCard>
+      </AppGrid>
+    </PageSection>
   </AppPage>
 </template>

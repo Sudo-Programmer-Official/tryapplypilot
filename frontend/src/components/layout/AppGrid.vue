@@ -2,7 +2,7 @@
 withDefaults(
   defineProps<{
     as?: string;
-    columns?: "2" | "3" | "4";
+    columns?: "1" | "2" | "3" | "4";
     gap?: "card" | "content";
   }>(),
   {

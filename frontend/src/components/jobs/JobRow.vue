@@ -3,6 +3,7 @@ import { Bookmark, ExternalLink, MapPin } from "lucide-vue-next";
 
 import AppBadge from "../ui/AppBadge.vue";
 import AppButton from "../ui/AppButton.vue";
+import AppCard from "../ui/AppCard.vue";
 import AppIconButton from "../ui/AppIconButton.vue";
 import MatchIndicator from "./MatchIndicator.vue";
 import type { JobOpportunity } from "../../types";
@@ -19,45 +20,46 @@ defineEmits<{
 </script>
 
 <template>
-  <article class="job-row surface-card">
-    <div class="job-row__identity">
-      <span class="job-row__mark" :style="companyMarkStyle(job.company)">{{ getInitials(job.company) }}</span>
-      <div>
-        <div class="job-row__title-row">
-          <h3>{{ job.title }}</h3>
-          <AppBadge tone="success" size="sm">{{ job.freshness_label }}</AppBadge>
+  <AppCard class="job-row" :padded="false">
+    <article class="job-row__body card-content">
+      <div class="job-row__identity">
+        <span class="job-row__mark" :style="companyMarkStyle(job.company)">{{ getInitials(job.company) }}</span>
+        <div>
+          <div class="job-row__title-row">
+            <h3>{{ job.title }}</h3>
+            <AppBadge tone="success" size="sm">{{ job.freshness_label }}</AppBadge>
+          </div>
+          <p>{{ job.company }} · {{ job.source }}</p>
+          <span class="job-row__meta"><MapPin class="job-row__meta-icon" /> {{ job.location || job.country_display }} ({{ job.remote_policy }})</span>
         </div>
-        <p>{{ job.company }} · {{ job.source }}</p>
-        <span class="job-row__meta"><MapPin class="job-row__meta-icon" /> {{ job.location || job.country_display }} ({{ job.remote_policy }})</span>
       </div>
-    </div>
 
-    <div class="job-row__match">
-      <MatchIndicator :score="job.match_score" />
-      <div class="job-row__skills">
-        <AppBadge v-for="skill in job.why.slice(0, 3)" :key="skill" tone="neutral" size="sm">{{ skill }}</AppBadge>
+      <div class="job-row__match">
+        <MatchIndicator :score="job.match_score" />
+        <div class="job-row__skills">
+          <AppBadge v-for="skill in job.why.slice(0, 3)" :key="skill" tone="neutral" size="sm">{{ skill }}</AppBadge>
+        </div>
       </div>
-    </div>
 
-    <div class="job-row__actions">
-      <AppIconButton :label="saved ? 'Remove saved job' : 'Save job'" @click="$emit('toggle-save', job.id)">
-        <Bookmark :fill="saved ? 'currentColor' : 'none'" />
-      </AppIconButton>
-      <AppButton :href="job.apply_url" target="_blank" rel="noreferrer">
-        <span class="job-row__apply-link">
-          Apply
-          <ExternalLink />
-        </span>
-      </AppButton>
-    </div>
-  </article>
+      <div class="job-row__actions">
+        <AppIconButton :label="saved ? 'Remove saved job' : 'Save job'" @click="$emit('toggle-save', job.id)">
+          <Bookmark :fill="saved ? 'currentColor' : 'none'" />
+        </AppIconButton>
+        <AppButton :href="job.apply_url" target="_blank" rel="noreferrer">
+          <span class="job-row__apply-link">
+            Apply
+            <ExternalLink />
+          </span>
+        </AppButton>
+      </div>
+    </article>
+  </AppCard>
 </template>
 
 <style scoped>
-.job-row {
+.job-row__body {
   display: grid;
   gap: var(--card-gap);
-  padding: var(--card-padding);
   grid-template-columns: minmax(0, 1.6fr) auto auto;
   align-items: center;
 }
@@ -134,7 +136,7 @@ defineEmits<{
 }
 
 @media (max-width: 1023px) {
-  .job-row {
+  .job-row__body {
     grid-template-columns: 1fr;
   }
 

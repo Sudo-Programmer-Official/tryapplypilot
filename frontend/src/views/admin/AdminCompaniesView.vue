@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 
+import AppGrid from "../../components/layout/AppGrid.vue";
 import AppPage from "../../components/layout/AppPage.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
+import PageSection from "../../components/layout/PageSection.vue";
 import AppBadge from "../../components/ui/AppBadge.vue";
 import AppButton from "../../components/ui/AppButton.vue";
 import AppCard from "../../components/ui/AppCard.vue";
@@ -219,7 +221,7 @@ onMounted(load);
       description="Seed the catalog once, scan the catalog in a table, and only open the drawer when something actually needs editing."
     >
       <template #actions>
-        <div class="catalog-actions">
+        <div class="app-actions-row catalog-actions">
           <AppButton variant="secondary" :disabled="refreshing" @click="refreshSnapshot">
             {{ refreshing ? "Refreshing..." : "Refresh Snapshot" }}
           </AppButton>
@@ -231,46 +233,54 @@ onMounted(load);
       </template>
     </PageHeader>
 
-    <AppCard v-if="error" title="Catalog unavailable" :subtitle="error" />
+    <PageSection v-if="error">
+      <AppGrid columns="1">
+        <AppCard title="Catalog unavailable" :subtitle="error" />
+      </AppGrid>
+    </PageSection>
 
     <template v-else>
-      <AppCard title="Catalog companies" :subtitle="`${companies.length} companies in the current catalog.`">
-        <div class="catalog-toolbar">
-          <AppInput v-model="search" label="Search" placeholder="Search company, connector, or identifier" />
-        </div>
+      <PageSection>
+        <AppGrid columns="1">
+          <AppCard title="Catalog companies" :subtitle="`${companies.length} companies in the current catalog.`">
+            <div class="app-form-grid">
+              <AppInput v-model="search" label="Search" placeholder="Search company, connector, or identifier" />
+            </div>
 
-        <AppEmptyState
-          v-if="!loading && filteredCompanies.length === 0"
-          title="No companies in the catalog"
-          description="Import the recommended defaults to seed the catalog, then edit only what needs to change."
-        >
-          <template #actions>
-            <AppButton :disabled="importing" @click="importDefaults">Import Recommended Companies</AppButton>
-          </template>
-        </AppEmptyState>
+            <AppEmptyState
+              v-if="!loading && filteredCompanies.length === 0"
+              title="No companies in the catalog"
+              description="Import the recommended defaults to seed the catalog, then edit only what needs to change."
+            >
+              <template #actions>
+                <AppButton :disabled="importing" @click="importDefaults">Import Recommended Companies</AppButton>
+              </template>
+            </AppEmptyState>
 
-        <AppTable v-else :columns="columns" :has-rows="filteredCompanies.length > 0" empty-message="No companies match the current search.">
-          <tr v-for="company in filteredCompanies" :key="company.id || company.company">
-            <td>
-              <div class="company-cell">
-                <strong>{{ company.company }}</strong>
-                <span>{{ company.career_url || "Career URL will be generated from connector defaults." }}</span>
-              </div>
-            </td>
-            <td>{{ connectorLabel(company.connector) }}</td>
-            <td>
-              <AppBadge :tone="companyStatus(company).tone">
-                {{ companyStatus(company).label }}
-              </AppBadge>
-            </td>
-            <td>{{ companyJobCount(company.company) }}</td>
-            <td>{{ companyLastSync(company) }}</td>
-            <td>
-              <AppButton size="sm" variant="secondary" @click="openEditDrawer(company)">Edit</AppButton>
-            </td>
-          </tr>
-        </AppTable>
-      </AppCard>
+            <AppTable v-else :columns="columns" :has-rows="filteredCompanies.length > 0" empty-message="No companies match the current search.">
+              <tr v-for="company in filteredCompanies" :key="company.id || company.company">
+                <td>
+                  <div class="company-cell">
+                    <strong>{{ company.company }}</strong>
+                    <span>{{ company.career_url || "Career URL will be generated from connector defaults." }}</span>
+                  </div>
+                </td>
+                <td>{{ connectorLabel(company.connector) }}</td>
+                <td>
+                  <AppBadge :tone="companyStatus(company).tone">
+                    {{ companyStatus(company).label }}
+                  </AppBadge>
+                </td>
+                <td>{{ companyJobCount(company.company) }}</td>
+                <td>{{ companyLastSync(company) }}</td>
+                <td>
+                  <AppButton size="sm" variant="secondary" @click="openEditDrawer(company)">Edit</AppButton>
+                </td>
+              </tr>
+            </AppTable>
+          </AppCard>
+        </AppGrid>
+      </PageSection>
 
       <AppDrawer
         :open="drawerOpen"
@@ -280,7 +290,7 @@ onMounted(load);
         width="lg"
         @close="drawerOpen = false"
       >
-        <div class="drawer-form">
+        <div class="app-form-grid">
           <AppInput v-model="draft.company" label="Company" placeholder="Microsoft" />
           <AppInput v-model="draft.career_url" label="Career URL" placeholder="https://..." />
           <AppInput v-model="draft.external_identifier" label="External identifier" placeholder="microsoft" />
@@ -327,7 +337,7 @@ onMounted(load);
             @update:model-value="draft.role_families = parseCsv($event)"
           />
           <AppCheckbox :model-value="draft.enabled" label="Enabled" @update:model-value="draft.enabled = $event" />
-          <div class="drawer-actions">
+          <div class="app-actions-row">
             <AppButton variant="secondary" @click="drawerOpen = false">Cancel</AppButton>
             <AppButton :disabled="saving" @click="saveDraft">{{ saving ? "Saving..." : "Save company" }}</AppButton>
           </div>
@@ -338,20 +348,8 @@ onMounted(load);
 </template>
 
 <style scoped>
-.catalog-actions,
-.catalog-toolbar,
-.drawer-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-}
-
 .catalog-actions {
   justify-content: flex-end;
-}
-
-.catalog-toolbar {
-  margin-bottom: var(--space-4);
 }
 
 .company-cell {
@@ -362,12 +360,6 @@ onMounted(load);
 .company-cell span {
   color: var(--color-text-muted);
   font-size: 0.88rem;
-}
-
-.drawer-form {
-  display: grid;
-  gap: var(--space-4);
-  padding: var(--space-5);
 }
 
 td {

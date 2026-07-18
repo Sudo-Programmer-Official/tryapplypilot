@@ -4,6 +4,7 @@ import { computed, ref } from "vue";
 import AppGrid from "../../components/layout/AppGrid.vue";
 import AppPage from "../../components/layout/AppPage.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
+import PageSection from "../../components/layout/PageSection.vue";
 import AppBadge from "../../components/ui/AppBadge.vue";
 import AppButton from "../../components/ui/AppButton.vue";
 import AppCard from "../../components/ui/AppCard.vue";
@@ -86,79 +87,81 @@ async function verifyTelegram(): Promise<void> {
       </template>
     </PageHeader>
 
-    <AppGrid as="section" columns="2">
-      <AppCard title="Personal profile" subtitle="This information powers onboarding progress and future resume workflows.">
-        <div class="app-form-grid">
-          <AppInput v-model="draft.full_name" label="Full name" placeholder="Abhishek Kumar Jha" />
-          <AppInput v-model="draft.linkedin_url" label="LinkedIn URL" placeholder="https://linkedin.com/in/..." />
-          <AppInput v-model="draft.github_url" label="GitHub URL" placeholder="https://github.com/..." />
-          <AppInput v-model="draft.portfolio_url" label="Portfolio URL" placeholder="https://..." />
-          <AppInput
-            :model-value="draft.years_of_experience ?? ''"
-            label="Years of experience"
-            type="number"
-            :min="0"
-            @update:model-value="draft.years_of_experience = $event ? Number($event) : null"
-          />
-          <AppInput v-model="draft.work_authorization" label="Work authorization" placeholder="US citizen, H1B, EAD..." />
-          <AppInput v-model="draft.visa_status" label="Visa status" placeholder="Optional" />
+    <PageSection>
+      <AppGrid columns="2">
+        <AppCard title="Personal profile" subtitle="This information powers onboarding progress and future resume workflows.">
+          <div class="app-form-grid">
+            <AppInput v-model="draft.full_name" label="Full name" placeholder="Abhishek Kumar Jha" />
+            <AppInput v-model="draft.linkedin_url" label="LinkedIn URL" placeholder="https://linkedin.com/in/..." />
+            <AppInput v-model="draft.github_url" label="GitHub URL" placeholder="https://github.com/..." />
+            <AppInput v-model="draft.portfolio_url" label="Portfolio URL" placeholder="https://..." />
+            <AppInput
+              :model-value="draft.years_of_experience ?? ''"
+              label="Years of experience"
+              type="number"
+              :min="0"
+              @update:model-value="draft.years_of_experience = $event ? Number($event) : null"
+            />
+            <AppInput v-model="draft.work_authorization" label="Work authorization" placeholder="US citizen, H1B, EAD..." />
+            <AppInput v-model="draft.visa_status" label="Visa status" placeholder="Optional" />
+          </div>
+        </AppCard>
+
+        <div class="app-stack app-stack--card">
+          <AppCard title="Telegram delivery" subtitle="Each user connects directly to the bot for private alerts.">
+            <div class="app-actions-row">
+              <AppBadge :tone="auth.user.value?.telegram_chat_id ? 'success' : 'warning'">{{ telegramStatus }}</AppBadge>
+              <span v-if="auth.user.value?.telegram_chat_id">Chat ID {{ auth.user.value.telegram_chat_id }}</span>
+            </div>
+            <div class="app-actions-row">
+              <AppButton variant="secondary" :disabled="connecting" @click="startTelegramConnect">
+                {{ connecting ? "Starting..." : auth.user.value?.telegram_chat_id ? "Reconnect Telegram" : "Connect Telegram" }}
+              </AppButton>
+              <AppButton :disabled="!connectSession || verifying" @click="verifyTelegram">
+                {{ verifying ? "Verifying..." : "Verify connection" }}
+              </AppButton>
+            </div>
+            <AppTextArea
+              v-if="connectSession"
+              :model-value="connectSession.connect_url"
+              label="Bot link"
+              hint="Open this exact link, press Start in Telegram, then return here and click verify. If the bot chat was already open before, use the manual command below instead."
+              :rows="3"
+              @update:model-value="() => undefined"
+            />
+            <AppTextArea
+              v-if="connectSession?.connect_command"
+              :model-value="connectSession.connect_command"
+              label="Manual connect command"
+              hint="If Telegram opens an existing chat and does not trigger the deep link, send this exact command to the bot, then click verify."
+              :rows="2"
+              @update:model-value="() => undefined"
+            />
+          </AppCard>
+
+          <AppCard title="Account status" subtitle="Basic metadata for support and operations.">
+            <div class="app-meta-grid">
+              <div>
+                <span class="eyebrow">Email</span>
+                <strong>{{ auth.user.value?.email }}</strong>
+              </div>
+              <div>
+                <span class="eyebrow">Role</span>
+                <strong>{{ auth.user.value?.role }}</strong>
+              </div>
+              <div>
+                <span class="eyebrow">Created</span>
+                <strong>{{ formatDateTime(auth.user.value?.created_at) }}</strong>
+              </div>
+              <div>
+                <span class="eyebrow">Last login</span>
+                <strong>{{ formatDateTime(auth.user.value?.last_login_at) }}</strong>
+              </div>
+            </div>
+          </AppCard>
         </div>
-      </AppCard>
-
-      <div class="app-stack app-stack--card">
-        <AppCard title="Telegram delivery" subtitle="Each user connects directly to the bot for private alerts.">
-          <div class="app-actions-row">
-            <AppBadge :tone="auth.user.value?.telegram_chat_id ? 'success' : 'warning'">{{ telegramStatus }}</AppBadge>
-            <span v-if="auth.user.value?.telegram_chat_id">Chat ID {{ auth.user.value.telegram_chat_id }}</span>
-          </div>
-          <div class="app-actions-row">
-            <AppButton variant="secondary" :disabled="connecting" @click="startTelegramConnect">
-              {{ connecting ? "Starting..." : auth.user.value?.telegram_chat_id ? "Reconnect Telegram" : "Connect Telegram" }}
-            </AppButton>
-            <AppButton :disabled="!connectSession || verifying" @click="verifyTelegram">
-              {{ verifying ? "Verifying..." : "Verify connection" }}
-            </AppButton>
-          </div>
-          <AppTextArea
-            v-if="connectSession"
-            :model-value="connectSession.connect_url"
-            label="Bot link"
-            hint="Open this exact link, press Start in Telegram, then return here and click verify. If the bot chat was already open before, use the manual command below instead."
-            :rows="3"
-            @update:model-value="() => undefined"
-          />
-          <AppTextArea
-            v-if="connectSession?.connect_command"
-            :model-value="connectSession.connect_command"
-            label="Manual connect command"
-            hint="If Telegram opens an existing chat and does not trigger the deep link, send this exact command to the bot, then click verify."
-            :rows="2"
-            @update:model-value="() => undefined"
-          />
-        </AppCard>
-
-        <AppCard title="Account status" subtitle="Basic metadata for support and operations.">
-          <div class="app-meta-grid">
-            <div>
-              <span class="eyebrow">Email</span>
-              <strong>{{ auth.user.value?.email }}</strong>
-            </div>
-            <div>
-              <span class="eyebrow">Role</span>
-              <strong>{{ auth.user.value?.role }}</strong>
-            </div>
-            <div>
-              <span class="eyebrow">Created</span>
-              <strong>{{ formatDateTime(auth.user.value?.created_at) }}</strong>
-            </div>
-            <div>
-              <span class="eyebrow">Last login</span>
-              <strong>{{ formatDateTime(auth.user.value?.last_login_at) }}</strong>
-            </div>
-          </div>
-        </AppCard>
-      </div>
-    </AppGrid>
+      </AppGrid>
+    </PageSection>
   </AppPage>
 </template>
 

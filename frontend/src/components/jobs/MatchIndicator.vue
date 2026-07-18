@@ -23,7 +23,7 @@ const style = computed(() => ({
 .match-indicator {
   width: 4rem;
   height: 4rem;
-  padding: 0.35rem;
+  padding: var(--space-1);
   border-radius: 50%;
 }
 

@@ -48,9 +48,17 @@
   gap: var(--section-body-gap);
 }
 
+.page-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-section-gap);
+  padding: var(--page-section-padding);
+  min-width: 0;
+}
+
 .app-section__header {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--heading-gap);
 }
 
 .app-section__eyebrow {
@@ -75,8 +83,9 @@
 
 .app-grid {
   display: grid;
-  gap: var(--grid-gap, var(--card-gap));
+  gap: var(--grid-gap, var(--grid-gap-desktop));
   grid-template-columns: repeat(var(--grid-columns, 1), minmax(0, 1fr));
+  align-items: start;
 }
 
 .app-grid--content {
@@ -85,7 +94,7 @@
 
 .app-form-grid {
   display: grid;
-  gap: var(--content-gap);
+  gap: var(--form-row-gap);
 }
 
 .app-actions-row {
@@ -95,10 +104,78 @@
   gap: var(--content-gap);
 }
 
+.app-checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--checkbox-group-gap);
+}
+
 .app-meta-grid {
   display: grid;
   gap: var(--content-gap);
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.card-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--content-gap);
+  min-width: 0;
+  padding: var(--card-padding);
+}
+
+.app-card-header,
+.app-card-footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--content-gap);
+  min-width: 0;
+}
+
+.app-card-header {
+  padding: var(--card-padding) var(--card-padding) 0;
+}
+
+.app-card-header__copy {
+  display: grid;
+  gap: var(--heading-gap);
+  min-width: 0;
+}
+
+.app-card-header__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--type-title);
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.app-card-header__subtitle {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-small);
+  line-height: 1.5;
+}
+
+.app-card-header__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--content-gap);
+}
+
+.app-card-body {
+  padding-top: var(--card-padding);
+}
+
+.app-card-header + .app-card-body {
+  padding-top: var(--card-body-padding-top);
+}
+
+.app-card-footer {
+  padding: 0 var(--card-padding) var(--card-padding);
 }
 
 .app-table-copy {
@@ -171,6 +248,7 @@
 
 @media (max-width: 1023px) {
   .app-grid {
+    gap: var(--grid-gap, var(--grid-gap-tablet));
     grid-template-columns: repeat(min(var(--grid-columns, 1), 2), minmax(0, 1fr));
   }
 }
@@ -180,7 +258,12 @@
     padding-block: 24px;
   }
 
+  .page-section {
+    padding: var(--space-6);
+  }
+
   .app-grid {
+    gap: var(--grid-gap, var(--grid-gap-mobile));
     grid-template-columns: 1fr;
   }
 }

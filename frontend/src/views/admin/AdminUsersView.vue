@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 
+import AppGrid from "../../components/layout/AppGrid.vue";
 import AppPage from "../../components/layout/AppPage.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
+import PageSection from "../../components/layout/PageSection.vue";
 import AppCard from "../../components/ui/AppCard.vue";
 import AppEmptyState from "../../components/ui/AppEmptyState.vue";
 import AppTable from "../../components/ui/AppTable.vue";
@@ -43,22 +45,30 @@ onMounted(load);
   <AppPage>
     <PageHeader title="Users" description="Inspect account setup, role assignment, and private notification readiness." />
 
-    <AppEmptyState v-if="error" title="Users unavailable" :description="error" />
+    <PageSection v-if="error">
+      <AppGrid columns="1">
+        <AppEmptyState title="Users unavailable" :description="error" />
+      </AppGrid>
+    </PageSection>
 
-    <AppCard v-else title="Accounts" :subtitle="loading ? 'Loading users...' : `${users.length} user accounts loaded.`">
-      <AppTable :columns="columns" :has-rows="users.length > 0" empty-message="No users found.">
-        <tr v-for="user in users" :key="user.id">
-          <td class="app-table__copy">
-            <strong>{{ user.full_name }}</strong>
-            <p>{{ user.email }}</p>
-          </td>
-          <td>{{ user.role }}</td>
-          <td>{{ user.preferences.country ?? user.country }}</td>
-          <td>{{ user.telegram_chat_id ? "Connected" : "Pending" }}</td>
-          <td>{{ user.onboarding.progress_percent }}%</td>
-          <td>{{ formatDateTime(user.last_login_at) }}</td>
-        </tr>
-      </AppTable>
-    </AppCard>
+    <PageSection v-else>
+      <AppGrid columns="1">
+        <AppCard title="Accounts" :subtitle="loading ? 'Loading users...' : `${users.length} user accounts loaded.`">
+          <AppTable :columns="columns" :has-rows="users.length > 0" empty-message="No users found.">
+            <tr v-for="user in users" :key="user.id">
+              <td class="app-table__copy">
+                <strong>{{ user.full_name }}</strong>
+                <p>{{ user.email }}</p>
+              </td>
+              <td>{{ user.role }}</td>
+              <td>{{ user.preferences.country ?? user.country }}</td>
+              <td>{{ user.telegram_chat_id ? "Connected" : "Pending" }}</td>
+              <td>{{ user.onboarding.progress_percent }}%</td>
+              <td>{{ formatDateTime(user.last_login_at) }}</td>
+            </tr>
+          </AppTable>
+        </AppCard>
+      </AppGrid>
+    </PageSection>
   </AppPage>
 </template>

@@ -34,7 +34,7 @@ defineProps<{
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: var(--content-gap);
   align-items: start;
-  padding: 0.95rem 1rem;
+  padding: var(--space-5) var(--space-4);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-elevated);
@@ -44,7 +44,7 @@ defineProps<{
   width: 0.85rem;
   height: 0.85rem;
   border-radius: 50%;
-  margin-top: 0.35rem;
+  margin-top: var(--space-1);
 }
 
 .activity-list__copy {
