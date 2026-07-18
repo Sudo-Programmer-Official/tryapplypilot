@@ -24,26 +24,29 @@ const sparklinePoints = computed(() => {
 
 <template>
   <AppCard class="metric-card">
-    <div class="metric-card__header">
-      <span class="metric-card__icon" :class="`metric-card__icon--${tone ?? 'primary'}`">
-        <component :is="icon" />
-      </span>
-      <div>
+    <div class="metric-card__top">
+      <div class="metric-card__copy">
         <p class="metric-card__label">{{ label }}</p>
         <strong class="metric-card__value">{{ value }}</strong>
       </div>
+      <span class="metric-card__icon" :class="`metric-card__icon--${tone ?? 'primary'}`">
+        <component :is="icon" />
+      </span>
     </div>
     <p class="metric-card__detail">{{ detail }}</p>
-    <svg v-if="sparkline?.length" class="metric-card__spark" viewBox="0 0 120 28" preserveAspectRatio="none">
-      <polyline
-        :points="sparklinePoints"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      />
-    </svg>
+    <div v-if="sparkline?.length" class="metric-card__trend">
+      <span class="metric-card__trend-label">Recent activity</span>
+      <svg class="metric-card__spark" viewBox="0 0 120 28" preserveAspectRatio="none">
+        <polyline
+          :points="sparklinePoints"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+    </div>
   </AppCard>
 </template>
 
@@ -52,43 +55,56 @@ const sparklinePoints = computed(() => {
   height: 100%;
 }
 
-.metric-card__header {
-  display: flex;
-  align-items: center;
+.metric-card :deep(.app-card__body) {
+  height: 100%;
+  align-content: start;
+}
+
+.metric-card__top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--space-4);
+  align-items: start;
+}
+
+.metric-card__copy {
+  min-width: 0;
 }
 
 .metric-card__icon {
   display: grid;
   place-items: center;
-  width: 4.5rem;
-  height: 4.5rem;
-  border-radius: 1.5rem;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 1.15rem;
+  background: var(--metric-surface);
+  color: var(--metric-accent);
+  box-shadow: inset 0 0 0 1px rgba(15, 29, 58, 0.05);
 }
 
 .metric-card__icon :deep(svg) {
-  width: 48px;
-  height: 48px;
+  width: 1.9rem;
+  height: 1.9rem;
 }
 
 .metric-card__icon--primary {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
+  --metric-surface: var(--color-primary-soft);
+  --metric-accent: var(--color-primary);
 }
 
 .metric-card__icon--success {
-  background: var(--color-success-soft);
-  color: var(--color-success);
+  --metric-surface: var(--color-success-soft);
+  --metric-accent: var(--color-success);
 }
 
 .metric-card__icon--warning {
-  background: var(--color-warning-soft);
-  color: var(--color-warning);
+  --metric-surface: var(--color-warning-soft);
+  --metric-accent: var(--color-warning);
 }
 
 .metric-card__icon--info {
-  background: var(--color-info-soft);
-  color: var(--color-info);
+  --metric-surface: var(--color-info-soft);
+  --metric-accent: var(--color-info);
 }
 
 .metric-card__label,
@@ -97,17 +113,45 @@ const sparklinePoints = computed(() => {
   color: var(--color-text-muted);
 }
 
+.metric-card__label {
+  font-size: var(--type-caption);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .metric-card__value {
   display: block;
-  margin-top: var(--space-1);
+  margin-top: var(--space-2);
   font-family: var(--font-display);
-  font-size: var(--type-display);
+  font-size: clamp(2.75rem, 4vw, 3.5rem);
+  line-height: 0.92;
   letter-spacing: -0.04em;
+}
+
+.metric-card__detail {
+  max-width: 26ch;
+  font-size: var(--type-small);
+  line-height: 1.55;
+}
+
+.metric-card__trend {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: auto;
+  color: var(--metric-accent, var(--color-primary));
+}
+
+.metric-card__trend-label {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .metric-card__spark {
   width: 100%;
-  height: 1.75rem;
-  color: var(--color-primary);
+  height: 2rem;
 }
 </style>

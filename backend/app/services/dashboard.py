@@ -5,6 +5,7 @@ from typing import Any
 
 from app.job_metadata import matches_country_preference
 from app.runtime import get_runtime
+from app.scheduler_service import SchedulerStatusSnapshot, get_scheduler_service
 
 
 def _component_detail(status: str, healthy: str, lagging: str, degraded: str) -> str:
@@ -35,6 +36,72 @@ def _build_scheduler_status(
     if int(last_run_minutes_ago) > polling_interval_minutes * 2:
         return ("lagging", "Scheduler is behind the 5-minute polling target.", last_poll, next_poll)
     return ("healthy", f"Next poll due within {polling_interval_minutes} minutes.", last_poll, next_poll)
+
+
+def _minutes_until(instant: str | None, *, current_time: datetime) -> int | None:
+    if instant is None:
+        return None
+    try:
+        date_value = datetime.fromisoformat(instant)
+    except ValueError:
+        return None
+    if date_value.tzinfo is None:
+        date_value = date_value.replace(tzinfo=timezone.utc)
+    delta_seconds = (date_value - current_time).total_seconds()
+    return max(0, int(delta_seconds // 60))
+
+
+def _build_scheduler_snapshot(
+    *,
+    current_time: datetime,
+    polling_interval_minutes: int,
+    active_source: dict[str, Any] | None,
+) -> SchedulerStatusSnapshot:
+    service = get_scheduler_service()
+    if service is not None:
+        return service.status()
+
+    _, _, last_poll_at, next_poll_at = _build_scheduler_status(
+        current_time=current_time,
+        polling_interval_minutes=polling_interval_minutes,
+        active_source=active_source,
+    )
+    return SchedulerStatusSnapshot(
+        running=False,
+        cycle_state="stopped",
+        polling_interval_minutes=polling_interval_minutes,
+        started_at=None,
+        last_run_started_at=last_poll_at,
+        last_run=last_poll_at,
+        next_run=next_poll_at,
+        last_duration_seconds=None,
+        jobs_collected=int(active_source.get("jobs_collected", 0)) if active_source is not None else 0,
+        jobs_inserted=int(active_source.get("new_jobs_today", 0)) if active_source is not None else 0,
+        jobs_matched=0,
+        notifications_sent=0,
+        errors=0,
+        current_connector=active_source.get("source") if active_source is not None else None,
+        last_error=None,
+    )
+
+
+def _scheduler_component(
+    scheduler: SchedulerStatusSnapshot,
+    *,
+    current_time: datetime,
+) -> tuple[str, str]:
+    if not scheduler.running:
+        return ("degraded", "Scheduler service is not running.")
+    if scheduler.cycle_state == "running":
+        return ("healthy", "A poll cycle is running now.")
+    if scheduler.last_run is None:
+        return ("lagging", "Scheduler started and is waiting for the first completed poll.")
+    next_run_minutes = _minutes_until(scheduler.next_run, current_time=current_time)
+    if next_run_minutes is not None and next_run_minutes == 0:
+        return ("healthy", "Next poll is due now.")
+    if next_run_minutes is not None:
+        return ("healthy", f"Next poll due within {next_run_minutes} minutes.")
+    return ("healthy", "Scheduler is running on the configured cadence.")
 
 
 async def list_jobs(
@@ -93,17 +160,30 @@ async def build_dashboard_snapshot(now: datetime | None = None) -> dict[str, Any
     live_sources = [source for source in sources if source.enabled and source.rollout_stage == "live"]
     next_sources = [source for source in sources if source.rollout_stage == "next"]
     active_source = live_sources[0] if live_sources else None
-    agent_state = "healthy"
-    if any(source.state == "degraded" for source in live_sources):
-        agent_state = "degraded"
-    elif any(source.state == "lagging" for source in live_sources):
-        agent_state = "lagging"
-    scheduler_state, scheduler_detail, last_poll_at, next_poll_at = _build_scheduler_status(
+    scheduler = _build_scheduler_snapshot(
         current_time=current_time,
         polling_interval_minutes=settings.polling_interval_minutes,
         active_source=active_source.to_dict() if active_source is not None else None,
     )
+    scheduler_state, scheduler_detail = _scheduler_component(scheduler, current_time=current_time)
+    agent_state = "healthy"
+    if scheduler_state == "degraded":
+        agent_state = "degraded"
+    elif scheduler_state == "lagging":
+        agent_state = "lagging"
+    elif any(source.state == "degraded" for source in live_sources):
+        agent_state = "degraded"
+    elif any(source.state == "lagging" for source in live_sources):
+        agent_state = "lagging"
+    last_poll_at = scheduler.last_run
+    next_poll_at = scheduler.next_run
     total_new_today = sum(source.new_jobs_today for source in live_sources)
+    last_run_minutes_ago = (
+        max(0, int((current_time - datetime.fromisoformat(scheduler.last_run)).total_seconds() // 60))
+        if scheduler.last_run is not None
+        else (active_source.last_run_minutes_ago if active_source is not None else settings.polling_interval_minutes)
+    )
+    next_run_minutes = _minutes_until(scheduler.next_run, current_time=current_time)
 
     return {
         "generated_at": current_time.isoformat(),
@@ -117,17 +197,12 @@ async def build_dashboard_snapshot(now: datetime | None = None) -> dict[str, Any
         "agent": {
             "name": "Market Scout Agent",
             "state": agent_state,
-            "current_connector": settings.primary_connector,
+            "current_connector": scheduler.current_connector or settings.primary_connector,
             "polling_interval_minutes": settings.polling_interval_minutes,
             "apply_now_threshold_score": apply_now_threshold,
             "review_threshold_score": review_threshold,
-            "last_run_minutes_ago": active_source.last_run_minutes_ago or settings.polling_interval_minutes,
-            "next_run_minutes": max(
-                0,
-                settings.polling_interval_minutes - (active_source.last_run_minutes_ago or 0),
-            )
-            if active_source is not None
-            else settings.polling_interval_minutes,
+            "last_run_minutes_ago": last_run_minutes_ago,
+            "next_run_minutes": next_run_minutes if next_run_minutes is not None else settings.polling_interval_minutes,
             "workflow": ["Collect", "Normalize", "Deduplicate", "Score", "Notify", "Sleep"],
         },
         "summary": {
@@ -152,6 +227,7 @@ async def build_dashboard_snapshot(now: datetime | None = None) -> dict[str, Any
         "alerts": [alert.to_dict() for alert in alerts],
         "sources": [source.to_dict() for source in sources],
         "settings": settings.to_dict(),
+        "scheduler": scheduler.to_dict(),
         "system_status": {
             "components": [
                 {
@@ -208,9 +284,12 @@ async def build_dashboard_snapshot(now: datetime | None = None) -> dict[str, Any
                 },
             ],
             "stats": {
-                "jobs_collected": len(jobs),
+                "running": scheduler.running,
+                "jobs_collected": scheduler.jobs_collected,
+                "jobs_matched": scheduler.jobs_matched,
                 "new_today": total_new_today,
-                "notifications_sent": len(alerts),
+                "notifications_sent": scheduler.notifications_sent,
+                "errors": scheduler.errors,
                 "last_poll_at": last_poll_at,
                 "next_poll_at": next_poll_at,
             },
@@ -239,17 +318,24 @@ async def build_health_snapshot(now: datetime | None = None) -> dict[str, Any]:
     settings = await runtime.repositories.settings.get()
     sources = await runtime.repositories.sources.list()
     live_sources = [source for source in sources if source.enabled]
-    health_state = "ok"
-    if any(source.state == "degraded" for source in live_sources):
-        health_state = "degraded"
-    elif any(source.state == "lagging" for source in live_sources):
-        health_state = "lagging"
     active_source = live_sources[0] if live_sources else None
-    scheduler_state, scheduler_detail, last_poll_at, next_poll_at = _build_scheduler_status(
+    scheduler = _build_scheduler_snapshot(
         current_time=current_time,
         polling_interval_minutes=settings.polling_interval_minutes,
         active_source=active_source.to_dict() if active_source is not None else None,
     )
+    scheduler_state, scheduler_detail = _scheduler_component(scheduler, current_time=current_time)
+    last_poll_at = scheduler.last_run
+    next_poll_at = scheduler.next_run
+    health_state = "ok"
+    if scheduler_state == "degraded":
+        health_state = "degraded"
+    elif scheduler_state == "lagging":
+        health_state = "lagging"
+    elif any(source.state == "degraded" for source in live_sources):
+        health_state = "degraded"
+    elif any(source.state == "lagging" for source in live_sources):
+        health_state = "lagging"
 
     return {
         "status": health_state,
@@ -261,10 +347,18 @@ async def build_health_snapshot(now: datetime | None = None) -> dict[str, Any]:
             "polling_interval_minutes": settings.polling_interval_minutes,
         },
         "scheduler": {
+            "running": scheduler.running,
+            "cycle_state": scheduler.cycle_state,
             "status": scheduler_state,
             "detail": scheduler_detail,
             "last_poll_at": last_poll_at,
             "next_poll_at": next_poll_at,
+            "jobs_collected": scheduler.jobs_collected,
+            "jobs_matched": scheduler.jobs_matched,
+            "notifications_sent": scheduler.notifications_sent,
+            "errors": scheduler.errors,
+            "current_connector": scheduler.current_connector,
+            "last_error": scheduler.last_error,
         },
         "database": {
             "backend": runtime.database.backend,

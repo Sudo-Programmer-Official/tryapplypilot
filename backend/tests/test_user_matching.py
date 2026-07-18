@@ -12,15 +12,25 @@ from app.user_matching import (
 )
 
 
-def _user(*, locations: list[str], companies: list[str], roles: list[str], threshold: int = 90) -> UserAccount:
+def _user(
+    *,
+    locations: list[str],
+    companies: list[str],
+    roles: list[str],
+    threshold: int = 90,
+    country: str = "US",
+    skills: list[str] | None = None,
+    profile: dict[str, object] | None = None,
+) -> UserAccount:
     return UserAccount(
         id="user-1",
         email="user@example.com",
         role="user",
         full_name="Abhishek",
-        country="US",
+        country=country,
+        profile=profile or {},
         preferences={
-            "country": "US",
+            "country": country,
             "locations": locations,
             "preferred_companies": companies,
             "preferred_roles": roles,
@@ -28,13 +38,20 @@ def _user(*, locations: list[str], companies: list[str], roles: list[str], thres
             "experience_levels": ["Senior", "Staff"],
             "minimum_match_score": threshold,
             "freshness_hours": 6,
-            "skills": ["Python", "Distributed Systems"],
+            "skills": skills if skills is not None else ["Python", "Distributed Systems"],
         },
         onboarding=OnboardingStatus(progress_percent=0, steps=[]),
     )
 
 
-def _job(*, company: str, location: str, remote_policy: str = "Hybrid", title: str = "Senior Software Engineer") -> NormalizedJobRecord:
+def _job(
+    *,
+    company: str,
+    location: str,
+    remote_policy: str = "Hybrid",
+    title: str = "Senior Software Engineer",
+    description_text: str = "Backend distributed systems role with Python and AI agents.",
+) -> NormalizedJobRecord:
     return NormalizedJobRecord(
         connector_key="greenhouse:databricks",
         external_job_id="job-1",
@@ -44,7 +61,7 @@ def _job(*, company: str, location: str, remote_policy: str = "Hybrid", title: s
         remote_policy=remote_policy,
         published_at=None,
         apply_url="https://example.com/apply",
-        description_text="Backend distributed systems role with Python and AI agents.",
+        description_text=description_text,
         job_fingerprint="fingerprint-1",
         raw_payload={},
     )
@@ -69,9 +86,66 @@ class UserMatchingTests(unittest.TestCase):
         self.assertEqual(filter_reason_for_user(_job(company="Databricks", location="Seattle, WA"), user, settings), "company")
         self.assertEqual(filter_reason_for_user(_job(company="Microsoft", location="New York, NY"), user, settings), "location")
 
+    def test_filter_reason_for_user_respects_selected_country(self) -> None:
+        settings = get_settings()
+        user = _user(
+            locations=[],
+            companies=["Microsoft"],
+            roles=["Senior Software Engineer"],
+            country="US",
+        )
+        self.assertEqual(filter_reason_for_user(_job(company="Microsoft", location="Toronto, Canada"), user, settings), "country")
+
+    def test_filter_reason_for_user_uses_resume_metadata_as_domain_signal(self) -> None:
+        settings = get_settings()
+        user = _user(
+            locations=["Remote"],
+            companies=["Microsoft"],
+            roles=["AI Engineer"],
+            skills=[],
+            profile={
+                "resume_uploaded": True,
+                "resume_skill_keywords": ["Distributed Systems", "Python"],
+                "resume_library": [{"role_focus": "AI Platform"}],
+            },
+        )
+        self.assertIsNone(
+            filter_reason_for_user(
+                _job(
+                    company="Microsoft",
+                    location="Remote - US",
+                    title="Senior Software Engineer",
+                ),
+                user,
+                settings,
+            )
+        )
+
+    def test_filter_reason_for_user_rejects_out_of_domain_roles(self) -> None:
+        settings = get_settings()
+        user = _user(
+            locations=["Seattle"],
+            companies=["Microsoft"],
+            roles=["AI Engineer"],
+            skills=["LLMs"],
+        )
+        self.assertEqual(
+            filter_reason_for_user(
+                _job(
+                    company="Microsoft",
+                    location="Seattle, WA",
+                    title="Senior Software Engineer",
+                    description_text="Build internal billing dashboards and finance reporting workflows in Java.",
+                ),
+                user,
+                settings,
+            ),
+            "domain_interest",
+        )
+
     def test_filter_reason_for_user_rejects_missing_required_preferences(self) -> None:
         settings = get_settings()
-        user = _user(locations=["Seattle"], companies=[], roles=[])
+        user = _user(locations=["Seattle"], companies=[], roles=[], skills=[])
         self.assertEqual(
             filter_reason_for_user(_job(company="Microsoft", location="Seattle, WA"), user, settings),
             "preferred_companies_missing",

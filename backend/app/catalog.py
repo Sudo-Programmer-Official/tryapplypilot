@@ -4,6 +4,7 @@ from dataclasses import replace
 import json
 from uuid import NAMESPACE_URL, uuid5
 
+from app.company_catalog_defaults import build_recommended_company_preferences, default_role_families_for_company
 from app.config import AppSettings, GreenhouseBoard, TargetCompany, get_settings
 from app.db.client import connection
 from app.domain import CompanyPreference, NotificationChannel, RolePreference, ScoutSettings, Watchlist, WatchlistTerm
@@ -68,44 +69,6 @@ def _company_career_url(*, connector: str, external_identifier: str, existing_ur
     return ""
 
 
-def _default_role_families(company_name: str) -> list[str]:
-    normalized = company_name.casefold()
-    role_families = {"Core Engineering", "Backend"}
-    if normalized in {
-        "openai",
-        "anthropic",
-        "perplexity",
-        "scale ai",
-        "mistral ai",
-        "cohere",
-        "cursor",
-        "elevenlabs",
-        "together ai",
-        "hugging face",
-        "weights & biases",
-    }:
-        role_families.add("AI")
-    if normalized in {
-        "databricks",
-        "snowflake",
-        "cloudflare",
-        "confluent",
-        "mongodb",
-        "nvidia",
-        "hashicorp",
-    }:
-        role_families.add("Backend")
-    if normalized in {
-        "stripe",
-        "twilio",
-        "github",
-        "figma",
-        "vercel",
-    }:
-        role_families.add("Customer-Facing Engineering")
-    return sorted(role_families)
-
-
 def _notifications(settings: AppSettings) -> list[NotificationChannel]:
     return [
         NotificationChannel(
@@ -156,11 +119,6 @@ async def ensure_catalog_seeded(settings: AppSettings | None = None) -> None:
     if resolved_settings.radar.mode == "seed":
         return
 
-    board_map = {
-        board.company.casefold(): board.token
-        for board in resolved_settings.radar.greenhouse_boards
-    }
-
     async with connection() as conn:
         async with conn.transaction():
             for family in resolved_settings.radar.role_families:
@@ -176,14 +134,8 @@ async def ensure_catalog_seeded(settings: AppSettings | None = None) -> None:
 
             company_count = int(await conn.fetchval("SELECT COUNT(*) FROM companies") or 0)
             if company_count == 0:
-                for company in resolved_settings.radar.target_companies:
-                    external_identifier = board_map.get(company.name.casefold(), "")
-                    career_url = _company_career_url(
-                        connector=company.connector,
-                        external_identifier=external_identifier,
-                        existing_url="",
-                    )
-                    company_id = _company_id(company.name)
+                for company in build_recommended_company_preferences(default_role_families_for_company):
+                    company_id = _company_id(company.company)
                     await conn.execute(
                         """
                         INSERT INTO companies (
@@ -202,17 +154,17 @@ async def ensure_catalog_seeded(settings: AppSettings | None = None) -> None:
                         ON CONFLICT (company_id) DO NOTHING
                         """,
                         company_id,
-                        company.name,
+                        company.company,
                         company.connector,
-                        external_identifier,
+                        company.external_identifier,
                         company.priority,
                         company.tier,
                         company.enabled,
                         company.poll_interval_minutes,
-                        resolved_settings.radar.selected_country,
-                        career_url,
+                        company.country,
+                        company.career_url,
                     )
-                    for family in _default_role_families(company.name):
+                    for family in company.role_families:
                         await conn.execute(
                             """
                             INSERT INTO company_role_families (company_id, role_family_id)
@@ -348,12 +300,10 @@ async def list_companies(settings: AppSettings | None = None) -> list[CompanyPre
     ]
 
 
-async def upsert_company(company: CompanyPreference, settings: AppSettings | None = None) -> CompanyPreference:
-    resolved_settings = settings or get_settings()
-    if resolved_settings.radar.mode == "seed":
-        return company
-
-    await ensure_catalog_seeded(resolved_settings)
+async def _persist_company(
+    conn,
+    company: CompanyPreference,
+) -> CompanyPreference:
     company_id = company.id or _company_id(company.company)
     role_families = sorted({family.strip() for family in company.role_families if family.strip()})
     career_url = _company_career_url(
@@ -361,70 +311,68 @@ async def upsert_company(company: CompanyPreference, settings: AppSettings | Non
         external_identifier=company.external_identifier,
         existing_url=company.career_url,
     )
-    async with connection() as conn:
-        async with conn.transaction():
-            await conn.execute(
-                """
-                INSERT INTO companies (
-                    company_id,
-                    name,
-                    connector,
-                    external_identifier,
-                    priority,
-                    tier,
-                    enabled,
-                    poll_interval_minutes,
-                    country,
-                    career_url,
-                    updated_at
-                )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
-                ON CONFLICT (company_id) DO UPDATE SET
-                    name = EXCLUDED.name,
-                    connector = EXCLUDED.connector,
-                    external_identifier = EXCLUDED.external_identifier,
-                    priority = EXCLUDED.priority,
-                    tier = EXCLUDED.tier,
-                    enabled = EXCLUDED.enabled,
-                    poll_interval_minutes = EXCLUDED.poll_interval_minutes,
-                    country = EXCLUDED.country,
-                    career_url = EXCLUDED.career_url,
-                    updated_at = NOW()
-                """,
-                company_id,
-                company.company.strip(),
-                company.connector.strip(),
-                company.external_identifier.strip(),
-                company.priority,
-                company.tier,
-                company.enabled,
-                company.poll_interval_minutes,
-                normalize_supported_country(company.country),
-                career_url,
-            )
-            await conn.execute("DELETE FROM company_role_families WHERE company_id = $1", company_id)
-            for family in role_families:
-                role_family_id = _role_family_id(family)
-                await conn.execute(
-                    """
-                    INSERT INTO role_families (role_family_id, name, updated_at)
-                    VALUES ($1, $2, NOW())
-                    ON CONFLICT (role_family_id) DO UPDATE SET
-                        name = EXCLUDED.name,
-                        updated_at = NOW()
-                    """,
-                    role_family_id,
-                    family,
-                )
-                await conn.execute(
-                    """
-                    INSERT INTO company_role_families (company_id, role_family_id)
-                    VALUES ($1, $2)
-                    ON CONFLICT (company_id, role_family_id) DO NOTHING
-                    """,
-                    company_id,
-                    role_family_id,
-                )
+    await conn.execute(
+        """
+        INSERT INTO companies (
+            company_id,
+            name,
+            connector,
+            external_identifier,
+            priority,
+            tier,
+            enabled,
+            poll_interval_minutes,
+            country,
+            career_url,
+            updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+        ON CONFLICT (company_id) DO UPDATE SET
+            name = EXCLUDED.name,
+            connector = EXCLUDED.connector,
+            external_identifier = EXCLUDED.external_identifier,
+            priority = EXCLUDED.priority,
+            tier = EXCLUDED.tier,
+            enabled = EXCLUDED.enabled,
+            poll_interval_minutes = EXCLUDED.poll_interval_minutes,
+            country = EXCLUDED.country,
+            career_url = EXCLUDED.career_url,
+            updated_at = NOW()
+        """,
+        company_id,
+        company.company.strip(),
+        company.connector.strip(),
+        company.external_identifier.strip(),
+        company.priority,
+        company.tier,
+        company.enabled,
+        company.poll_interval_minutes,
+        normalize_supported_country(company.country),
+        career_url,
+    )
+    await conn.execute("DELETE FROM company_role_families WHERE company_id = $1", company_id)
+    for family in role_families:
+        role_family_id = _role_family_id(family)
+        await conn.execute(
+            """
+            INSERT INTO role_families (role_family_id, name, updated_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (role_family_id) DO UPDATE SET
+                name = EXCLUDED.name,
+                updated_at = NOW()
+            """,
+            role_family_id,
+            family,
+        )
+        await conn.execute(
+            """
+            INSERT INTO company_role_families (company_id, role_family_id)
+            VALUES ($1, $2)
+            ON CONFLICT (company_id, role_family_id) DO NOTHING
+            """,
+            company_id,
+            role_family_id,
+        )
     return CompanyPreference(
         id=company_id,
         company=company.company.strip(),
@@ -438,6 +386,31 @@ async def upsert_company(company: CompanyPreference, settings: AppSettings | Non
         external_identifier=company.external_identifier.strip(),
         role_families=role_families,
     )
+
+
+async def upsert_company(company: CompanyPreference, settings: AppSettings | None = None) -> CompanyPreference:
+    resolved_settings = settings or get_settings()
+    if resolved_settings.radar.mode == "seed":
+        return company
+
+    await ensure_catalog_seeded(resolved_settings)
+    async with connection() as conn:
+        async with conn.transaction():
+            return await _persist_company(conn, company)
+
+
+async def import_recommended_companies(settings: AppSettings | None = None) -> list[CompanyPreference]:
+    resolved_settings = settings or get_settings()
+    if resolved_settings.radar.mode == "seed":
+        return build_recommended_company_preferences(default_role_families_for_company)
+
+    await ensure_catalog_seeded(resolved_settings)
+    imported: list[CompanyPreference] = []
+    async with connection() as conn:
+        async with conn.transaction():
+            for company in build_recommended_company_preferences(default_role_families_for_company):
+                imported.append(await _persist_company(conn, company))
+    return sorted(imported, key=lambda item: (item.tier, item.priority, item.company.casefold()))
 
 
 async def list_watchlists(settings: AppSettings | None = None) -> list[Watchlist]:

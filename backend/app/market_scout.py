@@ -41,8 +41,11 @@ class ConnectorRunSummary:
     company: str
     jobs_fetched: int
     jobs_inserted: int
+    jobs_matched: int
     alerts_sent: int
     alerts_failed: int
+    failed: bool = False
+    error_message: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -50,8 +53,11 @@ class ConnectorRunSummary:
             "company": self.company,
             "jobs_fetched": self.jobs_fetched,
             "jobs_inserted": self.jobs_inserted,
+            "jobs_matched": self.jobs_matched,
             "alerts_sent": self.alerts_sent,
             "alerts_failed": self.alerts_failed,
+            "failed": self.failed,
+            "error_message": self.error_message,
         }
 
 
@@ -61,11 +67,41 @@ class MarketScoutRunSummary:
     finished_at: str
     runs: list[ConnectorRunSummary]
 
+    @property
+    def jobs_collected(self) -> int:
+        return sum(run.jobs_fetched for run in self.runs)
+
+    @property
+    def jobs_inserted(self) -> int:
+        return sum(run.jobs_inserted for run in self.runs)
+
+    @property
+    def jobs_matched(self) -> int:
+        return sum(run.jobs_matched for run in self.runs)
+
+    @property
+    def alerts_sent(self) -> int:
+        return sum(run.alerts_sent for run in self.runs)
+
+    @property
+    def alerts_failed(self) -> int:
+        return sum(run.alerts_failed for run in self.runs)
+
+    @property
+    def connector_failures(self) -> int:
+        return sum(1 for run in self.runs if run.failed)
+
     def to_dict(self) -> dict[str, object]:
         return {
             "started_at": self.started_at,
             "finished_at": self.finished_at,
             "runs": [run.to_dict() for run in self.runs],
+            "jobs_collected": self.jobs_collected,
+            "jobs_inserted": self.jobs_inserted,
+            "jobs_matched": self.jobs_matched,
+            "alerts_sent": self.alerts_sent,
+            "alerts_failed": self.alerts_failed,
+            "connector_failures": self.connector_failures,
         }
 
 
@@ -168,7 +204,29 @@ class MarketScoutAgent:
         try:
             if self.settings.radar.is_connector_enabled("greenhouse"):
                 for board in self.settings.radar.greenhouse_boards:
-                    runs.append(await self._run_greenhouse_board(board))
+                    try:
+                        runs.append(await self._run_greenhouse_board(board))
+                    except Exception as exc:  # noqa: BLE001
+                        self.logger.exception(
+                            "Connector sync failed; scheduler will continue with the next connector",
+                            extra={
+                                "operation_name": "market_scout.connector.failure_continued",
+                                "connector_key": f"greenhouse:{board.token}",
+                            },
+                        )
+                        runs.append(
+                            ConnectorRunSummary(
+                                connector_key=f"greenhouse:{board.token}",
+                                company=board.company,
+                                jobs_fetched=0,
+                                jobs_inserted=0,
+                                jobs_matched=0,
+                                alerts_sent=0,
+                                alerts_failed=0,
+                                failed=True,
+                                error_message=str(exc)[:1000],
+                            )
+                        )
             finished_at = datetime.now(timezone.utc)
             self.logger.info(
                 "Finished market scout cycle",
@@ -331,6 +389,7 @@ class MarketScoutAgent:
         next_published_at: datetime | None,
     ) -> ConnectorRunSummary:
         jobs_inserted = 0
+        jobs_matched = 0
         alerts_sent = 0
         alerts_failed = 0
         now = datetime.now(timezone.utc)
@@ -410,6 +469,7 @@ class MarketScoutAgent:
                     if initial_sync and allow_openai and match.provider == "openai":
                         remaining_initial_openai_budget -= 1
                     user_matches.append((user_context, match))
+                    jobs_matched += 1
 
                     if (
                         best_match is None
@@ -675,6 +735,7 @@ class MarketScoutAgent:
             company=board.company,
             jobs_fetched=len(jobs),
             jobs_inserted=jobs_inserted,
+            jobs_matched=jobs_matched,
             alerts_sent=alerts_sent,
             alerts_failed=alerts_failed,
         )

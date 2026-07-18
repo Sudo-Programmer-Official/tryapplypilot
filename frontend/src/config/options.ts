@@ -2,10 +2,11 @@ export const connectorOptions = [
   { label: "Greenhouse", value: "greenhouse" },
   { label: "Lever", value: "lever" },
   { label: "Ashby", value: "ashby" },
-  { label: "Microsoft Careers", value: "microsoft" },
-  { label: "Google Careers", value: "google" },
+  { label: "Microsoft Careers", value: "microsoft-careers" },
+  { label: "Google Careers", value: "google-careers" },
   { label: "Workday", value: "workday" },
   { label: "SmartRecruiters", value: "smartrecruiters" },
+  { label: "Company API", value: "company-api" },
 ];
 
 export const countryOptions = [

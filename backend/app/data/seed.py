@@ -1,13 +1,7 @@
 from __future__ import annotations
 
-from app.config import (
-    DEFAULT_EXCLUDED_KEYWORDS,
-    DEFAULT_EXPERIENCE_LEVELS,
-    DEFAULT_ROLE_FAMILIES,
-    DEFAULT_TARGET_COMPANY_ROWS,
-    DEFAULT_TARGET_ROLES,
-    DEFAULT_WORK_ARRANGEMENTS,
-)
+from app.company_catalog_defaults import build_recommended_company_preferences
+from app.config import DEFAULT_EXCLUDED_KEYWORDS, DEFAULT_EXPERIENCE_LEVELS, DEFAULT_ROLE_FAMILIES, DEFAULT_TARGET_ROLES, DEFAULT_WORK_ARRANGEMENTS
 from app.domain import (
     AlertEvent,
     CompanyPreference,
@@ -125,22 +119,7 @@ JOBS: list[JobOpportunity] = [
     ),
 ]
 
-COMPANIES: list[CompanyPreference] = [
-    CompanyPreference(
-        id=name.casefold().replace(" ", "-"),
-        company=name,
-        enabled=True,
-        tier=tier,
-        priority=priority,
-        connector="greenhouse" if name == "Databricks" else connector,
-        poll_interval_minutes=5,
-        country="US",
-        career_url="https://boards.greenhouse.io/databricks" if name == "Databricks" else "",
-        external_identifier="databricks" if name == "Databricks" else "",
-        role_families=["Core Engineering", "Backend"],
-    )
-    for name, tier, priority, connector in DEFAULT_TARGET_COMPANY_ROWS
-]
+COMPANIES: list[CompanyPreference] = build_recommended_company_preferences()
 
 ROLE_FAMILIES: list[RolePreference] = [RolePreference(label=label, enabled=True) for label in DEFAULT_ROLE_FAMILIES]
 

@@ -1,8 +1,18 @@
-import type { AlertEvent, AuditLogEntry, CompanyRequest, DashboardSnapshot } from "../types";
+import type { AlertEvent, AuditLogEntry, CompanyRequest, DashboardSnapshot, SchedulerStatusSnapshot } from "../types";
 import { requestJson } from "./client";
 
 export function fetchDashboard(): Promise<DashboardSnapshot> {
   return requestJson<DashboardSnapshot>("/api/dashboard");
+}
+
+export function fetchSchedulerStatus(): Promise<SchedulerStatusSnapshot> {
+  return requestJson<SchedulerStatusSnapshot>("/api/admin/scheduler/status");
+}
+
+export function runSchedulerNow(): Promise<SchedulerStatusSnapshot> {
+  return requestJson<SchedulerStatusSnapshot>("/api/admin/scheduler/run-now", {
+    method: "POST",
+  });
 }
 
 export function fetchAdminCompanyRequests(): Promise<{ items: CompanyRequest[] }> {

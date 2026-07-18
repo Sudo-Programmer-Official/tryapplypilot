@@ -303,9 +303,12 @@ export interface SystemStatusComponent {
 }
 
 export interface SystemStatusStats {
+  running: boolean;
   jobs_collected: number;
+  jobs_matched: number;
   new_today: number;
   notifications_sent: number;
+  errors: number;
   last_poll_at: string | null;
   next_poll_at: string | null;
 }
@@ -313,6 +316,24 @@ export interface SystemStatusStats {
 export interface SystemStatusSnapshot {
   components: SystemStatusComponent[];
   stats: SystemStatusStats;
+}
+
+export interface SchedulerStatusSnapshot {
+  running: boolean;
+  cycle_state: "running" | "idle" | "stopped";
+  polling_interval_minutes: number;
+  started_at: string | null;
+  last_run_started_at: string | null;
+  last_run: string | null;
+  next_run: string | null;
+  last_duration_seconds: number | null;
+  jobs_collected: number;
+  jobs_inserted: number;
+  jobs_matched: number;
+  notifications_sent: number;
+  errors: number;
+  current_connector: string | null;
+  last_error: string | null;
 }
 
 export interface DashboardSnapshot {
@@ -325,6 +346,7 @@ export interface DashboardSnapshot {
   alerts: AlertEvent[];
   sources: SourceStatus[];
   settings: ScoutSettings;
+  scheduler: SchedulerStatusSnapshot;
   system_status: SystemStatusSnapshot;
 }
 

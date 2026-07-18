@@ -73,13 +73,13 @@ onMounted(load);
 </script>
 
 <template>
-  <AppPage>
+  <AppPage class="dashboard-page">
     <PageHeader
       title="Your job radar"
       description="See what landed today, what deserves action now, and whether your alert pipeline is fully configured."
     />
 
-    <AppGrid as="section" columns="4">
+    <AppGrid as="section" columns="4" class="dashboard-metrics">
       <MetricCard
         icon="BriefcaseBusiness"
         label="New jobs"
@@ -111,12 +111,12 @@ onMounted(load);
       />
     </AppGrid>
 
-    <AppGrid as="section" columns="2">
+    <AppGrid as="section" columns="2" class="dashboard-overview">
       <SetupProgress
         :progress="auth.user.value?.onboarding.progress_percent ?? 0"
         :steps="auth.user.value?.onboarding.steps ?? []"
       />
-      <AppGrid columns="2" gap="content">
+      <AppGrid columns="2" gap="content" class="dashboard-status-grid">
         <StatusCard
           title="Telegram"
           :value="auth.user.value?.telegram_chat_id ? 'Connected' : 'Pending'"
@@ -132,10 +132,15 @@ onMounted(load);
       </AppGrid>
     </AppGrid>
 
-    <AppGrid as="section" columns="2">
-      <AppCard title="Top opportunities" subtitle="The highest scoring jobs currently in your personalized queue.">
+    <AppGrid as="section" columns="2" class="dashboard-feed">
+      <AppCard
+        class="dashboard-panel"
+        title="Top opportunities"
+        subtitle="The highest scoring jobs currently in your personalized queue."
+      >
         <AppEmptyState
           v-if="!loading && topJobs.length === 0"
+          class="dashboard-empty"
           title="No jobs yet"
           description="Finish onboarding and wait for the next poll cycle to fill your dashboard."
         />
@@ -150,9 +155,14 @@ onMounted(load);
         </div>
       </AppCard>
 
-      <AppCard title="Latest alerts" subtitle="Recent notifications that were sent to your configured channels.">
+      <AppCard
+        class="dashboard-panel"
+        title="Latest alerts"
+        subtitle="Recent notifications that were sent to your configured channels."
+      >
         <AppEmptyState
           v-if="!loading && activityItems.length === 0"
+          class="dashboard-empty"
           title="No alerts sent yet"
           description="Once a new high-match job lands, it will show up here and in Telegram."
         />
@@ -167,3 +177,46 @@ onMounted(load);
     />
   </AppPage>
 </template>
+
+<style scoped>
+.dashboard-page {
+  --page-gap: 28px;
+}
+
+.dashboard-metrics,
+.dashboard-overview,
+.dashboard-feed {
+  align-items: stretch;
+}
+
+.dashboard-status-grid {
+  height: 100%;
+}
+
+.dashboard-panel {
+  min-height: 100%;
+}
+
+.dashboard-panel :deep(.app-card__body) {
+  align-content: start;
+}
+
+.job-card-grid {
+  display: grid;
+  gap: var(--card-gap);
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.dashboard-empty {
+  min-height: 18rem;
+  border-style: dashed;
+  box-shadow: none;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.95));
+}
+
+@media (max-width: 1023px) {
+  .dashboard-status-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

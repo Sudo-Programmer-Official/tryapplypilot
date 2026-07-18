@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
+import { computed, onBeforeUnmount, onMounted } from "vue";
 
 import ConnectorHealthTable from "../../components/admin/ConnectorHealthTable.vue";
 import SystemStatus from "../../components/admin/SystemStatus.vue";
@@ -10,21 +10,27 @@ import JobRow from "../../components/jobs/JobRow.vue";
 import AppGrid from "../../components/layout/AppGrid.vue";
 import AppPage from "../../components/layout/AppPage.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
+import AppButton from "../../components/ui/AppButton.vue";
 import AppCard from "../../components/ui/AppCard.vue";
 import AppEmptyState from "../../components/ui/AppEmptyState.vue";
 import { useDashboard } from "../../composables/useDashboard";
 import { useJobs } from "../../composables/useJobs";
+import { useToast } from "../../composables/useToast";
 import type { MatchDecision } from "../../types";
-import { extractJobTrend, formatRelativeMinutes } from "../../utils/format";
+import { extractJobTrend, formatDateTime, formatRelativeMinutes } from "../../utils/format";
 
 const dashboard = useDashboard();
+const { pushToast } = useToast();
 const { toggleSavedJob, isSavedJob } = useJobs(dashboard.jobs);
+let refreshHandle: number | null = null;
 
 const jobSparkline = computed(() => {
   const values = extractJobTrend(dashboard.jobs.value);
   const max = Math.max(...values, 1);
   return values.map((value) => Math.round((value / max) * 5));
 });
+
+const scheduler = computed(() => dashboard.effectiveScheduler.value);
 
 function activityTone(decision: MatchDecision): "success" | "warning" | "info" {
   if (decision === "APPLY_NOW") {
@@ -46,7 +52,29 @@ const alertItems = computed(() =>
   })),
 );
 
-onMounted(dashboard.load);
+async function handleRunNow(): Promise<void> {
+  try {
+    await dashboard.triggerRunNow();
+    pushToast("Scheduler started", "A poll cycle is running now and the dashboard has been refreshed.", "success");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to trigger the scheduler.";
+    pushToast("Run now failed", message, "error");
+  }
+}
+
+onMounted(async () => {
+  await dashboard.load();
+  refreshHandle = window.setInterval(() => {
+    void dashboard.load();
+  }, 30_000);
+});
+
+onBeforeUnmount(() => {
+  if (refreshHandle !== null) {
+    window.clearInterval(refreshHandle);
+    refreshHandle = null;
+  }
+});
 </script>
 
 <template>
@@ -54,7 +82,13 @@ onMounted(dashboard.load);
     <PageHeader
       title="Admin dashboard"
       description="Watch the live pipeline, connector health, and notification output without leaving the operations workspace."
-    />
+    >
+      <template #actions>
+        <AppButton :disabled="dashboard.runningNow.value" @click="handleRunNow">
+          {{ dashboard.runningNow.value ? "Running..." : "Run Poll Now" }}
+        </AppButton>
+      </template>
+    </PageHeader>
 
     <AppEmptyState v-if="dashboard.error.value" title="Dashboard unavailable" :description="dashboard.error.value" />
 
@@ -63,46 +97,46 @@ onMounted(dashboard.load);
         <MetricCard
           icon="BriefcaseBusiness"
           label="Jobs collected"
-          :value="dashboard.snapshot.value.summary.todays_jobs"
-          detail="Total jobs visible inside the active dashboard freshness window."
+          :value="scheduler?.jobs_collected ?? 0"
+          detail="Collected during the last completed poll cycle."
           tone="primary"
           :sparkline="jobSparkline"
         />
         <MetricCard
-          icon="Bell"
-          label="Apply now"
-          :value="dashboard.snapshot.value.summary.apply_now_queue"
-          detail="High-priority roles ready for immediate notification."
+          icon="Users"
+          label="Jobs matched"
+          :value="scheduler?.jobs_matched ?? 0"
+          detail="User-specific matches scored in the latest cycle."
           tone="success"
         />
         <MetricCard
-          icon="Users"
-          label="Alerts sent"
-          :value="dashboard.snapshot.value.summary.alerts_sent"
-          detail="Notifications issued across the current dashboard window."
+          icon="Bell"
+          label="Telegram sent"
+          :value="scheduler?.notifications_sent ?? 0"
+          detail="Private alerts delivered in the latest cycle."
           tone="warning"
         />
         <MetricCard
           icon="Building2"
-          label="Companies"
-          :value="dashboard.snapshot.value.summary.configured_companies"
-          detail="Catalog companies currently available to users and admins."
+          label="Errors"
+          :value="scheduler?.errors ?? 0"
+          detail="Connector and delivery errors recorded in the latest cycle."
           tone="info"
         />
       </AppGrid>
 
       <AppGrid as="section" columns="2">
         <StatusCard
-          title="Agent"
-          :value="dashboard.snapshot.value.agent.name"
+          title="Scheduler"
+          :value="scheduler?.running ? 'Running' : 'Stopped'"
           :tone="dashboard.snapshot.value.agent.state === 'healthy' ? 'healthy' : dashboard.snapshot.value.agent.state === 'lagging' ? 'warning' : 'failed'"
-          :detail="`Connector ${dashboard.snapshot.value.agent.current_connector} · next run in ${dashboard.snapshot.value.agent.next_run_minutes} min`"
+          :detail="`Last poll ${formatDateTime(scheduler?.last_run)} · next poll ${formatDateTime(scheduler?.next_run)}`"
         />
         <StatusCard
-          title="Thresholds"
-          :value="`${dashboard.snapshot.value.agent.apply_now_threshold_score}% / ${dashboard.snapshot.value.agent.review_threshold_score}%`"
+          title="Connector"
+          :value="scheduler?.current_connector ?? dashboard.snapshot.value.agent.current_connector"
           tone="info"
-          :detail="`Polling every ${dashboard.snapshot.value.agent.polling_interval_minutes} minutes.`"
+          :detail="`Polling every ${dashboard.snapshot.value.agent.polling_interval_minutes} minutes · ${scheduler?.last_duration_seconds ? `${scheduler.last_duration_seconds.toFixed(1)} sec last cycle` : 'waiting for first completed cycle'}`"
         />
       </AppGrid>
 

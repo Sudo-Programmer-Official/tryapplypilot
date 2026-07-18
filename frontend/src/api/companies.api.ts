@@ -5,6 +5,15 @@ export function fetchCatalogCompanies(): Promise<{ items: CompanyPreference[] }>
   return requestJson<{ items: CompanyPreference[] }>("/api/catalog/companies");
 }
 
+export function importRecommendedCompanies(): Promise<{ items: CompanyPreference[]; summary: { count: number; enabled_count: number } }> {
+  return requestJson<{ items: CompanyPreference[]; summary: { count: number; enabled_count: number } }>(
+    "/api/catalog/companies/import-defaults",
+    {
+      method: "POST",
+    },
+  );
+}
+
 export function saveCompany(company: CompanyPreference): Promise<{ item: CompanyPreference }> {
   const path = company.id ? `/api/catalog/companies/${company.id}` : "/api/catalog/companies";
   const method = company.id ? "PUT" : "POST";

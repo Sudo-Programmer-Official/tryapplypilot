@@ -1,7 +1,7 @@
 import { computed, ref } from "vue";
 
 import { fetchCurrentUser, login, logout, signup } from "../api/auth.api";
-import { clearAuthSession, hasStoredSession } from "../api/client";
+import { clearAuthSession, getStoredUserSnapshot, hasStoredSession, RequestError, storeUserSnapshot } from "../api/client";
 import type { AuthUser, UserRole } from "../types";
 
 const user = ref<AuthUser | null>(null);
@@ -20,12 +20,19 @@ export function useAuth() {
     loading.value = true;
     try {
       if (hasStoredSession()) {
+        const cachedUser = getStoredUserSnapshot();
+        if (cachedUser) {
+          user.value = cachedUser;
+        }
         const payload = await fetchCurrentUser();
         user.value = payload.user;
+        storeUserSnapshot(payload.user);
       }
-    } catch {
-      clearAuthSession();
-      user.value = null;
+    } catch (err) {
+      if (err instanceof RequestError && (err.status === 401 || err.status === 403)) {
+        clearAuthSession();
+        user.value = null;
+      }
     } finally {
       loading.value = false;
       initialized.value = true;
@@ -40,12 +47,14 @@ export function useAuth() {
     }
     const payload = await fetchCurrentUser();
     user.value = payload.user;
+    storeUserSnapshot(payload.user);
     return payload.user;
   }
 
   async function loginWithPassword(email: string, password: string): Promise<AuthUser> {
     const nextUser = await login(email, password);
     user.value = nextUser;
+    storeUserSnapshot(nextUser);
     initialized.value = true;
     return nextUser;
   }
@@ -53,6 +62,7 @@ export function useAuth() {
   async function signupWithPassword(email: string, password: string, fullName: string): Promise<AuthUser> {
     const nextUser = await signup(email, password, fullName);
     user.value = nextUser;
+    storeUserSnapshot(nextUser);
     initialized.value = true;
     return nextUser;
   }
@@ -65,6 +75,7 @@ export function useAuth() {
 
   function setUser(nextUser: AuthUser): void {
     user.value = nextUser;
+    storeUserSnapshot(nextUser);
   }
 
   return {

@@ -1,12 +1,35 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import re
 
 from app.config import AppSettings
 from app.connectors.base import NormalizedJobRecord
 from app.domain import UserAccount
 from app.job_filters import filter_reason
-from app.job_metadata import normalize_supported_country
+from app.job_metadata import infer_country_code, matches_country_preference, normalize_supported_country
+
+_SIGNAL_STOP_WORDS = frozenset(
+    {
+        "engineer",
+        "engineering",
+        "software",
+        "senior",
+        "staff",
+        "principal",
+        "lead",
+        "applied",
+        "developer",
+        "developers",
+        "architect",
+        "solution",
+        "solutions",
+        "level",
+        "ii",
+        "iii",
+        "iv",
+    }
+)
 
 
 def _string_list(value: object) -> list[str]:
@@ -14,6 +37,18 @@ def _string_list(value: object) -> list[str]:
         return []
     cleaned = [str(item).strip() for item in value if str(item).strip()]
     return cleaned
+
+
+def _dedupe_strings(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    unique: list[str] = []
+    for value in values:
+        key = value.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(value)
+    return unique
 
 
 def _user_preferences(user: UserAccount) -> dict[str, object]:
@@ -32,8 +67,43 @@ def preferred_roles(user: UserAccount) -> list[str]:
     return _string_list(_user_preferences(user).get("preferred_roles"))
 
 
+def preferred_skills(user: UserAccount) -> list[str]:
+    return _string_list(_user_preferences(user).get("skills"))
+
+
+def watchlist_themes(user: UserAccount) -> list[str]:
+    return _string_list(_user_preferences(user).get("watchlists"))
+
+
 def preferred_locations(user: UserAccount) -> list[str]:
     return _string_list(_user_preferences(user).get("locations"))
+
+
+def resume_skill_keywords(user: UserAccount) -> list[str]:
+    return _string_list(_user_profile(user).get("resume_skill_keywords"))
+
+
+def resume_role_focuses(user: UserAccount) -> list[str]:
+    profile = _user_profile(user)
+    resume_library = profile.get("resume_library")
+    if not isinstance(resume_library, list):
+        return []
+    role_focuses = [
+        str(entry.get("role_focus", "")).strip()
+        for entry in resume_library
+        if isinstance(entry, dict) and str(entry.get("role_focus", "")).strip()
+    ]
+    return _dedupe_strings(role_focuses)
+
+
+def domain_interest_signals(user: UserAccount) -> list[str]:
+    return _dedupe_strings(
+        preferred_roles(user)
+        + preferred_skills(user)
+        + watchlist_themes(user)
+        + resume_skill_keywords(user)
+        + resume_role_focuses(user)
+    )
 
 
 def preferred_work_arrangements(user: UserAccount, settings: AppSettings) -> tuple[str, ...]:
@@ -78,7 +148,7 @@ def telegram_connected(user: UserAccount) -> bool:
 def required_preferences_reason(user: UserAccount) -> str | None:
     if not preferred_companies(user):
         return "preferred_companies_missing"
-    if not preferred_roles(user):
+    if not domain_interest_signals(user):
         return "preferred_roles_missing"
     return None
 
@@ -106,6 +176,45 @@ def location_matches(job: NormalizedJobRecord, user: UserAccount) -> bool:
     return False
 
 
+def country_matches(job: NormalizedJobRecord, user: UserAccount, settings: AppSettings) -> bool:
+    country_code = infer_country_code(job.location, job.description_text)
+    return matches_country_preference(country_code, selected_country(user, settings))
+
+
+def _contains_word(haystack: str, value: str) -> bool:
+    if not value:
+        return False
+    return re.search(rf"(?<!\w){re.escape(value)}(?!\w)", haystack) is not None
+
+
+def _signal_tokens(signal: str) -> list[str]:
+    return [
+        token
+        for token in re.split(r"[^a-z0-9]+", signal.casefold())
+        if token and token not in _SIGNAL_STOP_WORDS
+    ]
+
+
+def _signal_matches(haystack: str, signal: str) -> bool:
+    normalized = signal.strip().casefold()
+    if not normalized:
+        return False
+    if normalized in haystack:
+        return True
+    tokens = _signal_tokens(normalized)
+    if not tokens:
+        return False
+    return all(_contains_word(haystack, token) for token in tokens)
+
+
+def domain_interest_matches(job: NormalizedJobRecord, user: UserAccount) -> bool:
+    signals = domain_interest_signals(user)
+    if not signals:
+        return True
+    haystack = f" {job.title.strip()} {job.description_text.strip()} {job.company.strip()} ".casefold()
+    return any(_signal_matches(haystack, signal) for signal in signals)
+
+
 def build_user_profile_text(user: UserAccount, settings: AppSettings) -> str:
     profile = _user_profile(user)
     preferences = _user_preferences(user)
@@ -115,8 +224,10 @@ def build_user_profile_text(user: UserAccount, settings: AppSettings) -> str:
     companies = preferred_companies(user)
     roles = preferred_roles(user)
     locations = preferred_locations(user)
-    skills = _string_list(preferences.get("skills"))
-    watchlists = _string_list(preferences.get("watchlists"))
+    skills = preferred_skills(user)
+    watchlists = watchlist_themes(user)
+    resume_skills = resume_skill_keywords(user)
+    resume_focuses = resume_role_focuses(user)
 
     profile_lines = [
         "Candidate profile for personalized job triage.",
@@ -139,6 +250,10 @@ def build_user_profile_text(user: UserAccount, settings: AppSettings) -> str:
         profile_lines.append(f"Core skills: {', '.join(skills)}.")
     if watchlists:
         profile_lines.append(f"Watchlist themes: {', '.join(watchlists)}.")
+    if resume_skills:
+        profile_lines.append(f"Resume skill signals: {', '.join(resume_skills)}.")
+    if resume_focuses:
+        profile_lines.append(f"Resume role focus: {', '.join(resume_focuses)}.")
     if profile.get("resume_uploaded"):
         profile_lines.append("A resume has been uploaded for this user.")
     if profile.get("linkedin_url"):
@@ -151,6 +266,7 @@ def build_user_profile_text(user: UserAccount, settings: AppSettings) -> str:
 
 
 def build_user_matching_settings(settings: AppSettings, user: UserAccount) -> AppSettings:
+    merged_target_roles = tuple(_dedupe_strings([*settings.radar.target_roles, *preferred_roles(user)]))
     return replace(
         settings,
         radar=replace(
@@ -158,7 +274,7 @@ def build_user_matching_settings(settings: AppSettings, user: UserAccount) -> Ap
             minimum_match_score=minimum_match_score(user, settings),
             selected_country=selected_country(user, settings),
             alert_freshness_hours=alert_freshness_hours(user, settings),
-            target_roles=tuple(preferred_roles(user)),
+            target_roles=merged_target_roles,
             preferred_work_arrangements=preferred_work_arrangements(user, settings),
             preferred_experience_levels=preferred_experience_levels(user, settings),
             profile_text=build_user_profile_text(user, settings),
@@ -180,7 +296,18 @@ def filter_reason_for_user(
     if not company_matches(job, user):
         return "company"
 
+    if not country_matches(job, user, settings):
+        return "country"
+
     if not location_matches(job, user):
         return "location"
 
-    return filter_reason(job, matching_settings or build_user_matching_settings(settings, user))
+    resolved_matching_settings = matching_settings or build_user_matching_settings(settings, user)
+    generic_filter_reason = filter_reason(job, resolved_matching_settings)
+    if generic_filter_reason is not None:
+        return generic_filter_reason
+
+    if not domain_interest_matches(job, user):
+        return "domain_interest"
+
+    return None

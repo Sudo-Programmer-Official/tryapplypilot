@@ -15,6 +15,17 @@ function resolveApiBaseUrl(): string {
 const API_BASE_URL = resolveApiBaseUrl();
 const ACCESS_TOKEN_KEY = "tryapplypilot-access-token";
 const REFRESH_TOKEN_KEY = "tryapplypilot-refresh-token";
+const USER_SNAPSHOT_KEY = "tryapplypilot-user";
+
+export class RequestError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "RequestError";
+    this.status = status;
+  }
+}
 
 function getAccessToken(): string | null {
   return window.localStorage.getItem(ACCESS_TOKEN_KEY);
@@ -33,21 +44,39 @@ export function storeTokens(tokens: AuthTokens): void {
   window.localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token);
 }
 
+export function getStoredUserSnapshot(): AuthUser | null {
+  const raw = window.localStorage.getItem(USER_SNAPSHOT_KEY);
+  if (!raw) {
+    return null;
+  }
+  try {
+    return JSON.parse(raw) as AuthUser;
+  } catch {
+    window.localStorage.removeItem(USER_SNAPSHOT_KEY);
+    return null;
+  }
+}
+
+export function storeUserSnapshot(user: AuthUser): void {
+  window.localStorage.setItem(USER_SNAPSHOT_KEY, JSON.stringify(user));
+}
+
 export function clearAuthSession(): void {
   window.localStorage.removeItem(ACCESS_TOKEN_KEY);
   window.localStorage.removeItem(REFRESH_TOKEN_KEY);
+  window.localStorage.removeItem(USER_SNAPSHOT_KEY);
 }
 
-async function parseRequestError(path: string, response: Response): Promise<Error> {
+async function parseRequestError(path: string, response: Response): Promise<RequestError> {
   try {
     const payload = (await response.json()) as { detail?: string };
     if (payload.detail?.trim()) {
-      return new Error(payload.detail);
+      return new RequestError(payload.detail, response.status);
     }
   } catch {
     // Fall through to the generic message.
   }
-  return new Error(`Request failed for ${path}: ${response.status}`);
+  return new RequestError(`Request failed for ${path}: ${response.status}`, response.status);
 }
 
 async function refreshAuthSession(): Promise<boolean> {
@@ -66,6 +95,7 @@ async function refreshAuthSession(): Promise<boolean> {
   }
   const payload = (await response.json()) as { user: AuthUser; tokens: AuthTokens };
   storeTokens(payload.tokens);
+  storeUserSnapshot(payload.user);
   return true;
 }
 
@@ -86,7 +116,14 @@ export async function authorizedRequest(
     ...options,
     headers,
   });
-  if (response.status === 401 && retryOnUnauthorized && !path.startsWith("/api/auth/")) {
+  if (
+    response.status === 401 &&
+    retryOnUnauthorized &&
+    path !== "/api/auth/login" &&
+    path !== "/api/auth/signup" &&
+    path !== "/api/auth/refresh" &&
+    path !== "/api/auth/logout"
+  ) {
     const refreshed = await refreshAuthSession();
     if (refreshed) {
       return authorizedRequest(path, options, false);

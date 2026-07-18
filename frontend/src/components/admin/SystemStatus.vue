@@ -13,12 +13,28 @@ defineProps<{
   <AppCard title="System Status">
     <div class="system-status__stats">
       <div>
+        <span class="eyebrow">Scheduler</span>
+        <strong>{{ snapshot.stats.running ? "Running" : "Stopped" }}</strong>
+      </div>
+      <div>
         <span class="eyebrow">Jobs Collected</span>
         <strong>{{ snapshot.stats.jobs_collected }}</strong>
       </div>
       <div>
-        <span class="eyebrow">Notifications</span>
+        <span class="eyebrow">Jobs Matched</span>
+        <strong>{{ snapshot.stats.jobs_matched }}</strong>
+      </div>
+      <div>
+        <span class="eyebrow">Telegram Sent</span>
         <strong>{{ snapshot.stats.notifications_sent }}</strong>
+      </div>
+      <div>
+        <span class="eyebrow">Errors</span>
+        <strong>{{ snapshot.stats.errors }}</strong>
+      </div>
+      <div>
+        <span class="eyebrow">Last Poll</span>
+        <strong>{{ formatDateTime(snapshot.stats.last_poll_at) }}</strong>
       </div>
       <div>
         <span class="eyebrow">Next Poll</span>

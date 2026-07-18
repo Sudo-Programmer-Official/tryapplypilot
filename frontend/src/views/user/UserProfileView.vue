@@ -52,7 +52,16 @@ async function verifyTelegram(): Promise<void> {
   try {
     const payload = await verifyTelegramConnection(connectSession.value.connect_token);
     auth.setUser(payload.user);
-    pushToast("Telegram connected", "You will now receive private job alerts.", "success");
+    if (payload.connected && payload.user.telegram_chat_id) {
+      pushToast("Telegram connected", "You will now receive private job alerts.", "success");
+      connectSession.value = null;
+      return;
+    }
+    pushToast(
+      "Telegram still pending",
+      payload.message ?? "Press Start in Telegram, then verify the connection again.",
+      "info",
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to verify Telegram connection.";
     pushToast("Telegram verification failed", message, "error");

@@ -48,6 +48,9 @@ class DashboardServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("excluded_keywords", snapshot["settings"])
         self.assertIn("watchlists", snapshot["settings"])
         self.assertGreater(len(snapshot["settings"]["watchlists"]), 0)
+        self.assertIn("scheduler", snapshot)
+        self.assertIn("jobs_matched", snapshot["system_status"]["stats"])
+        self.assertIn("errors", snapshot["system_status"]["stats"])
 
     async def test_health_snapshot_reports_connector_status(self) -> None:
         with patch.dict(os.environ, {"JOB_RADAR_RUNTIME_MODE": "seed"}, clear=True):
@@ -57,6 +60,8 @@ class DashboardServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(health["service"], "ai-job-radar-api")
         self.assertGreater(len(health["connectors"]), 0)
         self.assertEqual(health["connectors"][0]["source"], "Greenhouse")
+        self.assertIn("scheduler", health)
+        self.assertIn("running", health["scheduler"])
 
 
 if __name__ == "__main__":

@@ -1,14 +1,20 @@
 <script setup lang="ts">
-defineProps<{
+import { computed, useSlots } from "vue";
+
+const props = defineProps<{
   title?: string;
   subtitle?: string;
   padded?: boolean;
 }>();
+
+const slots = useSlots();
+
+const hasHeader = computed(() => Boolean(props.title || props.subtitle || slots.header || slots.actions));
 </script>
 
 <template>
   <section class="app-card surface-card" :class="{ 'app-card--padded': padded !== false }">
-    <header v-if="title || subtitle || $slots.header || $slots.actions" class="app-card__header">
+    <header v-if="hasHeader" class="app-card__header">
       <div>
         <slot name="header">
           <h3 v-if="title" class="app-card__title">{{ title }}</h3>
@@ -19,7 +25,7 @@ defineProps<{
         <slot name="actions" />
       </div>
     </header>
-    <div class="app-card__body">
+    <div class="app-card__body" :class="{ 'app-card__body--standalone': !hasHeader }">
       <slot />
     </div>
   </section>
@@ -31,10 +37,7 @@ defineProps<{
   gap: var(--content-gap);
   overflow: hidden;
   height: 100%;
-}
-
-.app-card--padded {
-  padding: var(--card-padding);
+  min-width: 0;
 }
 
 .app-card__header {
@@ -42,6 +45,10 @@ defineProps<{
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--content-gap);
+}
+
+.app-card--padded .app-card__header {
+  padding: var(--card-padding) var(--card-padding) 0;
 }
 
 .app-card__title {
@@ -58,5 +65,19 @@ defineProps<{
   color: var(--color-text-muted);
   font-size: var(--type-small);
   line-height: 1.5;
+}
+
+.app-card__body {
+  display: grid;
+  gap: var(--content-gap);
+  min-width: 0;
+}
+
+.app-card--padded .app-card__body {
+  padding: 0 var(--card-padding) var(--card-padding);
+}
+
+.app-card--padded .app-card__body--standalone {
+  padding-top: var(--card-padding);
 }
 </style>

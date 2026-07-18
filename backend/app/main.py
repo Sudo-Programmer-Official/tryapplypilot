@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile, status
@@ -12,6 +13,7 @@ import jwt
 
 from app.audit_logs import list_audit_logs, record_audit_event
 from app.catalog import (
+    import_recommended_companies,
     list_companies as list_catalog_companies,
     list_watchlists as list_catalog_watchlists,
     update_preference_settings,
@@ -26,11 +28,13 @@ from app.company_requests import (
 )
 from app.auth import create_telegram_connect_token, decode_token, extract_telegram_start_token, role_allows
 from app.config import get_settings as get_app_settings
+from app.db.bootstrap import bootstrap_database
 from app.domain import CompanyPreference, UserAccount, Watchlist, WatchlistTerm
 from app.logging_utils import configure_logging
 from app.notifications.telegram import TelegramConfigurationError, TelegramDeliveryError, list_updates
 from app.repositories.postgres import list_user_alerts, list_user_jobs
 from app.resume_library import ResumeUploadError, list_user_resumes, upload_resume_for_user
+from app.scheduler_service import SchedulerBusyError, SchedulerService, get_scheduler_service, set_scheduler_service
 from app.saved_jobs import list_saved_jobs, remove_saved_job_for_user, save_job_for_user
 from app.services.dashboard import (
     build_dashboard_snapshot,
@@ -206,10 +210,28 @@ security = HTTPBearer(auto_error=False)
 
 configure_logging(get_app_settings().log_level)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    settings = get_app_settings()
+    scheduler = SchedulerService(settings)
+    set_scheduler_service(scheduler)
+    app.state.scheduler_service = scheduler
+    try:
+        if settings.radar.mode != "seed":
+            await bootstrap_database()
+            await ensure_super_admin(settings)
+        await scheduler.start()
+        yield
+    finally:
+        await scheduler.stop()
+        set_scheduler_service(None)
+
 app = FastAPI(
     title="AI Job Radar API",
     version="0.1.0",
     description="Phase 1 backend for the Market Scout Agent MVP.",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -258,6 +280,13 @@ def _request_context(request: Request) -> tuple[str, str]:
     user_agent = request.headers.get("user-agent", "")
     client_ip = request.client.host if request.client is not None and request.client.host is not None else ""
     return user_agent, client_ip
+
+
+def _scheduler_or_503() -> SchedulerService:
+    scheduler = get_scheduler_service()
+    if scheduler is None:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Scheduler service is not initialized.")
+    return scheduler
 
 
 @app.post("/api/auth/signup")
@@ -590,6 +619,21 @@ async def healthcheck() -> dict[str, object]:
     return await build_health_snapshot()
 
 
+@app.get("/api/admin/scheduler/status")
+async def scheduler_status(_: UserAccount = Depends(require_admin)) -> dict[str, object]:
+    return _scheduler_or_503().status().to_dict()
+
+
+@app.post("/api/admin/scheduler/run-now")
+async def scheduler_run_now(_: UserAccount = Depends(require_admin)) -> dict[str, object]:
+    scheduler = _scheduler_or_503()
+    try:
+        snapshot = await scheduler.run_poll_cycle(trigger="manual")
+    except SchedulerBusyError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return snapshot.to_dict()
+
+
 @app.get("/api/dashboard")
 async def dashboard(_: UserAccount = Depends(require_admin)) -> dict[str, object]:
     return await build_dashboard_snapshot()
@@ -629,6 +673,19 @@ async def settings(_: UserAccount = Depends(require_admin)) -> dict[str, object]
 @app.get("/api/catalog/companies")
 async def companies_catalog(_: UserAccount = Depends(require_admin)) -> dict[str, object]:
     return {"items": [company.to_dict() for company in await list_catalog_companies()]}
+
+
+@app.post("/api/catalog/companies/import-defaults")
+async def import_default_companies(_: UserAccount = Depends(require_admin)) -> dict[str, object]:
+    items = await import_recommended_companies()
+    enabled_count = sum(1 for company in items if company.enabled)
+    return {
+        "items": [company.to_dict() for company in items],
+        "summary": {
+            "count": len(items),
+            "enabled_count": enabled_count,
+        },
+    }
 
 
 @app.post("/api/catalog/companies")
