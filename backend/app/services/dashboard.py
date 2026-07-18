@@ -7,6 +7,20 @@ from app.job_metadata import matches_country_preference
 from app.runtime import get_runtime
 from app.scheduler_service import SchedulerStatusSnapshot, get_scheduler_service
 
+SOURCE_LAYER_LABELS = {
+    "official_ats": "Official ATS",
+    "company_careers": "Company Careers",
+    "job_aggregator": "Job Aggregators",
+    "discovery_agent": "Discovery Agent",
+}
+
+CONNECTOR_STATUS_LABELS = {
+    "live": "Live",
+    "beta": "Beta",
+    "planned": "Planned",
+    "disabled": "Disabled",
+}
+
 
 def _component_detail(status: str, healthy: str, lagging: str, degraded: str) -> str:
     if status == "healthy":
@@ -104,6 +118,59 @@ def _scheduler_component(
     return ("healthy", "Scheduler is running on the configured cadence.")
 
 
+def _build_source_layer_summary(sources: list[Any]) -> list[dict[str, Any]]:
+    summary: list[dict[str, Any]] = []
+    for layer, label in SOURCE_LAYER_LABELS.items():
+        layer_sources = [source for source in sources if source.layer == layer]
+        if not layer_sources:
+            continue
+        summary.append(
+            {
+                "layer": layer,
+                "label": label,
+                "connectors_registered": len(layer_sources),
+                "connectors_enabled": sum(1 for source in layer_sources if source.enabled),
+                "connectors_live": sum(1 for source in layer_sources if source.admin_status == "live"),
+                "connectors_beta": sum(1 for source in layer_sources if source.admin_status == "beta"),
+                "connectors_planned": sum(1 for source in layer_sources if source.admin_status == "planned"),
+                "companies_enabled": sum(source.companies_enabled for source in layer_sources),
+                "catalog_company_count": sum(source.catalog_company_count for source in layer_sources),
+                "jobs_collected_today": sum(source.jobs_collected for source in layer_sources),
+            }
+        )
+    return summary
+
+
+def _build_connector_roadmap(sources: list[Any]) -> list[dict[str, Any]]:
+    roadmap: list[dict[str, Any]] = []
+    for status, label in CONNECTOR_STATUS_LABELS.items():
+        grouped_sources = [source for source in sources if source.admin_status == status]
+        if not grouped_sources:
+            continue
+        roadmap.append(
+            {
+                "status": status,
+                "label": label,
+                "count": len(grouped_sources),
+                "connectors": [
+                    {
+                        "key": source.connector_key,
+                        "source": source.source,
+                        "layer": source.layer,
+                        "layer_label": SOURCE_LAYER_LABELS.get(source.layer, source.layer),
+                        "enabled": source.enabled,
+                        "state": source.state,
+                        "companies_enabled": source.companies_enabled,
+                        "catalog_company_count": source.catalog_company_count,
+                        "last_successful_sync": source.last_successful_sync,
+                    }
+                    for source in grouped_sources
+                ],
+            }
+        )
+    return roadmap
+
+
 async def list_jobs(
     min_score: int | None = None,
     company: str | None = None,
@@ -159,6 +226,8 @@ async def build_dashboard_snapshot(now: datetime | None = None) -> dict[str, Any
     enabled_companies = [company for company in settings.companies if company.enabled]
     live_sources = [source for source in sources if source.enabled and source.rollout_stage == "live"]
     next_sources = [source for source in sources if source.rollout_stage == "next"]
+    source_coverage = _build_source_layer_summary(sources)
+    connector_roadmap = _build_connector_roadmap(sources)
     active_source = live_sources[0] if live_sources else None
     scheduler = _build_scheduler_snapshot(
         current_time=current_time,
@@ -188,11 +257,11 @@ async def build_dashboard_snapshot(now: datetime | None = None) -> dict[str, Any
     return {
         "generated_at": current_time.isoformat(),
         "product": {
-            "name": "AI Job Radar",
-            "phase": "Phase 1 MVP",
-            "goal": "Never miss a high-quality job again.",
-            "focus": "One real source end-to-end before expanding connector coverage.",
-            "implementation_order": "Postgres -> Greenhouse -> Score -> Telegram -> Dashboard.",
+            "name": "TryApplyPilot",
+            "phase": "Internet Job Discovery Engine",
+            "goal": "If a relevant software or AI job becomes public anywhere online, detect it within minutes.",
+            "focus": "Official ATS first, then company careers, then aggregators and autonomous discovery.",
+            "implementation_order": "Official ATS -> Company Careers -> Job Aggregators -> Discovery Agent.",
         },
         "agent": {
             "name": "Market Scout Agent",
@@ -217,6 +286,8 @@ async def build_dashboard_snapshot(now: datetime | None = None) -> dict[str, Any
             "configured_companies": len(enabled_companies),
             "live_connectors": len(live_sources),
             "next_connectors": len(next_sources),
+            "beta_connectors": sum(1 for source in sources if source.admin_status == "beta"),
+            "planned_connectors": sum(1 for source in sources if source.admin_status == "planned"),
             "polling_interval_minutes": settings.polling_interval_minutes,
             "notification_sla_minutes": 5,
             "apply_now_threshold_score": apply_now_threshold,
@@ -226,6 +297,8 @@ async def build_dashboard_snapshot(now: datetime | None = None) -> dict[str, Any
         "jobs": jobs,
         "alerts": [alert.to_dict() for alert in alerts],
         "sources": [source.to_dict() for source in sources],
+        "source_coverage": source_coverage,
+        "connector_roadmap": connector_roadmap,
         "settings": settings.to_dict(),
         "scheduler": scheduler.to_dict(),
         "system_status": {
@@ -299,6 +372,8 @@ async def build_dashboard_snapshot(now: datetime | None = None) -> dict[str, Any
             "database_mode": runtime.database.mode,
             "schema_tables": list(runtime.database.schema_tables),
             "connectors_registered": [connector.to_dict() for connector in runtime.connectors.list_definitions()],
+            "source_coverage": source_coverage,
+            "connector_roadmap": connector_roadmap,
             "notifications": {
                 "telegram_bot_configured": runtime.settings.telegram.bot_configured,
                 "telegram_chat_configured": bool(runtime.settings.telegram.chat_id),
@@ -336,6 +411,8 @@ async def build_health_snapshot(now: datetime | None = None) -> dict[str, Any]:
         health_state = "degraded"
     elif any(source.state == "lagging" for source in live_sources):
         health_state = "lagging"
+    source_layers = _build_source_layer_summary(sources)
+    connector_roadmap = _build_connector_roadmap(sources)
 
     return {
         "status": health_state,
@@ -377,12 +454,19 @@ async def build_health_snapshot(now: datetime | None = None) -> dict[str, Any]:
             "configured": runtime.settings.openai.enabled,
             "model": runtime.settings.openai.model,
         },
+        "source_layers": source_layers,
+        "connector_roadmap": connector_roadmap,
         "connectors": [
             {
+                "connector_key": source.connector_key,
                 "source": source.source,
+                "layer": source.layer,
+                "admin_status": source.admin_status,
                 "enabled": source.enabled,
                 "rollout_stage": source.rollout_stage,
                 "state": source.state,
+                "companies_enabled": source.companies_enabled,
+                "catalog_company_count": source.catalog_company_count,
                 "last_run_minutes_ago": source.last_run_minutes_ago,
                 "last_successful_sync": source.last_successful_sync,
             }

@@ -1,8 +1,28 @@
 from __future__ import annotations
 
 import os
+import sys
+import types
 import unittest
 from unittest.mock import patch
+
+if "asyncpg" not in sys.modules:
+    asyncpg_stub = types.ModuleType("asyncpg")
+    asyncpg_stub.Connection = object
+    asyncpg_stub.Record = dict
+    asyncpg_stub.connect = None
+    sys.modules["asyncpg"] = asyncpg_stub
+
+if "jwt" not in sys.modules:
+    jwt_stub = types.ModuleType("jwt")
+
+    class _InvalidTokenError(Exception):
+        pass
+
+    jwt_stub.InvalidTokenError = _InvalidTokenError
+    jwt_stub.encode = lambda payload, secret, algorithm=None: "stub-token"
+    jwt_stub.decode = lambda token, secret, algorithms=None, issuer=None: {"type": "access"}
+    sys.modules["jwt"] = jwt_stub
 
 from app.config import get_settings
 from app.runtime import get_runtime
@@ -40,6 +60,7 @@ class DashboardServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertLessEqual(snapshot["summary"]["notification_sla_minutes"], 5)
         self.assertEqual(snapshot["agent"]["name"], "Market Scout Agent")
         self.assertEqual(snapshot["agent"]["current_connector"], "Greenhouse")
+        self.assertEqual(snapshot["product"]["name"], "TryApplyPilot")
         self.assertGreater(len(snapshot["settings"]["companies"]), 20)
         self.assertEqual(snapshot["settings"]["companies"][0]["tier"], 1)
         self.assertIn("role_families", snapshot["settings"])
@@ -49,6 +70,10 @@ class DashboardServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("watchlists", snapshot["settings"])
         self.assertGreater(len(snapshot["settings"]["watchlists"]), 0)
         self.assertIn("scheduler", snapshot)
+        self.assertIn("source_coverage", snapshot)
+        self.assertIn("connector_roadmap", snapshot)
+        self.assertGreater(len(snapshot["source_coverage"]), 0)
+        self.assertEqual(snapshot["source_coverage"][0]["layer"], "official_ats")
         self.assertIn("jobs_matched", snapshot["system_status"]["stats"])
         self.assertIn("errors", snapshot["system_status"]["stats"])
 
@@ -60,6 +85,8 @@ class DashboardServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(health["service"], "ai-job-radar-api")
         self.assertGreater(len(health["connectors"]), 0)
         self.assertEqual(health["connectors"][0]["source"], "Greenhouse")
+        self.assertEqual(health["connectors"][0]["layer"], "official_ats")
+        self.assertIn("source_layers", health)
         self.assertIn("scheduler", health)
         self.assertIn("running", health["scheduler"])
 

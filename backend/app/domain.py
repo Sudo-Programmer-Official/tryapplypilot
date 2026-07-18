@@ -5,6 +5,8 @@ from typing import Literal
 
 CollectorState = Literal["healthy", "lagging", "degraded"]
 ConnectorRolloutStage = Literal["live", "next", "later"]
+ConnectorAdminStatus = Literal["live", "beta", "planned", "disabled"]
+SourceLayer = Literal["official_ats", "company_careers", "job_aggregator", "discovery_agent"]
 JobState = Literal["new", "seen", "dismissed", "skipped"]
 MatchDecision = Literal["APPLY_NOW", "REVIEW", "IGNORE"]
 NotificationChannelName = Literal["telegram", "email", "slack", "desktop"]
@@ -204,6 +206,9 @@ class CompanyRequest:
 class SourceStatus:
     id: str
     source: str
+    connector_key: str
+    layer: SourceLayer
+    admin_status: ConnectorAdminStatus
     enabled: bool
     rollout_stage: ConnectorRolloutStage
     state: CollectorState
@@ -213,6 +218,8 @@ class SourceStatus:
     retries_today: int
     last_successful_sync: str | None
     jobs_collected: int = 0
+    companies_enabled: int = 0
+    catalog_company_count: int = 0
     average_runtime_seconds: int | None = None
     last_failed_sync: str | None = None
     next_scheduled_poll: str | None = None

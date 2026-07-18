@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from app.domain import CompanyPreference, OnboardingStatus, UserAccount
-from app.main import companies_catalog
+from app.main import companies_catalog, current_user_companies
 
 
 def _user(*, role: str) -> UserAccount:
@@ -28,10 +28,10 @@ class MainCatalogAccessTests(unittest.IsolatedAsyncioTestCase):
             CompanyPreference(id="disabled-1", company="Google", enabled=False),
         ]
         with patch("app.main.list_catalog_companies", AsyncMock(return_value=companies)):
-            payload = await companies_catalog(_user(role="user"))
+            payload = await current_user_companies(_user(role="user"))
         self.assertEqual([item["company"] for item in payload["items"]], ["Databricks"])
 
-    async def test_user_catalog_returns_full_catalog_for_admin(self) -> None:
+    async def test_admin_catalog_returns_full_catalog(self) -> None:
         companies = [
             CompanyPreference(id="enabled-1", company="Databricks", enabled=True),
             CompanyPreference(id="disabled-1", company="Google", enabled=False),

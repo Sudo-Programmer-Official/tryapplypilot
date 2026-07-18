@@ -400,12 +400,17 @@ class AggregatedSourcesRepository:
             key_prefix,
         )
 
-        enabled = any(
-            company.enabled
-            and company.connector == definition.key
-            and (definition.key != "greenhouse" or bool(company.external_identifier.strip()))
+        connector_companies = [
+            company
             for company in settings.radar.companies
-        )
+            if company.connector == definition.key
+        ]
+        runnable_companies = [
+            company
+            for company in connector_companies
+            if company.enabled and (definition.key != "greenhouse" or bool(company.external_identifier.strip()))
+        ]
+        enabled = bool(runnable_companies)
         now = datetime.now(timezone.utc)
         last_run_at = aggregate["last_run_at"] if aggregate is not None else None
         last_successful_sync = aggregate["last_successful_sync"] if aggregate is not None else None
@@ -419,8 +424,12 @@ class AggregatedSourcesRepository:
             if aggregate is not None and aggregate["average_runtime_seconds"] is not None
             else None
         )
+        cadence_minutes = min(
+            (company.poll_interval_minutes for company in runnable_companies),
+            default=settings.radar.polling_interval_minutes,
+        )
         next_scheduled_poll = (
-            (last_run_at + timedelta(minutes=settings.radar.polling_interval_minutes)).isoformat()
+            (last_run_at + timedelta(minutes=cadence_minutes)).isoformat()
             if enabled and last_run_at is not None
             else None
         )
@@ -440,15 +449,20 @@ class AggregatedSourcesRepository:
         return SourceStatus(
             id=f"source-{definition.key}",
             source=definition.display_name,
+            connector_key=definition.key,
+            layer=definition.layer,
+            admin_status=definition.admin_status,
             enabled=enabled,
             rollout_stage=definition.rollout_stage,
             state=state,
-            cadence_minutes=settings.radar.polling_interval_minutes,
+            cadence_minutes=cadence_minutes,
             new_jobs_today=new_jobs_today,
             last_run_minutes_ago=last_run_minutes_ago,
             retries_today=retries_today,
             last_successful_sync=last_successful_sync.isoformat() if last_successful_sync is not None else None,
             jobs_collected=jobs_collected,
+            companies_enabled=len(runnable_companies),
+            catalog_company_count=len(connector_companies),
             average_runtime_seconds=average_runtime_seconds,
             last_failed_sync=last_failed_sync.isoformat() if last_failed_sync is not None else None,
             next_scheduled_poll=next_scheduled_poll,

@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import Any, Literal
 
-from app.domain import ConnectorRolloutStage
+from app.domain import ConnectorAdminStatus, ConnectorRolloutStage, SourceLayer
 
 PaginationMode = Literal["cursor", "page", "none"]
 
@@ -14,6 +14,8 @@ PaginationMode = Literal["cursor", "page", "none"]
 class ConnectorDefinition:
     key: str
     display_name: str
+    layer: SourceLayer
+    admin_status: ConnectorAdminStatus
     rollout_stage: ConnectorRolloutStage
     pagination_mode: PaginationMode
     supports_incremental_sync: bool
@@ -78,4 +80,3 @@ class JobConnector(ABC):
     @abstractmethod
     def collect(self, cursor: ConnectorCursor | None = None) -> ConnectorRunResult:
         """Collect a batch of normalized jobs from the connector."""
-

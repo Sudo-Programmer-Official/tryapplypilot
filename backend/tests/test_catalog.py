@@ -4,9 +4,15 @@ import os
 import unittest
 from unittest.mock import patch
 
-from app.catalog import build_effective_app_settings, build_scout_settings
-from app.company_catalog_defaults import ENABLED_COMPANY_NAMES, RECOMMENDED_COMPANY_DEFAULTS
+from app.catalog import _persist_company, build_effective_app_settings, build_scout_settings
+from app.company_catalog_defaults import (
+    ENABLED_COMPANY_NAMES,
+    RECOMMENDED_COMPANY_DEFAULTS,
+    build_recommended_company_preferences,
+    recommended_company_catalog_fingerprint,
+)
 from app.config import get_settings
+from app.domain import CompanyPreference
 
 
 class CatalogTests(unittest.IsolatedAsyncioTestCase):
@@ -49,6 +55,40 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("company-api", effective.radar.enabled_connectors)
         self.assertNotIn("google-careers", effective.radar.enabled_connectors)
         self.assertNotIn("workday", effective.radar.enabled_connectors)
+
+    def test_recommended_catalog_fingerprint_is_stable_and_live_defaults_are_greenhouse(self) -> None:
+        first = recommended_company_catalog_fingerprint()
+        second = recommended_company_catalog_fingerprint()
+        self.assertEqual(first, second)
+        enabled_companies = [company for company in build_recommended_company_preferences() if company.enabled]
+        self.assertGreater(len(enabled_companies), 0)
+        self.assertEqual({company.connector for company in enabled_companies}, {"greenhouse", "lever"})
+
+    async def test_persist_company_preserves_existing_company_id_for_same_name(self) -> None:
+        class FakeConn:
+            async def fetchval(self, query: str, *args: object) -> str | None:
+                self.last_fetch = (query, args)
+                return "existing-company-id"
+
+            async def execute(self, query: str, *args: object) -> None:
+                self.last_execute = (query, args)
+
+        company = CompanyPreference(
+            id="openai",
+            company="OpenAI",
+            enabled=True,
+            tier=1,
+            priority=1,
+            connector="greenhouse",
+            poll_interval_minutes=5,
+            country="US",
+            career_url="https://job-boards.greenhouse.io/openai",
+            external_identifier="openai",
+            role_families=["AI Platform", "Backend Engineering"],
+        )
+
+        persisted = await _persist_company(FakeConn(), company)
+        self.assertEqual(persisted.id, "existing-company-id")
 
 
 if __name__ == "__main__":

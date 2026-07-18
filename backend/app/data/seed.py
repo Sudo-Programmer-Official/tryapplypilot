@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from app.company_catalog_defaults import build_recommended_company_preferences
 from app.config import DEFAULT_EXCLUDED_KEYWORDS, DEFAULT_EXPERIENCE_LEVELS, DEFAULT_ROLE_FAMILIES, DEFAULT_TARGET_ROLES, DEFAULT_WORK_ARRANGEMENTS
+from app.connectors.registry import build_default_registry
 from app.domain import (
     AlertEvent,
     CompanyPreference,
@@ -151,103 +154,84 @@ NOTIFICATIONS: list[NotificationChannel] = [
     NotificationChannel(channel="desktop", enabled=False, destination="Local desktop notifications"),
 ]
 
+_SOURCE_STATUS_OVERRIDES: dict[str, dict[str, object]] = {
+    "greenhouse": {
+        "state": "healthy",
+        "new_jobs_today": 12,
+        "jobs_collected": 48,
+        "last_run_minutes_ago": 1,
+        "retries_today": 1,
+        "average_runtime_seconds": 3,
+        "last_successful_sync": "2026-07-18T08:24:00+00:00",
+    },
+    "lever": {
+        "state": "healthy",
+        "new_jobs_today": 0,
+        "jobs_collected": 0,
+        "last_run_minutes_ago": None,
+        "retries_today": 0,
+        "average_runtime_seconds": None,
+        "last_successful_sync": None,
+    },
+    "ashby": {
+        "state": "healthy",
+        "new_jobs_today": 0,
+        "jobs_collected": 0,
+        "last_run_minutes_ago": None,
+        "retries_today": 0,
+        "average_runtime_seconds": None,
+        "last_successful_sync": None,
+    },
+}
+
+
+def _seed_source_status(connector_key: str) -> SourceStatus:
+    definition = next(
+        connector
+        for connector in build_default_registry().list_definitions()
+        if connector.key == connector_key
+    )
+    catalog_companies = [company for company in COMPANIES if company.connector == definition.key]
+    enabled_companies = [
+        company
+        for company in catalog_companies
+        if company.enabled and (definition.key != "greenhouse" or bool(company.external_identifier.strip()))
+    ]
+    cadence_minutes = min((company.poll_interval_minutes for company in enabled_companies), default=5)
+    overrides = _SOURCE_STATUS_OVERRIDES.get(definition.key, {})
+    last_successful_sync = overrides.get("last_successful_sync")
+    next_scheduled_poll = None
+    if isinstance(last_successful_sync, str):
+        last_sync_at = datetime.fromisoformat(last_successful_sync.replace("Z", "+00:00"))
+        if last_sync_at.tzinfo is None:
+            last_sync_at = last_sync_at.replace(tzinfo=timezone.utc)
+        next_scheduled_poll = (last_sync_at + timedelta(minutes=cadence_minutes)).isoformat()
+    return SourceStatus(
+        id=f"source-{definition.key}",
+        source=definition.display_name,
+        connector_key=definition.key,
+        layer=definition.layer,
+        admin_status=definition.admin_status,
+        enabled=bool(enabled_companies),
+        rollout_stage=definition.rollout_stage,
+        state=str(overrides.get("state", "healthy")),  # type: ignore[arg-type]
+        cadence_minutes=cadence_minutes,
+        new_jobs_today=int(overrides.get("new_jobs_today", 0)),
+        last_run_minutes_ago=overrides.get("last_run_minutes_ago"),  # type: ignore[arg-type]
+        retries_today=int(overrides.get("retries_today", 0)),
+        last_successful_sync=last_successful_sync if isinstance(last_successful_sync, str) else None,
+        jobs_collected=int(overrides.get("jobs_collected", 0)),
+        companies_enabled=len(enabled_companies),
+        catalog_company_count=len(catalog_companies),
+        average_runtime_seconds=overrides.get("average_runtime_seconds"),  # type: ignore[arg-type]
+        last_failed_sync=None,
+        next_scheduled_poll=next_scheduled_poll,
+        lag_reason=None,
+    )
+
+
 SOURCES: list[SourceStatus] = [
-    SourceStatus(
-        id="source-greenhouse",
-        source="Greenhouse",
-        enabled=True,
-        rollout_stage="live",
-        state="healthy",
-        cadence_minutes=5,
-        new_jobs_today=12,
-        last_run_minutes_ago=1,
-        retries_today=1,
-        last_successful_sync="2026-07-18T08:24:00Z",
-    ),
-    SourceStatus(
-        id="source-lever",
-        source="Lever",
-        enabled=False,
-        rollout_stage="next",
-        state="healthy",
-        cadence_minutes=5,
-        new_jobs_today=0,
-        last_run_minutes_ago=None,
-        retries_today=0,
-        last_successful_sync=None,
-    ),
-    SourceStatus(
-        id="source-ashby",
-        source="Ashby",
-        enabled=False,
-        rollout_stage="next",
-        state="healthy",
-        cadence_minutes=5,
-        new_jobs_today=0,
-        last_run_minutes_ago=None,
-        retries_today=0,
-        last_successful_sync=None,
-    ),
-    SourceStatus(
-        id="source-microsoft",
-        source="Microsoft Careers",
-        enabled=False,
-        rollout_stage="later",
-        state="healthy",
-        cadence_minutes=5,
-        new_jobs_today=0,
-        last_run_minutes_ago=None,
-        retries_today=0,
-        last_successful_sync=None,
-    ),
-    SourceStatus(
-        id="source-google",
-        source="Google Careers",
-        enabled=False,
-        rollout_stage="later",
-        state="healthy",
-        cadence_minutes=5,
-        new_jobs_today=0,
-        last_run_minutes_ago=None,
-        retries_today=0,
-        last_successful_sync=None,
-    ),
-    SourceStatus(
-        id="source-workday",
-        source="Workday",
-        enabled=False,
-        rollout_stage="later",
-        state="healthy",
-        cadence_minutes=5,
-        new_jobs_today=0,
-        last_run_minutes_ago=None,
-        retries_today=0,
-        last_successful_sync=None,
-    ),
-    SourceStatus(
-        id="source-smartrecruiters",
-        source="SmartRecruiters",
-        enabled=False,
-        rollout_stage="later",
-        state="healthy",
-        cadence_minutes=5,
-        new_jobs_today=0,
-        last_run_minutes_ago=None,
-        retries_today=0,
-        last_successful_sync=None,
-    ),
-    SourceStatus(
-        id="source-company-api",
-        source="Company APIs",
-        enabled=False,
-        rollout_stage="later",
-        state="healthy",
-        cadence_minutes=5,
-        new_jobs_today=0,
-        last_run_minutes_ago=None,
-        retries_today=0,
-        last_successful_sync=None,
-    ),
+    _seed_source_status(definition.key) for definition in build_default_registry().list_definitions()
 ]
 
 ALERTS: list[AlertEvent] = [

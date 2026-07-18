@@ -1,17 +1,31 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
 from typing import Callable
 
 from app.domain import CompanyPreference
 
-# V1 keeps default enablement limited to connectors the runtime can actually poll today.
+# V1 keeps default enablement limited to live ATS boards that are verified and
+# narrow enough to be practical for the initial always-on scheduler.
 ENABLED_COMPANY_NAMES = {
-    "OpenAI",
     "Anthropic",
     "Databricks",
     "Stripe",
+    "Cloudflare",
+    "MongoDB",
     "Scale AI",
+    "Vercel",
+    "Figma",
+    "Cockroach Labs",
+    "PlanetScale",
+    "Sourcegraph",
+    "Together AI",
+    "ClickHouse",
+    "AssemblyAI",
+    "Neon",
+    "Flex",
 }
 
 
@@ -59,15 +73,15 @@ def _company(
 
 
 RECOMMENDED_COMPANY_DEFAULTS: tuple[CompanyCatalogDefault, ...] = (
-    _company("OpenAI", "greenhouse", "openai", "https://job-boards.greenhouse.io/openai", 1, 1),
+    _company("OpenAI", "company-api", "openai", "https://openai.com/careers/search/", 1, 1),
     _company("Anthropic", "greenhouse", "anthropic", "https://job-boards.greenhouse.io/anthropic", 1, 2),
     _company("Databricks", "greenhouse", "databricks", "https://job-boards.greenhouse.io/databricks", 1, 3),
     _company("Microsoft", "microsoft-careers", "microsoft", "https://jobs.careers.microsoft.com/", 1, 4),
     _company("Stripe", "greenhouse", "stripe", "https://job-boards.greenhouse.io/stripe", 1, 5),
-    _company("Cloudflare", "company-api", "cloudflare", "https://www.cloudflare.com/careers/jobs/", 1, 6),
+    _company("Cloudflare", "greenhouse", "cloudflare", "https://job-boards.greenhouse.io/cloudflare", 1, 6),
     _company("Snowflake", "company-api", "snowflake", "https://careers.snowflake.com/", 1, 7),
     _company("Confluent", "company-api", "confluent", "https://careers.confluent.io/", 1, 8),
-    _company("MongoDB", "company-api", "mongodb", "https://www.mongodb.com/company/careers", 1, 9),
+    _company("MongoDB", "greenhouse", "mongodb", "https://job-boards.greenhouse.io/mongodb", 1, 9),
     _company("GitHub", "company-api", "github", "https://www.github.careers/careers-home", 1, 10),
     _company("Ramp", "company-api", "ramp", "https://ramp.com/careers", 1, 11),
     _company("Perplexity", "company-api", "perplexity", "https://www.perplexity.ai/careers", 1, 12),
@@ -94,53 +108,66 @@ RECOMMENDED_COMPANY_DEFAULTS: tuple[CompanyCatalogDefault, ...] = (
     _company("Oracle", "company-api", "oracle", "https://careers.oracle.com/", 2, 26),
     _company("ServiceNow", "company-api", "servicenow", "https://careers.servicenow.com/", 2, 27),
     _company("HashiCorp", "company-api", "hashicorp", "https://www.hashicorp.com/careers", 2, 28),
-    _company("Elastic", "company-api", "elastic", "https://www.elastic.co/careers", 2, 29),
-    _company("Grafana Labs", "company-api", "grafanalabs", "https://grafana.com/about/careers/", 2, 30),
+    _company("Elastic", "greenhouse", "elastic", "https://job-boards.greenhouse.io/elastic", 2, 29),
+    _company("Grafana Labs", "greenhouse", "grafanalabs", "https://job-boards.greenhouse.io/grafanalabs", 2, 30),
     _company("DigitalOcean", "company-api", "digitalocean", "https://www.digitalocean.com/careers", 2, 31),
     _company("Supabase", "company-api", "supabase", "https://supabase.com/careers", 2, 32),
-    _company("Vercel", "company-api", "vercel", "https://vercel.com/careers", 2, 33),
-    _company("GitLab", "company-api", "gitlab", "https://about.gitlab.com/jobs/", 2, 34),
-    _company("Mercury", "company-api", "mercury", "https://mercury.com/careers", 2, 35),
-    _company("Brex", "company-api", "brex", "https://www.brex.com/careers", 3, 36),
-    _company("Plaid", "company-api", "plaid", "https://plaid.com/careers", 3, 37),
-    _company("Robinhood", "company-api", "robinhood", "https://careers.robinhood.com/", 3, 38),
-    _company("Figma", "company-api", "figma", "https://www.figma.com/careers/", 3, 39),
-    _company("Notion", "company-api", "notion", "https://www.notion.so/careers", 3, 40),
-    _company("Airtable", "company-api", "airtable", "https://airtable.com/careers", 3, 41),
-    _company("Canva", "company-api", "canva", "https://www.canva.com/careers/", 3, 42),
-    _company("Discord", "company-api", "discord", "https://discord.com/jobs", 3, 43),
-    _company("Roblox", "company-api", "roblox", "https://careers.roblox.com/", 3, 44),
-    _company("Rippling", "company-api", "rippling", "https://www.rippling.com/careers", 3, 45),
-    _company("Retool", "company-api", "retool", "https://retool.com/careers", 3, 46),
-    _company("Replit", "company-api", "replit", "https://replit.com/careers", 3, 47),
-    _company("Render", "company-api", "render", "https://render.com/careers", 3, 48),
-    _company("Netlify", "company-api", "netlify", "https://www.netlify.com/careers/", 3, 49),
-    _company("PlanetScale", "company-api", "planetscale", "https://planetscale.com/careers", 3, 50),
-    _company("Neon", "company-api", "neon", "https://neon.tech/careers", 3, 51),
-    _company("ElevenLabs", "company-api", "elevenlabs", "https://elevenlabs.io/careers", 3, 52),
-    _company("Cohere", "company-api", "cohere", "https://cohere.com/careers", 3, 53),
-    _company("Mistral AI", "company-api", "mistralai", "https://mistral.ai/careers", 3, 54),
-    _company("Sierra", "company-api", "sierra", "https://sierra.ai/careers", 3, 55),
-    _company("Glean", "company-api", "glean", "https://www.glean.com/careers", 3, 56),
-    _company("Harvey", "company-api", "harvey", "https://www.harvey.ai/careers", 3, 57),
-    _company("Windsurf", "company-api", "windsurf", "https://windsurf.com/careers", 3, 58),
-    _company("Together AI", "company-api", "togetherai", "https://www.together.ai/careers", 3, 59),
-    _company("Runway", "company-api", "runway", "https://runwayml.com/careers/", 3, 60),
-    _company("Hugging Face", "company-api", "huggingface", "https://huggingface.co/jobs", 3, 61),
-    _company("Weights and Biases", "company-api", "wandb", "https://wandb.ai/site/careers", 3, 62),
-    _company("Adobe", "company-api", "adobe", "https://careers.adobe.com/", 3, 63),
-    _company("Cisco", "company-api", "cisco", "https://jobs.cisco.com/", 3, 64),
-    _company("Intel", "company-api", "intel", "https://jobs.intel.com/", 3, 65),
-    _company("Qualcomm", "company-api", "qualcomm", "https://careers.qualcomm.com/", 3, 66),
-    _company("Coinbase", "company-api", "coinbase", "https://www.coinbase.com/careers", 3, 67),
-    _company("Reddit", "company-api", "reddit", "https://www.redditinc.com/careers", 3, 68),
-    _company("Pinterest", "company-api", "pinterest", "https://www.pinterestcareers.com/", 3, 69),
-    _company("Dropbox", "company-api", "dropbox", "https://jobs.dropbox.com/", 3, 70),
-    _company("Slack", "company-api", "slack", "https://slack.com/careers", 3, 71),
-    _company("DoorDash", "company-api", "doordash", "https://careersatdoordash.com/", 3, 72),
-    _company("Palantir", "company-api", "palantir", "https://www.palantir.com/careers/", 3, 73),
-    _company("PostHog", "company-api", "posthog", "https://posthog.com/careers", 3, 74),
-    _company("Snyk", "company-api", "snyk", "https://snyk.io/careers/", 3, 75),
+    _company("Vercel", "greenhouse", "vercel", "https://job-boards.greenhouse.io/vercel", 2, 33),
+    _company("GitLab", "greenhouse", "gitlab", "https://job-boards.greenhouse.io/gitlab", 2, 34),
+    _company("Mercury", "greenhouse", "mercury", "https://job-boards.greenhouse.io/mercury", 2, 35),
+    _company("Flex", "greenhouse", "flex", "https://job-boards.greenhouse.io/flex", 3, 36),
+    _company("Brex", "greenhouse", "brex", "https://job-boards.greenhouse.io/brex", 3, 37),
+    _company("Plaid", "company-api", "plaid", "https://plaid.com/careers", 3, 38),
+    _company("Robinhood", "greenhouse", "robinhood", "https://job-boards.greenhouse.io/robinhood", 3, 39),
+    _company("Figma", "greenhouse", "figma", "https://job-boards.greenhouse.io/figma", 3, 40),
+    _company("Notion", "company-api", "notion", "https://www.notion.so/careers", 3, 41),
+    _company("Airtable", "greenhouse", "airtable", "https://job-boards.greenhouse.io/airtable", 3, 42),
+    _company("Canva", "company-api", "canva", "https://www.canva.com/careers/", 3, 43),
+    _company("Discord", "greenhouse", "discord", "https://job-boards.greenhouse.io/discord", 3, 44),
+    _company("Roblox", "company-api", "roblox", "https://careers.roblox.com/", 3, 45),
+    _company("Rippling", "company-api", "rippling", "https://www.rippling.com/careers", 3, 46),
+    _company("Retool", "company-api", "retool", "https://retool.com/careers", 3, 47),
+    _company("Replit", "company-api", "replit", "https://replit.com/careers", 3, 48),
+    _company("Render", "company-api", "render", "https://render.com/careers", 3, 49),
+    _company("Netlify", "greenhouse", "netlify", "https://job-boards.greenhouse.io/netlify", 3, 50),
+    _company("PlanetScale", "greenhouse", "planetscale", "https://job-boards.greenhouse.io/planetscale", 3, 51),
+    _company("Neon", "lever", "neon", "https://jobs.lever.co/neon", 3, 52),
+    _company("ElevenLabs", "company-api", "elevenlabs", "https://elevenlabs.io/careers", 3, 53),
+    _company("Cohere", "company-api", "cohere", "https://cohere.com/careers", 3, 54),
+    _company("Mistral AI", "company-api", "mistralai", "https://mistral.ai/careers", 3, 55),
+    _company("Sierra", "company-api", "sierra", "https://sierra.ai/careers", 3, 56),
+    _company("Glean", "company-api", "glean", "https://www.glean.com/careers", 3, 57),
+    _company("Harvey", "company-api", "harvey", "https://www.harvey.ai/careers", 3, 58),
+    _company("Windsurf", "company-api", "windsurf", "https://windsurf.com/careers", 3, 59),
+    _company("Together AI", "greenhouse", "togetherai", "https://job-boards.greenhouse.io/togetherai", 3, 60),
+    _company("Runway", "company-api", "runway", "https://runwayml.com/careers/", 3, 61),
+    _company("Hugging Face", "company-api", "huggingface", "https://huggingface.co/jobs", 3, 62),
+    _company("Weights and Biases", "company-api", "wandb", "https://wandb.ai/site/careers", 3, 63),
+    _company("Adobe", "company-api", "adobe", "https://careers.adobe.com/", 3, 64),
+    _company("Cisco", "company-api", "cisco", "https://jobs.cisco.com/", 3, 65),
+    _company("Intel", "company-api", "intel", "https://jobs.intel.com/", 3, 66),
+    _company("Qualcomm", "company-api", "qualcomm", "https://careers.qualcomm.com/", 3, 67),
+    _company("Coinbase", "greenhouse", "coinbase", "https://job-boards.greenhouse.io/coinbase", 3, 68),
+    _company("Reddit", "greenhouse", "reddit", "https://job-boards.greenhouse.io/reddit", 3, 69),
+    _company("Pinterest", "greenhouse", "pinterest", "https://job-boards.greenhouse.io/pinterest", 3, 70),
+    _company("Dropbox", "greenhouse", "dropbox", "https://job-boards.greenhouse.io/dropbox", 3, 71),
+    _company("Slack", "company-api", "slack", "https://slack.com/careers", 3, 72),
+    _company("DoorDash", "company-api", "doordash", "https://careersatdoordash.com/", 3, 73),
+    _company("Palantir", "lever", "palantir", "https://jobs.lever.co/palantir", 3, 74),
+    _company("PostHog", "company-api", "posthog", "https://posthog.com/careers", 3, 75),
+    _company("Snyk", "company-api", "snyk", "https://snyk.io/careers/", 3, 76),
+    _company("Cockroach Labs", "greenhouse", "cockroachlabs", "https://job-boards.greenhouse.io/cockroachlabs", 2, 77),
+    _company("Sourcegraph", "greenhouse", "sourcegraph91", "https://job-boards.greenhouse.io/sourcegraph91", 2, 78),
+    _company("ClickHouse", "greenhouse", "clickhouse", "https://job-boards.greenhouse.io/clickhouse", 2, 79),
+    _company("AssemblyAI", "greenhouse", "assemblyai", "https://job-boards.greenhouse.io/assemblyai", 2, 80),
+    _company(
+        "Anduril",
+        "greenhouse",
+        "andurilindustries",
+        "https://job-boards.greenhouse.io/andurilindustries",
+        2,
+        81,
+    ),
 )
 
 AI_PLATFORM_COMPANIES = {
@@ -148,6 +175,8 @@ AI_PLATFORM_COMPANIES = {
     "anthropic",
     "perplexity",
     "scale ai",
+    "assemblyai",
+    "anduril",
     "cursor",
     "elevenlabs",
     "cohere",
@@ -169,6 +198,8 @@ DATA_PLATFORM_COMPANIES = {
     "snowflake",
     "confluent",
     "mongodb",
+    "cockroach labs",
+    "clickhouse",
     "elastic",
     "supabase",
     "planetscale",
@@ -179,6 +210,8 @@ DISTRIBUTED_SYSTEMS_COMPANIES = {
     "databricks",
     "stripe",
     "cloudflare",
+    "cockroach labs",
+    "clickhouse",
     "snowflake",
     "confluent",
     "mongodb",
@@ -201,6 +234,8 @@ PLATFORM_ENGINEERING_COMPANIES = {
     "snowflake",
     "confluent",
     "mongodb",
+    "cockroach labs",
+    "clickhouse",
     "github",
     "microsoft",
     "google",
@@ -235,6 +270,7 @@ DEVELOPER_EXPERIENCE_COMPANIES = {
     "github",
     "gitlab",
     "cursor",
+    "sourcegraph",
     "linear",
     "replit",
     "render",
@@ -289,12 +325,15 @@ FULL_STACK_COMPANIES = {
 SEARCH_COMPANIES = {
     "perplexity",
     "glean",
+    "sourcegraph",
     "elastic",
 }
 
 STORAGE_COMPANIES = {
     "snowflake",
     "mongodb",
+    "cockroach labs",
+    "clickhouse",
     "planetscale",
     "neon",
 }
@@ -307,6 +346,8 @@ NETWORKING_COMPANIES = {
 RELIABILITY_COMPANIES = {
     "cloudflare",
     "databricks",
+    "cockroach labs",
+    "clickhouse",
     "confluent",
     "mongodb",
     "grafana labs",
@@ -379,3 +420,25 @@ def build_recommended_company_preferences(
         )
         for spec in RECOMMENDED_COMPANY_DEFAULTS
     ]
+
+
+def recommended_company_catalog_fingerprint(
+    role_family_resolver: Callable[[str], list[str]] = default_role_families_for_company,
+) -> str:
+    payload = [
+        {
+            "name": spec.name,
+            "connector": spec.connector,
+            "external_identifier": spec.external_identifier,
+            "career_url": spec.career_url,
+            "tier": spec.tier,
+            "priority": spec.priority,
+            "country": spec.country,
+            "poll_interval_minutes": spec.poll_interval_minutes,
+            "enabled": spec.name in ENABLED_COMPANY_NAMES,
+            "role_families": sorted(role_family_resolver(spec.name)),
+        }
+        for spec in RECOMMENDED_COMPANY_DEFAULTS
+    ]
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()

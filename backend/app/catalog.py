@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import replace
+from dataclasses import asdict, dataclass
 import json
 from uuid import NAMESPACE_URL, uuid5
 
-from app.company_catalog_defaults import build_recommended_company_preferences, default_role_families_for_company
+from app.company_catalog_defaults import (
+    build_recommended_company_preferences,
+    default_role_families_for_company,
+    recommended_company_catalog_fingerprint,
+)
 from app.config import AppSettings, get_settings
-from app.db.client import connection
+from app.connectors.registry import build_default_registry
 from app.domain import CompanyPreference, NotificationChannel, RolePreference, ScoutSettings, Watchlist, WatchlistTerm
 from app.job_metadata import normalize_supported_country
+from app.logging_utils import get_logger
 
 DEFAULT_WATCHLISTS: tuple[dict[str, object], ...] = (
     {
@@ -43,9 +50,44 @@ PREFERENCE_DEFAULTS = (
     "initial_sync_max_alerts",
 )
 
+RECOMMENDED_COMPANY_CATALOG_FINGERPRINT_KEY = "recommended_company_catalog_fingerprint"
+IMPLEMENTED_CONNECTOR_KEYS = frozenset({"greenhouse", "lever"})
+logger = get_logger("app.catalog")
+
+
+def _connection():
+    from app.db.client import connection
+
+    return connection
+
+
+@dataclass(frozen=True)
+class CatalogReconciliationSummary:
+    added: int
+    updated: int
+    skipped: int
+    removed: int
+    connector_counts: dict[str, int]
+
+    def to_dict(self) -> dict[str, object]:
+        payload = asdict(self)
+        payload["implemented_connectors"] = sorted(IMPLEMENTED_CONNECTOR_KEYS)
+        payload["connector_summary"] = {
+            key: {
+                "enabled_companies": count,
+                "implemented": key in IMPLEMENTED_CONNECTOR_KEYS,
+            }
+            for key, count in self.connector_counts.items()
+        }
+        return payload
+
 
 def _company_id(name: str) -> str:
     return str(uuid5(NAMESPACE_URL, f"company:{name.casefold()}"))
+
+
+def _default_company_preference_id(name: str) -> str:
+    return name.casefold().replace(" ", "-")
 
 
 def _role_family_id(name: str) -> str:
@@ -113,12 +155,126 @@ def _enabled_connector_keys(companies: list[CompanyPreference], fallback: tuple[
     return connectors or fallback
 
 
+async def _sync_recommended_company_catalog(conn) -> list[CompanyPreference]:
+    imported: list[CompanyPreference] = []
+    for company in build_recommended_company_preferences(default_role_families_for_company):
+        imported.append(await _persist_company(conn, company))
+    await conn.execute(
+        """
+        INSERT INTO user_preferences (preference_key, preference_value, updated_at)
+        VALUES ($1, $2::jsonb, NOW())
+        ON CONFLICT (preference_key) DO UPDATE SET
+            preference_value = EXCLUDED.preference_value,
+            updated_at = NOW()
+        """,
+        RECOMMENDED_COMPANY_CATALOG_FINGERPRINT_KEY,
+        json.dumps(recommended_company_catalog_fingerprint(default_role_families_for_company)),
+    )
+    return imported
+
+
+def _normalized_company_metadata(company: CompanyPreference) -> tuple[object, ...]:
+    return (
+        company.connector.strip(),
+        company.external_identifier.strip(),
+        company.career_url.strip(),
+        company.tier,
+        company.priority,
+        company.enabled,
+        company.poll_interval_minutes,
+        normalize_supported_country(company.country),
+        tuple(sorted(family.strip() for family in company.role_families if family.strip())),
+    )
+
+
+def _recommended_connector_counts(companies: list[CompanyPreference]) -> dict[str, int]:
+    counts = Counter(company.connector.strip().casefold() for company in companies if company.enabled and company.connector.strip())
+    return {
+        definition.key: int(counts.get(definition.key, 0))
+        for definition in build_default_registry().list_definitions()
+    }
+
+
+def _build_catalog_reconciliation_summary(existing: list[CompanyPreference]) -> CatalogReconciliationSummary:
+    recommended = build_recommended_company_preferences(default_role_families_for_company)
+    existing_by_name = {company.company: company for company in existing}
+    added = 0
+    updated = 0
+    skipped = 0
+    for company in recommended:
+        current = existing_by_name.get(company.company)
+        if current is None:
+            added += 1
+            continue
+        if _normalized_company_metadata(current) != _normalized_company_metadata(company):
+            updated += 1
+            continue
+        skipped += 1
+    return CatalogReconciliationSummary(
+        added=added,
+        updated=updated,
+        skipped=skipped,
+        removed=0,
+        connector_counts=_recommended_connector_counts(recommended),
+    )
+
+
+async def _load_catalog_companies(conn) -> list[CompanyPreference]:
+    rows = await conn.fetch(
+        """
+        SELECT
+            c.company_id,
+            c.name,
+            c.connector,
+            c.external_identifier,
+            c.priority,
+            c.tier,
+            c.enabled,
+            c.poll_interval_minutes,
+            c.country,
+            c.career_url,
+            COALESCE(array_agg(rf.name ORDER BY rf.name) FILTER (WHERE rf.name IS NOT NULL), ARRAY[]::text[]) AS role_families
+        FROM companies c
+        LEFT JOIN company_role_families crf ON crf.company_id = c.company_id
+        LEFT JOIN role_families rf ON rf.role_family_id = crf.role_family_id
+        GROUP BY
+            c.company_id,
+            c.name,
+            c.connector,
+            c.external_identifier,
+            c.priority,
+            c.tier,
+            c.enabled,
+            c.poll_interval_minutes,
+            c.country,
+            c.career_url
+        ORDER BY c.tier ASC, c.priority ASC, c.name ASC
+        """
+    )
+    return [
+        CompanyPreference(
+            id=str(row["company_id"]),
+            company=str(row["name"]),
+            enabled=bool(row["enabled"]),
+            tier=int(row["tier"]),
+            priority=int(row["priority"]),
+            connector=str(row["connector"]),
+            poll_interval_minutes=int(row["poll_interval_minutes"]),
+            country=normalize_supported_country(str(row["country"])),
+            career_url=str(row["career_url"]),
+            external_identifier=str(row["external_identifier"]),
+            role_families=[str(item) for item in row["role_families"]],
+        )
+        for row in rows
+    ]
+
+
 async def ensure_catalog_seeded(settings: AppSettings | None = None) -> None:
     resolved_settings = settings or get_settings()
     if resolved_settings.radar.mode == "seed":
         return
 
-    async with connection() as conn:
+    async with _connection()() as conn:
         async with conn.transaction():
             for family in resolved_settings.radar.role_families:
                 await conn.execute(
@@ -131,48 +287,28 @@ async def ensure_catalog_seeded(settings: AppSettings | None = None) -> None:
                     family,
                 )
 
-            company_count = int(await conn.fetchval("SELECT COUNT(*) FROM companies") or 0)
-            if company_count == 0:
-                for company in build_recommended_company_preferences(default_role_families_for_company):
-                    company_id = _company_id(company.company)
-                    await conn.execute(
-                        """
-                        INSERT INTO companies (
-                            company_id,
-                            name,
-                            connector,
-                            external_identifier,
-                            priority,
-                            tier,
-                            enabled,
-                            poll_interval_minutes,
-                            country,
-                            career_url
-                        )
-                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-                        ON CONFLICT (company_id) DO NOTHING
-                        """,
-                        company_id,
-                        company.company,
-                        company.connector,
-                        company.external_identifier,
-                        company.priority,
-                        company.tier,
-                        company.enabled,
-                        company.poll_interval_minutes,
-                        company.country,
-                        company.career_url,
-                    )
-                    for family in company.role_families:
-                        await conn.execute(
-                            """
-                            INSERT INTO company_role_families (company_id, role_family_id)
-                            VALUES ($1, $2)
-                            ON CONFLICT (company_id, role_family_id) DO NOTHING
-                            """,
-                            company_id,
-                            _role_family_id(family),
-                        )
+            existing_companies = await _load_catalog_companies(conn)
+            stored_catalog_fingerprint = _json_value(
+                await conn.fetchval(
+                    """
+                    SELECT preference_value
+                    FROM user_preferences
+                    WHERE preference_key = $1
+                    """,
+                    RECOMMENDED_COMPANY_CATALOG_FINGERPRINT_KEY,
+                )
+            )
+            current_catalog_fingerprint = recommended_company_catalog_fingerprint(default_role_families_for_company)
+            summary = _build_catalog_reconciliation_summary(existing_companies)
+            if summary.added > 0 or summary.updated > 0 or stored_catalog_fingerprint != current_catalog_fingerprint:
+                await _sync_recommended_company_catalog(conn)
+            logger.info(
+                "Catalog reconciliation completed",
+                extra={
+                    "operation_name": "catalog.reconciliation",
+                    "catalog_summary": summary.to_dict(),
+                },
+            )
 
             defaults: dict[str, object] = {
                 "primary_connector": resolved_settings.radar.primary_connector,
@@ -249,61 +385,30 @@ async def list_companies(settings: AppSettings | None = None) -> list[CompanyPre
         return list(COMPANIES)
 
     await ensure_catalog_seeded(resolved_settings)
-    async with connection() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT
-                c.company_id,
-                c.name,
-                c.connector,
-                c.external_identifier,
-                c.priority,
-                c.tier,
-                c.enabled,
-                c.poll_interval_minutes,
-                c.country,
-                c.career_url,
-                COALESCE(array_agg(rf.name ORDER BY rf.name) FILTER (WHERE rf.name IS NOT NULL), ARRAY[]::text[]) AS role_families
-            FROM companies c
-            LEFT JOIN company_role_families crf ON crf.company_id = c.company_id
-            LEFT JOIN role_families rf ON rf.role_family_id = crf.role_family_id
-            GROUP BY
-                c.company_id,
-                c.name,
-                c.connector,
-                c.external_identifier,
-                c.priority,
-                c.tier,
-                c.enabled,
-                c.poll_interval_minutes,
-                c.country,
-                c.career_url
-            ORDER BY c.tier ASC, c.priority ASC, c.name ASC
-            """
-        )
-    return [
-        CompanyPreference(
-            id=str(row["company_id"]),
-            company=str(row["name"]),
-            enabled=bool(row["enabled"]),
-            tier=int(row["tier"]),
-            priority=int(row["priority"]),
-            connector=str(row["connector"]),
-            poll_interval_minutes=int(row["poll_interval_minutes"]),
-            country=normalize_supported_country(str(row["country"])),
-            career_url=str(row["career_url"]),
-            external_identifier=str(row["external_identifier"]),
-            role_families=[str(item) for item in row["role_families"]],
-        )
-        for row in rows
-    ]
+    async with _connection()() as conn:
+        return await _load_catalog_companies(conn)
 
 
 async def _persist_company(
     conn,
     company: CompanyPreference,
 ) -> CompanyPreference:
-    company_id = company.id or _company_id(company.company)
+    normalized_name = company.company.strip()
+    incoming_company_id = company.id.strip() if company.id else ""
+    existing_company_id = await conn.fetchval(
+        """
+        SELECT company_id
+        FROM companies
+        WHERE name = $1
+        """,
+        normalized_name,
+    )
+    if existing_company_id is not None:
+        company_id = str(existing_company_id)
+    elif not incoming_company_id or incoming_company_id == _default_company_preference_id(normalized_name):
+        company_id = _company_id(normalized_name)
+    else:
+        company_id = incoming_company_id
     role_families = sorted({family.strip() for family in company.role_families if family.strip()})
     career_url = _company_career_url(
         connector=company.connector,
@@ -339,7 +444,7 @@ async def _persist_company(
             updated_at = NOW()
         """,
         company_id,
-        company.company.strip(),
+        normalized_name,
         company.connector.strip(),
         company.external_identifier.strip(),
         company.priority,
@@ -374,7 +479,7 @@ async def _persist_company(
         )
     return CompanyPreference(
         id=company_id,
-        company=company.company.strip(),
+        company=normalized_name,
         enabled=company.enabled,
         tier=company.tier,
         priority=company.priority,
@@ -393,7 +498,7 @@ async def upsert_company(company: CompanyPreference, settings: AppSettings | Non
         return company
 
     await ensure_catalog_seeded(resolved_settings)
-    async with connection() as conn:
+    async with _connection()() as conn:
         async with conn.transaction():
             return await _persist_company(conn, company)
 
@@ -404,11 +509,9 @@ async def import_recommended_companies(settings: AppSettings | None = None) -> l
         return build_recommended_company_preferences(default_role_families_for_company)
 
     await ensure_catalog_seeded(resolved_settings)
-    imported: list[CompanyPreference] = []
-    async with connection() as conn:
+    async with _connection()() as conn:
         async with conn.transaction():
-            for company in build_recommended_company_preferences(default_role_families_for_company):
-                imported.append(await _persist_company(conn, company))
+            imported = await _sync_recommended_company_catalog(conn)
     return sorted(imported, key=lambda item: (item.tier, item.priority, item.company.casefold()))
 
 
@@ -420,7 +523,7 @@ async def list_watchlists(settings: AppSettings | None = None) -> list[Watchlist
         return list(WATCHLISTS)
 
     await ensure_catalog_seeded(resolved_settings)
-    async with connection() as conn:
+    async with _connection()() as conn:
         watchlist_rows = await conn.fetch(
             """
             SELECT watchlist_id, name, enabled
@@ -473,7 +576,7 @@ async def upsert_watchlist(watchlist: Watchlist, settings: AppSettings | None = 
         for term in watchlist.terms
         if term.term.strip()
     ]
-    async with connection() as conn:
+    async with _connection()() as conn:
         async with conn.transaction():
             await conn.execute(
                 """
@@ -526,7 +629,7 @@ async def build_scout_settings(settings: AppSettings | None = None) -> ScoutSett
     await ensure_catalog_seeded(resolved_settings)
     companies = await list_companies(resolved_settings)
     watchlists = await list_watchlists(resolved_settings)
-    async with connection() as conn:
+    async with _connection()() as conn:
         rows = await conn.fetch(
             """
             SELECT preference_key, preference_value
@@ -600,7 +703,7 @@ async def update_preference_settings(
             payload.get("initial_sync_max_alerts", resolved_settings.radar.initial_sync_max_alerts)
         ),
     }
-    async with connection() as conn:
+    async with _connection()() as conn:
         async with conn.transaction():
             for key, value in cleaned_payload.items():
                 await conn.execute(

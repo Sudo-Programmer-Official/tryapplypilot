@@ -1,8 +1,28 @@
 from __future__ import annotations
 
 import os
+import sys
+import types
 import unittest
 from unittest.mock import patch
+
+if "asyncpg" not in sys.modules:
+    asyncpg_stub = types.ModuleType("asyncpg")
+    asyncpg_stub.Connection = object
+    asyncpg_stub.Record = dict
+    asyncpg_stub.connect = None
+    sys.modules["asyncpg"] = asyncpg_stub
+
+if "jwt" not in sys.modules:
+    jwt_stub = types.ModuleType("jwt")
+
+    class _InvalidTokenError(Exception):
+        pass
+
+    jwt_stub.InvalidTokenError = _InvalidTokenError
+    jwt_stub.encode = lambda payload, secret, algorithm=None: "stub-token"
+    jwt_stub.decode = lambda token, secret, algorithms=None, issuer=None: {"type": "access"}
+    sys.modules["jwt"] = jwt_stub
 
 from app.config import get_settings
 from app.connectors.registry import build_default_registry
@@ -59,6 +79,8 @@ class RuntimeInfrastructureTests(unittest.TestCase):
         definitions = registry.list_definitions()
         self.assertGreater(len(definitions), 0)
         self.assertEqual(definitions[0].key, "greenhouse")
+        self.assertEqual(definitions[0].layer, "official_ats")
+        self.assertEqual(definitions[0].admin_status, "live")
         self.assertEqual(definitions[0].rollout_stage, "live")
 
     def test_retry_sync_retries_before_succeeding(self) -> None:

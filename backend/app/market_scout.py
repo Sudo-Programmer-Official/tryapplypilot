@@ -14,6 +14,7 @@ from app.catalog import build_effective_app_settings
 from app.config import AppSettings, GreenhouseBoard, get_settings
 from app.connectors.base import ConnectorCursor, NormalizedJobRecord
 from app.connectors.greenhouse import GreenhouseJobConnector
+from app.connectors.lever import LeverBoard, LeverJobConnector
 from app.db.client import connection
 from app.domain import CompanyPreference, UserAccount
 from app.job_metadata import (
@@ -44,6 +45,7 @@ class ConnectorRunSummary:
     company: str
     jobs_fetched: int
     jobs_inserted: int
+    jobs_updated: int
     jobs_matched: int
     alerts_sent: int
     alerts_failed: int
@@ -56,6 +58,7 @@ class ConnectorRunSummary:
             "company": self.company,
             "jobs_fetched": self.jobs_fetched,
             "jobs_inserted": self.jobs_inserted,
+            "jobs_updated": self.jobs_updated,
             "jobs_matched": self.jobs_matched,
             "alerts_sent": self.alerts_sent,
             "alerts_failed": self.alerts_failed,
@@ -77,6 +80,10 @@ class MarketScoutRunSummary:
     @property
     def jobs_inserted(self) -> int:
         return sum(run.jobs_inserted for run in self.runs)
+
+    @property
+    def jobs_updated(self) -> int:
+        return sum(run.jobs_updated for run in self.runs)
 
     @property
     def jobs_matched(self) -> int:
@@ -101,6 +108,7 @@ class MarketScoutRunSummary:
             "runs": [run.to_dict() for run in self.runs],
             "jobs_collected": self.jobs_collected,
             "jobs_inserted": self.jobs_inserted,
+            "jobs_updated": self.jobs_updated,
             "jobs_matched": self.jobs_matched,
             "alerts_sent": self.alerts_sent,
             "alerts_failed": self.alerts_failed,
@@ -115,6 +123,12 @@ class UserMatchContext:
     profile_text: str
     minimum_match_score: int
     freshness_hours: int
+
+
+def _company_connector_run_key(company: CompanyPreference) -> str:
+    connector_key = company.connector.strip().casefold()
+    company_key = company.external_identifier.strip() or company.company.casefold().replace(" ", "-")
+    return f"{connector_key}:{company_key}"
 
 
 def _decision_rank(decision: str) -> int:
@@ -190,20 +204,29 @@ class MarketScoutAgent:
         )
         started_at = datetime.now(timezone.utc)
         runs: list[ConnectorRunSummary] = []
-        connector_groups = self._enabled_companies_by_connector()
+        connector_groups, enabled_company_counts, skipped_company_counts = await self._due_companies_by_connector()
+        connector_summary = self._connector_cycle_summary(
+            runs,
+            enabled_company_counts=enabled_company_counts,
+            skipped_company_counts=skipped_company_counts,
+        )
         await record_audit_event(
             event_type="scheduler.started",
             subject_type="scheduler",
             subject_id="market-scout",
             message="Market Scout scheduler cycle started.",
-            metadata={"enabled_connectors": list(connector_groups)},
+            metadata={
+                "enabled_connectors": list(connector_groups),
+                "connector_summary": connector_summary,
+            },
             settings=self.settings,
         )
         self.logger.info(
             "Starting market scout cycle",
             extra={
                 "operation_name": "market_scout.run.start",
-                "connector_key": ",".join(connector_groups),
+                "connector_key": ",".join(connector_groups) or "none",
+                "connector_summary": connector_summary,
             },
         )
         try:
@@ -225,6 +248,7 @@ class MarketScoutAgent:
                                 company=company.company,
                                 jobs_fetched=0,
                                 jobs_inserted=0,
+                                jobs_updated=0,
                                 jobs_matched=0,
                                 alerts_sent=0,
                                 alerts_failed=0,
@@ -253,6 +277,7 @@ class MarketScoutAgent:
                                 company=company.company,
                                 jobs_fetched=0,
                                 jobs_inserted=0,
+                                jobs_updated=0,
                                 jobs_matched=0,
                                 alerts_sent=0,
                                 alerts_failed=0,
@@ -261,12 +286,19 @@ class MarketScoutAgent:
                             )
                         )
             finished_at = datetime.now(timezone.utc)
+            connector_summary = self._connector_cycle_summary(
+                runs,
+                enabled_company_counts=enabled_company_counts,
+                skipped_company_counts=skipped_company_counts,
+            )
             self.logger.info(
                 "Finished market scout cycle",
                 extra={
                     "operation_name": "market_scout.run.finish",
-                    "connector_key": ",".join(connector_groups),
+                    "connector_key": ",".join(connector_groups) or "none",
                     "runs": [run.to_dict() for run in runs],
+                    "connector_summary": connector_summary,
+                    "duration_seconds": round((finished_at - started_at).total_seconds(), 2),
                 },
             )
             await record_audit_event(
@@ -274,7 +306,10 @@ class MarketScoutAgent:
                 subject_type="scheduler",
                 subject_id="market-scout",
                 message="Market Scout scheduler cycle completed.",
-                metadata={"runs": [run.to_dict() for run in runs]},
+                metadata={
+                    "runs": [run.to_dict() for run in runs],
+                    "connector_summary": connector_summary,
+                },
                 settings=self.settings,
             )
             return MarketScoutRunSummary(
@@ -298,8 +333,13 @@ class MarketScoutAgent:
             await self.run_once()
             await asyncio.sleep(self.settings.radar.polling_interval_minutes * 60)
 
-    def _enabled_companies_by_connector(self) -> dict[str, list[CompanyPreference]]:
+    async def _due_companies_by_connector(
+        self,
+    ) -> tuple[dict[str, list[CompanyPreference]], dict[str, int], dict[str, int]]:
         groups: dict[str, list[CompanyPreference]] = {}
+        enabled_company_counts: dict[str, int] = {}
+        skipped_company_counts: dict[str, int] = {}
+        candidates: list[tuple[str, str, CompanyPreference]] = []
         for company in sorted(
             self.settings.radar.companies,
             key=lambda item: (item.tier, item.priority, item.company.casefold()),
@@ -317,8 +357,95 @@ class MarketScoutAgent:
                     },
                 )
                 continue
+            if connector_key == "lever" and not company.external_identifier.strip():
+                self.logger.warning(
+                    "Skipping enabled lever company without external identifier",
+                    extra={
+                        "operation_name": "market_scout.company.invalid",
+                        "connector_key": connector_key,
+                        "company": company.company,
+                    },
+                )
+                continue
+            run_key = _company_connector_run_key(company)
+            enabled_company_counts[connector_key] = enabled_company_counts.get(connector_key, 0) + 1
+            candidates.append((connector_key, run_key, company))
+
+        if not candidates:
+            return groups, enabled_company_counts, skipped_company_counts
+
+        cursor_keys = [run_key for _, run_key, _ in candidates]
+        async with connection() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT connector_key, last_successful_sync
+                FROM connector_cursors
+                WHERE connector_key = ANY($1::text[])
+                """,
+                cursor_keys,
+            )
+        last_sync_by_run_key = {
+            str(row["connector_key"]): row["last_successful_sync"]
+            for row in rows
+            if row["last_successful_sync"] is not None
+        }
+        current_time = datetime.now(timezone.utc)
+        for connector_key, run_key, company in candidates:
+            last_successful_sync = last_sync_by_run_key.get(run_key)
+            if last_successful_sync is not None:
+                if last_successful_sync.tzinfo is None:
+                    last_successful_sync = last_successful_sync.replace(tzinfo=timezone.utc)
+                next_due_at = last_successful_sync + timedelta(minutes=company.poll_interval_minutes)
+                if current_time < next_due_at:
+                    skipped_company_counts[connector_key] = skipped_company_counts.get(connector_key, 0) + 1
+                    continue
             groups.setdefault(connector_key, []).append(company)
-        return groups
+        return groups, enabled_company_counts, skipped_company_counts
+
+    def _connector_cycle_summary(
+        self,
+        runs: list[ConnectorRunSummary],
+        *,
+        enabled_company_counts: dict[str, int],
+        skipped_company_counts: dict[str, int],
+    ) -> list[dict[str, object]]:
+        summary_by_connector: dict[str, dict[str, object]] = {}
+        connector_order: list[str] = []
+
+        def ensure_summary(connector_key: str) -> dict[str, object]:
+            if connector_key not in summary_by_connector:
+                summary_by_connector[connector_key] = {
+                    "connector": connector_key,
+                    "companies_enabled": enabled_company_counts.get(connector_key, 0),
+                    "companies_polled": 0,
+                    "companies_skipped_interval": skipped_company_counts.get(connector_key, 0),
+                    "jobs_fetched": 0,
+                    "jobs_new": 0,
+                    "jobs_updated": 0,
+                    "jobs_matched": 0,
+                    "alerts_sent": 0,
+                    "alerts_failed": 0,
+                    "failures": 0,
+                }
+                connector_order.append(connector_key)
+            return summary_by_connector[connector_key]
+
+        for connector_key in sorted(set(enabled_company_counts) | set(skipped_company_counts)):
+            ensure_summary(connector_key)
+
+        for run in runs:
+            connector_key = run.connector_key.split(":", 1)[0]
+            summary = ensure_summary(connector_key)
+            summary["companies_polled"] = int(summary["companies_polled"]) + 1
+            summary["jobs_fetched"] = int(summary["jobs_fetched"]) + run.jobs_fetched
+            summary["jobs_new"] = int(summary["jobs_new"]) + run.jobs_inserted
+            summary["jobs_updated"] = int(summary["jobs_updated"]) + run.jobs_updated
+            summary["jobs_matched"] = int(summary["jobs_matched"]) + run.jobs_matched
+            summary["alerts_sent"] = int(summary["alerts_sent"]) + run.alerts_sent
+            summary["alerts_failed"] = int(summary["alerts_failed"]) + run.alerts_failed
+            summary["failures"] = int(summary["failures"]) + (1 if run.failed else 0)
+
+        return [summary_by_connector[connector_key] for connector_key in connector_order]
 
     def _connector_runner(
         self,
@@ -326,6 +453,8 @@ class MarketScoutAgent:
     ) -> Callable[[CompanyPreference], Awaitable[ConnectorRunSummary]] | None:
         if connector_key == "greenhouse":
             return self._run_greenhouse_company
+        if connector_key == "lever":
+            return self._run_lever_company
         return None
 
     async def _active_user_contexts(self) -> list[UserMatchContext]:
@@ -401,7 +530,7 @@ class MarketScoutAgent:
                     "jobs_fetched": len(result.jobs),
                 },
             )
-            summary = await self._persist_greenhouse_result(
+            summary = await self._persist_connector_result(
                 company=company,
                 connector_key=connector_key,
                 run_id=run_id,
@@ -416,6 +545,11 @@ class MarketScoutAgent:
                     "operation_name": "market_scout.connector.finish",
                     "connector_key": connector_key,
                     "summary": summary.to_dict(),
+                    "jobs_fetched": summary.jobs_fetched,
+                    "jobs_new": summary.jobs_inserted,
+                    "jobs_updated": summary.jobs_updated,
+                    "alerts_sent": summary.alerts_sent,
+                    "alerts_failed": summary.alerts_failed,
                 },
             )
             return summary
@@ -442,7 +576,114 @@ class MarketScoutAgent:
             )
             raise
 
-    async def _persist_greenhouse_result(
+    async def _run_lever_company(self, company: CompanyPreference) -> ConnectorRunSummary:
+        board = LeverBoard(company=company.company, token=company.external_identifier.strip())
+        connector_key = f"lever:{board.token}"
+        run_id = str(uuid4())
+        cursor_before: str | None = None
+        last_successful_sync: datetime | None = None
+        self.logger.info(
+            "Starting connector sync",
+            extra={
+                "operation_name": "market_scout.connector.start",
+                "connector_key": connector_key,
+            },
+        )
+
+        async with connection() as conn:
+            cursor_row = await conn.fetchrow(
+                """
+                SELECT cursor_value, last_successful_sync, last_published_at
+                FROM connector_cursors
+                WHERE connector_key = $1
+                """,
+                connector_key,
+            )
+            if cursor_row is not None:
+                cursor_before = cursor_row["cursor_value"]
+                last_successful_sync = cursor_row["last_successful_sync"]
+
+            await conn.execute(
+                """
+                INSERT INTO connector_runs (
+                    run_id,
+                    connector_key,
+                    run_status,
+                    cursor_before
+                )
+                VALUES ($1, $2, 'running', $3)
+                """,
+                run_id,
+                connector_key,
+                cursor_before,
+            )
+
+        connector = LeverJobConnector(board=board, connector_settings=self.settings.connectors)
+        connector_cursor = ConnectorCursor(cursor=cursor_before, last_published_at=last_successful_sync)
+        try:
+            result = await asyncio.to_thread(
+                retry_sync,
+                connector.collect,
+                connector_cursor,
+                policy=self.retry_policy,
+                logger=self.logger,
+                operation_name=f"lever.collect.{board.token}",
+            )
+            self.logger.info(
+                "Collected jobs from connector",
+                extra={
+                    "operation_name": "market_scout.connector.collect",
+                    "connector_key": connector_key,
+                    "jobs_fetched": len(result.jobs),
+                },
+            )
+            summary = await self._persist_connector_result(
+                company=company,
+                connector_key=connector_key,
+                run_id=run_id,
+                last_successful_sync=last_successful_sync,
+                jobs=result.jobs,
+                next_cursor=result.next_cursor.cursor,
+                next_published_at=result.next_cursor.last_published_at,
+            )
+            self.logger.info(
+                "Finished connector sync",
+                extra={
+                    "operation_name": "market_scout.connector.finish",
+                    "connector_key": connector_key,
+                    "summary": summary.to_dict(),
+                    "jobs_fetched": summary.jobs_fetched,
+                    "jobs_new": summary.jobs_inserted,
+                    "jobs_updated": summary.jobs_updated,
+                    "alerts_sent": summary.alerts_sent,
+                    "alerts_failed": summary.alerts_failed,
+                },
+            )
+            return summary
+        except BaseException as exc:  # noqa: BLE001
+            async with connection() as conn:
+                await conn.execute(
+                    """
+                    UPDATE connector_runs
+                    SET finished_at = NOW(),
+                        run_status = 'failed',
+                        error_message = $2
+                    WHERE run_id = $1
+                    """,
+                    run_id,
+                    str(exc)[:1000],
+                )
+            await record_audit_event(
+                event_type="connector.failed",
+                subject_type="connector",
+                subject_id=connector_key,
+                message=f"{connector_key} failed during sync.",
+                metadata={"run_id": run_id, "error": str(exc)[:1000]},
+                settings=self.settings,
+            )
+            raise
+
+    async def _persist_connector_result(
         self,
         *,
         company: CompanyPreference,
@@ -454,6 +695,7 @@ class MarketScoutAgent:
         next_published_at: datetime | None,
     ) -> ConnectorRunSummary:
         jobs_inserted = 0
+        jobs_updated = 0
         jobs_matched = 0
         alerts_sent = 0
         alerts_failed = 0
@@ -481,6 +723,7 @@ class MarketScoutAgent:
 
             for job in jobs:
                 if job.external_job_id in existing_external_ids:
+                    jobs_updated += 1
                     await conn.execute(
                         """
                         UPDATE jobs
@@ -801,14 +1044,15 @@ class MarketScoutAgent:
                 next_cursor,
             )
 
-        return ConnectorRunSummary(
-            connector_key=connector_key,
-            company=company.company,
-            jobs_fetched=len(jobs),
-            jobs_inserted=jobs_inserted,
-            jobs_matched=jobs_matched,
-            alerts_sent=alerts_sent,
-            alerts_failed=alerts_failed,
+            return ConnectorRunSummary(
+                connector_key=connector_key,
+                company=company.company,
+                jobs_fetched=len(jobs),
+                jobs_inserted=jobs_inserted,
+                jobs_updated=jobs_updated,
+                jobs_matched=jobs_matched,
+                alerts_sent=alerts_sent,
+                alerts_failed=alerts_failed,
         )
 
     def _should_alert_for_user(

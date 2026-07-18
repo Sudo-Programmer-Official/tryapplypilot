@@ -217,6 +217,9 @@ export interface SavedJobRecord {
 export interface SourceStatus {
   id: string;
   source: string;
+  connector_key: string;
+  layer: "official_ats" | "company_careers" | "job_aggregator" | "discovery_agent";
+  admin_status: "live" | "beta" | "planned" | "disabled";
   enabled: boolean;
   rollout_stage: "live" | "next" | "later";
   state: "healthy" | "lagging" | "degraded";
@@ -226,6 +229,8 @@ export interface SourceStatus {
   retries_today: number;
   last_successful_sync: string | null;
   jobs_collected: number;
+  companies_enabled: number;
+  catalog_company_count: number;
   average_runtime_seconds: number | null;
   last_failed_sync: string | null;
   next_scheduled_poll: string | null;
