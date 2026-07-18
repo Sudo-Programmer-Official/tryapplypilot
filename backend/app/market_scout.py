@@ -181,6 +181,12 @@ def _format_alert_message(
     )
 
 
+def _json_string_list(value: object) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return []
+
+
 class MarketScoutAgent:
     def __init__(self, settings: AppSettings | None = None) -> None:
         self.base_settings = settings or get_settings()
@@ -707,11 +713,11 @@ class MarketScoutAgent:
         user_contexts = await self._active_user_contexts()
 
         async with connection() as conn:
-            existing_external_ids: set[str] = set()
+            existing_jobs_by_external_id: dict[str, str] = {}
             if jobs:
                 rows = await conn.fetch(
                     """
-                    SELECT external_job_id
+                    SELECT external_job_id, job_id
                     FROM jobs
                     WHERE connector_key = $1
                       AND external_job_id = ANY($2::text[])
@@ -719,10 +725,14 @@ class MarketScoutAgent:
                     connector_key,
                     [job.external_job_id for job in jobs],
                 )
-                existing_external_ids = {str(row["external_job_id"]) for row in rows}
+                existing_jobs_by_external_id = {
+                    str(row["external_job_id"]): str(row["job_id"])
+                    for row in rows
+                }
 
             for job in jobs:
-                if job.external_job_id in existing_external_ids:
+                if job.external_job_id in existing_jobs_by_external_id:
+                    job_id = existing_jobs_by_external_id[job.external_job_id]
                     jobs_updated += 1
                     await conn.execute(
                         """
@@ -738,6 +748,19 @@ class MarketScoutAgent:
                         job.description_text,
                         json.dumps({"raw_payload": job.raw_payload}),
                     )
+                    country_code = infer_country_code(job.location, job.description_text)
+                    published_at = job.published_at or now
+                    pending_alerts_sent, pending_alerts_failed = await self._deliver_pending_alerts_for_existing_job(
+                        conn=conn,
+                        job_id=job_id,
+                        job=job,
+                        user_contexts=user_contexts,
+                        published_at=published_at,
+                        country_code=country_code,
+                        now=now,
+                    )
+                    alerts_sent += pending_alerts_sent
+                    alerts_failed += pending_alerts_failed
                     continue
 
                 country_code = infer_country_code(job.location, job.description_text)
@@ -952,59 +975,19 @@ class MarketScoutAgent:
                         continue
                     if initial_sync:
                         remaining_initial_alert_budget = max(0, remaining_initial_alert_budget - 1)
-
-                    posted_minutes_ago = max(0, int((now - published_at).total_seconds() // 60))
-                    try:
-                        await asyncio.to_thread(
-                            retry_sync,
-                            send_message,
-                            self.settings,
-                            _format_alert_message(
-                                job,
-                                match,
-                                posted_minutes_ago,
-                                country_code=country_code,
-                                settings=user_context.settings,
-                            ),
-                            chat_id=user_context.user.telegram_chat_id,
-                            policy=self.retry_policy,
-                            logger=self.logger,
-                            operation_name=f"telegram.send.{job.company}.{user_context.user.id}",
-                            parse_mode="HTML",
-                        )
-                        await conn.execute(
-                            """
-                            UPDATE user_alerts
-                            SET alert_status = 'sent',
-                                sent_at = NOW()
-                            WHERE user_alert_id = $1
-                            """,
-                            alert_id,
-                        )
-                        await conn.execute(
-                            """
-                            UPDATE job_matches
-                            SET alerted_at = NOW(),
-                                updated_at = NOW()
-                            WHERE user_id = $1
-                              AND job_id = $2
-                            """,
-                            user_context.user.id,
-                            job_id,
-                        )
-                        alerts_sent += 1
-                    except Exception as exc:  # noqa: BLE001
-                        await conn.execute(
-                            """
-                            UPDATE user_alerts
-                            SET alert_status = 'failed',
-                                failure_reason = $2
-                            WHERE user_alert_id = $1
-                            """,
-                            alert_id,
-                            str(exc)[:1000],
-                        )
-                        alerts_failed += 1
+                    sent, failed = await self._send_inserted_alert(
+                        conn=conn,
+                        alert_id=alert_id,
+                        job_id=job_id,
+                        job=job,
+                        match=match,
+                        user_context=user_context,
+                        published_at=published_at,
+                        country_code=country_code,
+                        now=now,
+                    )
+                    alerts_sent += sent
+                    alerts_failed += failed
 
             await conn.execute(
                 """
@@ -1079,3 +1062,168 @@ class MarketScoutAgent:
         if remaining_initial_alert_budget <= 0:
             return False
         return published_at >= now - timedelta(hours=self.settings.radar.initial_alert_window_hours)
+
+    async def _deliver_pending_alerts_for_existing_job(
+        self,
+        *,
+        conn,
+        job_id: str,
+        job: NormalizedJobRecord,
+        user_contexts: list[UserMatchContext],
+        published_at: datetime,
+        country_code: str | None,
+        now: datetime,
+    ) -> tuple[int, int]:
+        pending_matches = await conn.fetch(
+            """
+            SELECT user_id, match_score, decision, recommended_resume, why, gaps, provider
+            FROM job_matches
+            WHERE job_id = $1
+              AND alerted_at IS NULL
+            """,
+            job_id,
+        )
+        if not pending_matches:
+            return 0, 0
+
+        user_context_by_id = {context.user.id: context for context in user_contexts}
+        alerts_sent = 0
+        alerts_failed = 0
+        for row in pending_matches:
+            user_id = str(row["user_id"])
+            user_context = user_context_by_id.get(user_id)
+            if user_context is None:
+                continue
+
+            match = MatchResult(
+                score=int(row["match_score"]),
+                decision=str(row["decision"]),
+                top_strengths=_json_string_list(row["why"]),
+                gaps=_json_string_list(row["gaps"]),
+                recommended_resume=str(row["recommended_resume"]),
+                provider=str(row["provider"]),
+            )
+            if not self._should_alert_for_user(
+                job=job,
+                match=match,
+                user_context=user_context,
+                published_at=published_at,
+                initial_sync=False,
+                now=now,
+                remaining_initial_alert_budget=0,
+            ):
+                continue
+
+            alert_id = str(uuid5(NAMESPACE_URL, f"{job_id}:{user_id}:telegram:{match.decision}"))
+            inserted_alert = await conn.fetchval(
+                """
+                INSERT INTO user_alerts (
+                    user_alert_id,
+                    job_id,
+                    user_id,
+                    channel,
+                    decision,
+                    alert_status,
+                    payload
+                )
+                VALUES ($1, $2, $3, 'telegram', $4, 'pending', $5::jsonb)
+                ON CONFLICT DO NOTHING
+                RETURNING user_alert_id
+                """,
+                alert_id,
+                job_id,
+                user_id,
+                match.decision,
+                json.dumps(
+                    {
+                        "why": match.top_strengths,
+                        "gaps": match.gaps,
+                        "recommended_resume": match.recommended_resume,
+                        "country_code": country_code,
+                    }
+                ),
+            )
+            if inserted_alert is None:
+                continue
+
+            sent, failed = await self._send_inserted_alert(
+                conn=conn,
+                alert_id=alert_id,
+                job_id=job_id,
+                job=job,
+                match=match,
+                user_context=user_context,
+                published_at=published_at,
+                country_code=country_code,
+                now=now,
+            )
+            alerts_sent += sent
+            alerts_failed += failed
+
+        return alerts_sent, alerts_failed
+
+    async def _send_inserted_alert(
+        self,
+        *,
+        conn,
+        alert_id: str,
+        job_id: str,
+        job: NormalizedJobRecord,
+        match: MatchResult,
+        user_context: UserMatchContext,
+        published_at: datetime,
+        country_code: str | None,
+        now: datetime,
+    ) -> tuple[int, int]:
+        posted_minutes_ago = max(0, int((now - published_at).total_seconds() // 60))
+        try:
+            await asyncio.to_thread(
+                retry_sync,
+                send_message,
+                self.settings,
+                _format_alert_message(
+                    job,
+                    match,
+                    posted_minutes_ago,
+                    country_code=country_code,
+                    settings=user_context.settings,
+                ),
+                chat_id=user_context.user.telegram_chat_id,
+                policy=self.retry_policy,
+                logger=self.logger,
+                operation_name=f"telegram.send.{job.company}.{user_context.user.id}",
+                parse_mode="HTML",
+            )
+            await conn.execute(
+                """
+                UPDATE user_alerts
+                SET alert_status = 'sent',
+                    sent_at = NOW()
+                WHERE user_alert_id = $1
+                """,
+                alert_id,
+            )
+            await conn.execute(
+                """
+                UPDATE job_matches
+                SET alerted_at = NOW(),
+                    updated_at = NOW()
+                WHERE user_id = $1
+                  AND job_id = $2
+                """,
+                user_context.user.id,
+                job_id,
+            )
+            return 1, 0
+        except Exception as exc:  # noqa: BLE001
+            await conn.execute(
+                """
+                UPDATE user_alerts
+                SET alert_status = 'failed',
+                    failure_reason = $2
+                WHERE user_alert_id = $1
+                """,
+                alert_id,
+                str(exc)[:1000],
+            )
+            return 0, 1

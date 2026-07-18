@@ -6,7 +6,7 @@ import os
 import sys
 import types
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 if "asyncpg" not in sys.modules:
     asyncpg_stub = types.ModuleType("asyncpg")
@@ -27,8 +27,9 @@ if "jwt" not in sys.modules:
     sys.modules["jwt"] = jwt_stub
 
 from app.config import get_settings
-from app.domain import CompanyPreference
-from app.market_scout import ConnectorRunSummary, MarketScoutAgent
+from app.connectors.base import NormalizedJobRecord
+from app.domain import CompanyPreference, UserAccount
+from app.market_scout import ConnectorRunSummary, MarketScoutAgent, UserMatchContext
 
 
 class _FakeConnectionContext:
@@ -44,6 +45,21 @@ class _FakeConnectionContext:
     async def fetch(self, query: str, keys: list[str]):
         del query, keys
         return self._rows
+
+
+class _PendingAlertConnection:
+    def __init__(self, rows: list[dict[str, object]]) -> None:
+        self._rows = rows
+        self.inserted_alerts: list[tuple[object, ...]] = []
+
+    async def fetch(self, query: str, job_id: str):
+        del query, job_id
+        return self._rows
+
+    async def fetchval(self, query: str, *args: object):
+        del query
+        self.inserted_alerts.append(args)
+        return args[0]
 
 
 class MarketScoutTests(unittest.IsolatedAsyncioTestCase):
@@ -178,6 +194,76 @@ class MarketScoutTests(unittest.IsolatedAsyncioTestCase):
                 },
             ],
         )
+
+    async def test_existing_job_pending_alerts_are_delivered_on_followup_cycle(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "JOB_RADAR_RUNTIME_MODE": "seed",
+                "JOB_RADAR_ALERT_FRESHNESS_HOURS": "24",
+                "JOB_RADAR_MINIMUM_MATCH_SCORE": "90",
+            },
+            clear=True,
+        ):
+            get_settings.cache_clear()
+            settings = get_settings()
+
+        agent = MarketScoutAgent(settings=settings)
+        user = UserAccount(
+            id="user-1",
+            email="user@example.com",
+            role="user",
+            telegram_chat_id="12345",
+            preferences={"minimum_match_score": 90, "freshness_hours": 24},
+        )
+        user_context = UserMatchContext(
+            user=user,
+            settings=settings,
+            profile_text="Backend engineer",
+            minimum_match_score=90,
+            freshness_hours=24,
+        )
+        job = NormalizedJobRecord(
+            connector_key="greenhouse",
+            external_job_id="anthropic-role",
+            company="Anthropic",
+            title="Staff+ Software Engineer, Backend",
+            location="San Francisco",
+            remote_policy="Remote",
+            published_at=datetime.now(timezone.utc) - timedelta(hours=2),
+            apply_url="https://example.com/jobs/anthropic-role",
+            description_text="Backend distributed systems role",
+            job_fingerprint="fingerprint",
+            raw_payload={},
+        )
+        conn = _PendingAlertConnection(
+            [
+                {
+                    "user_id": "user-1",
+                    "match_score": 93,
+                    "decision": "APPLY_NOW",
+                    "recommended_resume": "Backend_AI_v5.pdf",
+                    "why": ["Python", "Backend"],
+                    "gaps": ["Kubernetes"],
+                    "provider": "heuristic",
+                }
+            ]
+        )
+
+        with patch.object(agent, "_send_inserted_alert", AsyncMock(return_value=(1, 0))) as send_alert:
+            alerts_sent, alerts_failed = await agent._deliver_pending_alerts_for_existing_job(
+                conn=conn,
+                job_id="job-1",
+                job=job,
+                user_contexts=[user_context],
+                published_at=job.published_at or datetime.now(timezone.utc),
+                country_code="US",
+                now=datetime.now(timezone.utc),
+            )
+
+        self.assertEqual((alerts_sent, alerts_failed), (1, 0))
+        self.assertEqual(len(conn.inserted_alerts), 1)
+        send_alert.assert_awaited_once()
 
 
 if __name__ == "__main__":
