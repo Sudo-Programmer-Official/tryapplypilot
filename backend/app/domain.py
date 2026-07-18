@@ -101,6 +101,17 @@ class Watchlist:
 
 
 @dataclass(frozen=True)
+class SavedJobRecord:
+    id: str
+    user_id: str
+    job_id: str
+    saved_at: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
 class OnboardingStep:
     id: str
     label: str
@@ -201,7 +212,27 @@ class SourceStatus:
     last_run_minutes_ago: int | None
     retries_today: int
     last_successful_sync: str | None
+    jobs_collected: int = 0
+    average_runtime_seconds: int | None = None
+    last_failed_sync: str | None = None
+    next_scheduled_poll: str | None = None
     lag_reason: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class AuditLogEntry:
+    id: str
+    event_type: str
+    subject_type: str
+    message: str
+    subject_id: str = ""
+    actor_user_id: str | None = None
+    actor_email: str | None = None
+    metadata: dict[str, object] = field(default_factory=dict)
+    created_at: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -250,6 +281,11 @@ class ScoutSettings:
     selected_country: str = "US"
     alert_freshness_hours: int = 6
     dashboard_freshness_hours: int = 24
+    profile_text: str = ""
+    resume_variants: list[str] = field(default_factory=list)
+    initial_alert_window_hours: int = 24
+    initial_sync_openai_job_limit: int = 20
+    initial_sync_max_alerts: int = 5
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)

@@ -1,3 +1,11 @@
+export type UserRole = "super_admin" | "admin" | "user";
+export type MatchDecision = "APPLY_NOW" | "REVIEW" | "IGNORE";
+export type JobStatus = "new" | "seen" | "dismissed" | "skipped";
+export type ThemeMode = "system" | "light" | "dark";
+export type ResolvedTheme = "light" | "dark";
+export type StatusTone = "healthy" | "warning" | "failed" | "inactive" | "info";
+export type ToastTone = "success" | "error" | "info";
+
 export interface JobOpportunity {
   id: string;
   company: string;
@@ -7,11 +15,11 @@ export interface JobOpportunity {
   remote_policy: string;
   posted_minutes_ago: number;
   match_score: number;
-  decision: "APPLY_NOW" | "REVIEW" | "IGNORE";
+  decision: MatchDecision;
   why: string[];
   recommended_resume: string;
   duplicate_sources: number;
-  status: "new" | "seen" | "dismissed" | "skipped";
+  status: JobStatus;
   alert_sent: boolean;
   apply_url: string;
   gaps: string[];
@@ -73,15 +81,38 @@ export interface OnboardingStatus {
   steps: OnboardingStep[];
 }
 
+export interface UserProfileRecord {
+  linkedin_url?: string;
+  portfolio_url?: string;
+  github_url?: string;
+  years_of_experience?: number | null;
+  visa_status?: string;
+  work_authorization?: string;
+  resume_uploaded?: boolean;
+}
+
+export interface UserPreferencesRecord {
+  country?: string;
+  locations?: string[];
+  preferred_companies?: string[];
+  preferred_roles?: string[];
+  skills?: string[];
+  work_arrangements?: string[];
+  experience_levels?: string[];
+  freshness_hours?: number;
+  minimum_match_score?: number;
+  notification_frequency?: string;
+}
+
 export interface AuthUser {
   id: string;
   email: string;
-  role: "super_admin" | "admin" | "user";
+  role: UserRole;
   full_name: string;
   telegram_chat_id: string | null;
   country: string;
-  profile: Record<string, unknown>;
-  preferences: Record<string, unknown>;
+  profile: UserProfileRecord;
+  preferences: UserPreferencesRecord;
   onboarding: OnboardingStatus;
   created_at: string | null;
   last_login_at: string | null;
@@ -112,6 +143,45 @@ export interface TelegramVerifyResult {
   user: AuthUser;
 }
 
+export interface ResumeAsset {
+  id: string;
+  user_id: string;
+  display_name: string;
+  original_filename: string;
+  storage_path: string;
+  mime_type: string;
+  file_size_bytes: number;
+  extracted_text_preview: string;
+  extracted_skills: string[];
+  role_focus: string;
+  created_at: string | null;
+}
+
+export interface CompanyRequest {
+  id: string;
+  user_id: string;
+  requester_email: string;
+  company_name: string;
+  career_url: string;
+  connector_suggestion: string;
+  external_identifier_suggestion: string;
+  notes: string;
+  status: "pending" | "approved" | "rejected";
+  admin_notes: string;
+  reviewed_at: string | null;
+  reviewed_by_user_id: string | null;
+  approved_company_id: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface SavedJobRecord {
+  id: string;
+  user_id: string;
+  job_id: string;
+  saved_at: string | null;
+}
+
 export interface SourceStatus {
   id: string;
   source: string;
@@ -123,7 +193,23 @@ export interface SourceStatus {
   last_run_minutes_ago: number | null;
   retries_today: number;
   last_successful_sync: string | null;
+  jobs_collected: number;
+  average_runtime_seconds: number | null;
+  last_failed_sync: string | null;
+  next_scheduled_poll: string | null;
   lag_reason: string | null;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  event_type: string;
+  subject_type: string;
+  subject_id: string;
+  message: string;
+  actor_user_id: string | null;
+  actor_email: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string | null;
 }
 
 export interface AlertEvent {
@@ -132,7 +218,7 @@ export interface AlertEvent {
   company: string;
   title: string;
   match_score: number;
-  decision: "APPLY_NOW" | "REVIEW" | "IGNORE";
+  decision: MatchDecision;
   posted_minutes_ago: number;
   sent_minutes_ago: number;
   why: string[];
@@ -202,6 +288,11 @@ export interface ScoutSettings {
   selected_country: string;
   alert_freshness_hours: number;
   dashboard_freshness_hours: number;
+  profile_text: string;
+  resume_variants: string[];
+  initial_alert_window_hours: number;
+  initial_sync_openai_job_limit: number;
+  initial_sync_max_alerts: number;
 }
 
 export interface SystemStatusComponent {
@@ -235,4 +326,45 @@ export interface DashboardSnapshot {
   sources: SourceStatus[];
   settings: ScoutSettings;
   system_status: SystemStatusSnapshot;
+}
+
+export interface SidebarItem {
+  label: string;
+  to: string;
+  icon: string;
+  badge?: string | number;
+  featureFlag?: string;
+}
+
+export interface TableColumn {
+  key: string;
+  label: string;
+  className?: string;
+}
+
+export interface ToastMessage {
+  id: string;
+  title: string;
+  description?: string;
+  tone: ToastTone;
+}
+
+export interface UserPreferenceDraft {
+  full_name: string;
+  linkedin_url: string;
+  portfolio_url: string;
+  github_url: string;
+  years_of_experience: number | null;
+  visa_status: string;
+  work_authorization: string;
+  country: string;
+  locations: string[];
+  preferred_companies: string[];
+  preferred_roles: string[];
+  skills: string[];
+  work_arrangements: string[];
+  experience_levels: string[];
+  freshness_hours: number;
+  minimum_match_score: number;
+  notification_frequency: string;
 }

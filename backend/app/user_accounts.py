@@ -59,6 +59,7 @@ def _default_preferences(settings: AppSettings) -> dict[str, object]:
         "experience_levels": list(settings.radar.preferred_experience_levels),
         "freshness_hours": settings.radar.alert_freshness_hours,
         "minimum_match_score": settings.radar.minimum_match_score,
+        "notification_frequency": "instant",
         "watchlists": [],
     }
 
@@ -93,6 +94,12 @@ def _row_to_user(row: Record) -> UserAccount:
         created_at=user.created_at,
         last_login_at=user.last_login_at,
     )
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
 
 
 async def ensure_super_admin(settings: AppSettings | None = None) -> None:
@@ -173,7 +180,19 @@ async def create_user(
             json.dumps(_default_preferences(resolved_settings)),
         )
     assert row is not None
-    return _row_to_user(row)
+    created_user = _row_to_user(row)
+    from app.audit_logs import record_audit_event
+
+    await record_audit_event(
+        actor_user=created_user,
+        event_type="user.registered",
+        subject_type="user",
+        subject_id=created_user.id,
+        message=f"{created_user.email} registered a new account.",
+        metadata={"role": created_user.role},
+        settings=resolved_settings,
+    )
+    return created_user
 
 
 async def get_user_by_id(user_id: str, settings: AppSettings | None = None) -> UserAccount | None:
@@ -354,6 +373,134 @@ async def set_user_telegram_chat(
     return _row_to_user(row)
 
 
+async def update_user_profile_fields(
+    user_id: str,
+    profile_updates: dict[str, object],
+    *,
+    settings: AppSettings | None = None,
+) -> UserAccount | None:
+    resolved_settings = settings or get_settings()
+    if resolved_settings.radar.mode == "seed":
+        return None
+    existing = await get_user_by_id(user_id, resolved_settings)
+    if existing is None:
+        return None
+
+    profile = dict(existing.profile)
+    profile.update(profile_updates)
+    async with connection() as conn:
+        row = await conn.fetchrow(
+            """
+            UPDATE users
+            SET profile = $2::jsonb,
+                updated_at = NOW()
+            WHERE user_id = $1
+            RETURNING *
+            """,
+            user_id,
+            json.dumps(profile),
+        )
+    if row is None:
+        return None
+    return _row_to_user(row)
+
+
+async def update_user_profile(
+    user_id: str,
+    payload: dict[str, Any],
+    settings: AppSettings | None = None,
+) -> UserAccount | None:
+    resolved_settings = settings or get_settings()
+    if resolved_settings.radar.mode == "seed":
+        return None
+    existing = await get_user_by_id(user_id, resolved_settings)
+    if existing is None:
+        return None
+
+    profile = dict(existing.profile)
+    profile.update(
+        {
+            "linkedin_url": str(payload.get("linkedin_url", profile.get("linkedin_url", ""))).strip(),
+            "portfolio_url": str(payload.get("portfolio_url", profile.get("portfolio_url", ""))).strip(),
+            "github_url": str(payload.get("github_url", profile.get("github_url", ""))).strip(),
+            "visa_status": str(payload.get("visa_status", profile.get("visa_status", ""))).strip(),
+            "work_authorization": str(payload.get("work_authorization", profile.get("work_authorization", ""))).strip(),
+            "resume_uploaded": bool(payload.get("resume_uploaded", profile.get("resume_uploaded", False))),
+        }
+    )
+    years_of_experience = payload.get("years_of_experience", profile.get("years_of_experience"))
+    profile["years_of_experience"] = int(years_of_experience) if years_of_experience not in {None, ""} else None
+    full_name = str(payload.get("full_name", existing.full_name)).strip()
+
+    async with connection() as conn:
+        row = await conn.fetchrow(
+            """
+            UPDATE users
+            SET full_name = $2,
+                profile = $3::jsonb,
+                updated_at = NOW()
+            WHERE user_id = $1
+            RETURNING *
+            """,
+            user_id,
+            full_name,
+            json.dumps(profile),
+        )
+    if row is None:
+        return None
+    return _row_to_user(row)
+
+
+async def update_user_preferences(
+    user_id: str,
+    payload: dict[str, Any],
+    settings: AppSettings | None = None,
+) -> UserAccount | None:
+    resolved_settings = settings or get_settings()
+    if resolved_settings.radar.mode == "seed":
+        return None
+    existing = await get_user_by_id(user_id, resolved_settings)
+    if existing is None:
+        return None
+
+    preferences = dict(existing.preferences)
+    preferences.update(
+        {
+            "country": normalize_supported_country(str(payload.get("country", preferences.get("country", existing.country)))),
+            "locations": _string_list(payload.get("locations", preferences.get("locations", []))),
+            "preferred_companies": _string_list(payload.get("preferred_companies", preferences.get("preferred_companies", []))),
+            "preferred_roles": _string_list(payload.get("preferred_roles", preferences.get("preferred_roles", []))),
+            "skills": _string_list(payload.get("skills", preferences.get("skills", []))),
+            "work_arrangements": _string_list(payload.get("work_arrangements", preferences.get("work_arrangements", []))),
+            "experience_levels": _string_list(payload.get("experience_levels", preferences.get("experience_levels", []))),
+            "freshness_hours": int(payload.get("freshness_hours", preferences.get("freshness_hours", resolved_settings.radar.alert_freshness_hours))),
+            "minimum_match_score": int(
+                payload.get("minimum_match_score", preferences.get("minimum_match_score", resolved_settings.radar.minimum_match_score))
+            ),
+            "notification_frequency": str(payload.get("notification_frequency", preferences.get("notification_frequency", "instant"))).strip()
+            or "instant",
+        }
+    )
+
+    async with connection() as conn:
+        row = await conn.fetchrow(
+            """
+            UPDATE users
+            SET country = $2,
+                preferences = $3::jsonb,
+                updated_at = NOW()
+            WHERE user_id = $1
+            RETURNING *
+            """,
+            user_id,
+            normalize_supported_country(str(preferences["country"])),
+            json.dumps(preferences),
+        )
+    if row is None:
+        return None
+    return _row_to_user(row)
+
+
 async def resolve_delivery_telegram_chat_id(settings: AppSettings | None = None) -> str | None:
     resolved_settings = settings or get_settings()
     if resolved_settings.radar.mode == "seed":
@@ -413,37 +560,19 @@ async def update_user_onboarding(
     preferences.update(
         {
             "country": normalize_supported_country(str(payload.get("country", preferences.get("country", existing.country)))),
-            "locations": [str(value).strip() for value in payload.get("locations", preferences.get("locations", [])) if str(value).strip()],
-            "preferred_companies": [
-                str(value).strip()
-                for value in payload.get("preferred_companies", preferences.get("preferred_companies", []))
-                if str(value).strip()
-            ],
-            "preferred_roles": [
-                str(value).strip()
-                for value in payload.get("preferred_roles", preferences.get("preferred_roles", []))
-                if str(value).strip()
-            ],
-            "skills": [str(value).strip() for value in payload.get("skills", preferences.get("skills", [])) if str(value).strip()],
-            "watchlists": [
-                str(value).strip()
-                for value in payload.get("watchlists", preferences.get("watchlists", []))
-                if str(value).strip()
-            ],
-            "work_arrangements": [
-                str(value).strip()
-                for value in payload.get("work_arrangements", preferences.get("work_arrangements", []))
-                if str(value).strip()
-            ],
-            "experience_levels": [
-                str(value).strip()
-                for value in payload.get("experience_levels", preferences.get("experience_levels", []))
-                if str(value).strip()
-            ],
+            "locations": _string_list(payload.get("locations", preferences.get("locations", []))),
+            "preferred_companies": _string_list(payload.get("preferred_companies", preferences.get("preferred_companies", []))),
+            "preferred_roles": _string_list(payload.get("preferred_roles", preferences.get("preferred_roles", []))),
+            "skills": _string_list(payload.get("skills", preferences.get("skills", []))),
+            "watchlists": _string_list(payload.get("watchlists", preferences.get("watchlists", []))),
+            "work_arrangements": _string_list(payload.get("work_arrangements", preferences.get("work_arrangements", []))),
+            "experience_levels": _string_list(payload.get("experience_levels", preferences.get("experience_levels", []))),
             "freshness_hours": int(payload.get("freshness_hours", preferences.get("freshness_hours", resolved_settings.radar.alert_freshness_hours))),
             "minimum_match_score": int(
                 payload.get("minimum_match_score", preferences.get("minimum_match_score", resolved_settings.radar.minimum_match_score))
             ),
+            "notification_frequency": str(payload.get("notification_frequency", preferences.get("notification_frequency", "instant"))).strip()
+            or "instant",
         }
     )
 

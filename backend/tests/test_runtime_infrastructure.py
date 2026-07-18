@@ -24,6 +24,9 @@ class RuntimeInfrastructureTests(unittest.TestCase):
         self.assertIn("CREATE TABLE IF NOT EXISTS companies", schema_sql)
         self.assertIn("CREATE TABLE IF NOT EXISTS watchlists", schema_sql)
         self.assertIn("CREATE TABLE IF NOT EXISTS user_preferences", schema_sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS saved_jobs", schema_sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS user_watchlists", schema_sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS audit_logs", schema_sql)
 
     def test_runtime_exposes_schema_tables_and_database_target(self) -> None:
         with patch.dict(os.environ, {"JOB_RADAR_RUNTIME_MODE": "seed"}, clear=True):

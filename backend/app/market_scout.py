@@ -8,6 +8,7 @@ from html import escape
 import json
 from uuid import uuid4, uuid5, NAMESPACE_URL
 
+from app.audit_logs import record_audit_event
 from app.catalog import build_effective_app_settings
 from app.config import AppSettings, GreenhouseBoard, get_settings
 from app.connectors.base import ConnectorCursor, NormalizedJobRecord
@@ -149,6 +150,14 @@ class MarketScoutAgent:
         )
         started_at = datetime.now(timezone.utc)
         runs: list[ConnectorRunSummary] = []
+        await record_audit_event(
+            event_type="scheduler.started",
+            subject_type="scheduler",
+            subject_id="market-scout",
+            message="Market Scout scheduler cycle started.",
+            metadata={"enabled_connectors": list(self.settings.radar.enabled_connectors)},
+            settings=self.settings,
+        )
         self.logger.info(
             "Starting market scout cycle",
             extra={
@@ -156,23 +165,42 @@ class MarketScoutAgent:
                 "connector_key": ",".join(self.settings.radar.enabled_connectors),
             },
         )
-        if self.settings.radar.is_connector_enabled("greenhouse"):
-            for board in self.settings.radar.greenhouse_boards:
-                runs.append(await self._run_greenhouse_board(board))
-        finished_at = datetime.now(timezone.utc)
-        self.logger.info(
-            "Finished market scout cycle",
-            extra={
-                "operation_name": "market_scout.run.finish",
-                "connector_key": ",".join(self.settings.radar.enabled_connectors),
-                "runs": [run.to_dict() for run in runs],
-            },
-        )
-        return MarketScoutRunSummary(
-            started_at=started_at.isoformat(),
-            finished_at=finished_at.isoformat(),
-            runs=runs,
-        )
+        try:
+            if self.settings.radar.is_connector_enabled("greenhouse"):
+                for board in self.settings.radar.greenhouse_boards:
+                    runs.append(await self._run_greenhouse_board(board))
+            finished_at = datetime.now(timezone.utc)
+            self.logger.info(
+                "Finished market scout cycle",
+                extra={
+                    "operation_name": "market_scout.run.finish",
+                    "connector_key": ",".join(self.settings.radar.enabled_connectors),
+                    "runs": [run.to_dict() for run in runs],
+                },
+            )
+            await record_audit_event(
+                event_type="scheduler.completed",
+                subject_type="scheduler",
+                subject_id="market-scout",
+                message="Market Scout scheduler cycle completed.",
+                metadata={"runs": [run.to_dict() for run in runs]},
+                settings=self.settings,
+            )
+            return MarketScoutRunSummary(
+                started_at=started_at.isoformat(),
+                finished_at=finished_at.isoformat(),
+                runs=runs,
+            )
+        except BaseException as exc:  # noqa: BLE001
+            await record_audit_event(
+                event_type="scheduler.failed",
+                subject_type="scheduler",
+                subject_id="market-scout",
+                message=f"Market Scout scheduler cycle failed: {str(exc)[:200]}",
+                metadata={"error": str(exc)[:1000]},
+                settings=self.settings,
+            )
+            raise
 
     async def run_loop(self) -> None:
         while True:
@@ -281,6 +309,14 @@ class MarketScoutAgent:
                     run_id,
                     str(exc)[:1000],
                 )
+            await record_audit_event(
+                event_type="connector.failed",
+                subject_type="connector",
+                subject_id=connector_key,
+                message=f"{connector_key} failed during sync.",
+                metadata={"run_id": run_id, "error": str(exc)[:1000]},
+                settings=self.settings,
+            )
             raise
 
     async def _persist_greenhouse_result(

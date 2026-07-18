@@ -36,6 +36,11 @@ PREFERENCE_DEFAULTS = (
     "work_arrangements",
     "experience_levels",
     "excluded_keywords",
+    "profile_text",
+    "resume_variants",
+    "initial_alert_window_hours",
+    "initial_sync_openai_job_limit",
+    "initial_sync_max_alerts",
 )
 
 
@@ -133,6 +138,19 @@ def _read_list(value: object, default: tuple[str, ...]) -> list[str]:
     return list(default)
 
 
+def _enabled_connector_keys(companies: list[CompanyPreference], fallback: tuple[str, ...]) -> tuple[str, ...]:
+    connectors = tuple(
+        sorted(
+            {
+                company.connector.strip().casefold()
+                for company in companies
+                if company.enabled and company.connector.strip()
+            }
+        )
+    )
+    return connectors or fallback
+
+
 async def ensure_catalog_seeded(settings: AppSettings | None = None) -> None:
     resolved_settings = settings or get_settings()
     if resolved_settings.radar.mode == "seed":
@@ -205,33 +223,36 @@ async def ensure_catalog_seeded(settings: AppSettings | None = None) -> None:
                             _role_family_id(family),
                         )
 
-            preference_count = int(await conn.fetchval("SELECT COUNT(*) FROM user_preferences") or 0)
-            if preference_count == 0:
-                defaults: dict[str, object] = {
-                    "primary_connector": resolved_settings.radar.primary_connector,
-                    "apply_now_threshold_score": resolved_settings.radar.apply_now_threshold_score,
-                    "review_threshold_score": resolved_settings.radar.review_threshold_score,
-                    "polling_interval_minutes": resolved_settings.radar.polling_interval_minutes,
-                    "minimum_match_score": resolved_settings.radar.minimum_match_score,
-                    "selected_country": resolved_settings.radar.selected_country,
-                    "alert_freshness_hours": resolved_settings.radar.alert_freshness_hours,
-                    "dashboard_freshness_hours": resolved_settings.radar.dashboard_freshness_hours,
-                    "roles": list(resolved_settings.radar.target_roles),
-                    "role_families": list(resolved_settings.radar.role_families),
-                    "work_arrangements": list(resolved_settings.radar.preferred_work_arrangements),
-                    "experience_levels": list(resolved_settings.radar.preferred_experience_levels),
-                    "excluded_keywords": list(resolved_settings.radar.excluded_keywords),
-                }
-                for key in PREFERENCE_DEFAULTS:
-                    await conn.execute(
-                        """
-                        INSERT INTO user_preferences (preference_key, preference_value)
-                        VALUES ($1, $2::jsonb)
-                        ON CONFLICT (preference_key) DO NOTHING
-                        """,
-                        key,
-                        json.dumps(defaults[key]),
-                    )
+            defaults: dict[str, object] = {
+                "primary_connector": resolved_settings.radar.primary_connector,
+                "apply_now_threshold_score": resolved_settings.radar.apply_now_threshold_score,
+                "review_threshold_score": resolved_settings.radar.review_threshold_score,
+                "polling_interval_minutes": resolved_settings.radar.polling_interval_minutes,
+                "minimum_match_score": resolved_settings.radar.minimum_match_score,
+                "selected_country": resolved_settings.radar.selected_country,
+                "alert_freshness_hours": resolved_settings.radar.alert_freshness_hours,
+                "dashboard_freshness_hours": resolved_settings.radar.dashboard_freshness_hours,
+                "roles": list(resolved_settings.radar.target_roles),
+                "role_families": list(resolved_settings.radar.role_families),
+                "work_arrangements": list(resolved_settings.radar.preferred_work_arrangements),
+                "experience_levels": list(resolved_settings.radar.preferred_experience_levels),
+                "excluded_keywords": list(resolved_settings.radar.excluded_keywords),
+                "profile_text": resolved_settings.radar.profile_text,
+                "resume_variants": list(resolved_settings.radar.resume_variants),
+                "initial_alert_window_hours": resolved_settings.radar.initial_alert_window_hours,
+                "initial_sync_openai_job_limit": resolved_settings.radar.initial_sync_openai_job_limit,
+                "initial_sync_max_alerts": resolved_settings.radar.initial_sync_max_alerts,
+            }
+            for key in PREFERENCE_DEFAULTS:
+                await conn.execute(
+                    """
+                    INSERT INTO user_preferences (preference_key, preference_value)
+                    VALUES ($1, $2::jsonb)
+                    ON CONFLICT (preference_key) DO NOTHING
+                    """,
+                    key,
+                    json.dumps(defaults[key]),
+                )
 
             watchlist_count = int(await conn.fetchval("SELECT COUNT(*) FROM watchlists") or 0)
             if watchlist_count == 0:
@@ -564,6 +585,11 @@ async def build_scout_settings(settings: AppSettings | None = None) -> ScoutSett
         selected_country=normalize_supported_country(str(values.get("selected_country", resolved_settings.radar.selected_country))),
         alert_freshness_hours=int(values.get("alert_freshness_hours", resolved_settings.radar.alert_freshness_hours)),
         dashboard_freshness_hours=int(values.get("dashboard_freshness_hours", resolved_settings.radar.dashboard_freshness_hours)),
+        profile_text=str(values.get("profile_text", resolved_settings.radar.profile_text)).strip(),
+        resume_variants=_read_list(values.get("resume_variants"), resolved_settings.radar.resume_variants),
+        initial_alert_window_hours=int(values.get("initial_alert_window_hours", resolved_settings.radar.initial_alert_window_hours)),
+        initial_sync_openai_job_limit=int(values.get("initial_sync_openai_job_limit", resolved_settings.radar.initial_sync_openai_job_limit)),
+        initial_sync_max_alerts=int(values.get("initial_sync_max_alerts", resolved_settings.radar.initial_sync_max_alerts)),
     )
 
 
@@ -592,6 +618,17 @@ async def update_preference_settings(
         "work_arrangements": [str(value).strip() for value in payload.get("work_arrangements", []) if str(value).strip()],
         "experience_levels": [str(value).strip() for value in payload.get("experience_levels", []) if str(value).strip()],
         "excluded_keywords": [str(value).strip() for value in payload.get("excluded_keywords", []) if str(value).strip()],
+        "profile_text": str(payload.get("profile_text", resolved_settings.radar.profile_text)).strip(),
+        "resume_variants": [str(value).strip() for value in payload.get("resume_variants", []) if str(value).strip()],
+        "initial_alert_window_hours": int(
+            payload.get("initial_alert_window_hours", resolved_settings.radar.initial_alert_window_hours)
+        ),
+        "initial_sync_openai_job_limit": int(
+            payload.get("initial_sync_openai_job_limit", resolved_settings.radar.initial_sync_openai_job_limit)
+        ),
+        "initial_sync_max_alerts": int(
+            payload.get("initial_sync_max_alerts", resolved_settings.radar.initial_sync_max_alerts)
+        ),
     }
     async with connection() as conn:
         async with conn.transaction():
@@ -613,6 +650,7 @@ async def update_preference_settings(
 async def build_effective_app_settings(settings: AppSettings | None = None) -> AppSettings:
     resolved_settings = settings or get_settings()
     scout_settings = await build_scout_settings(resolved_settings)
+    enabled_connectors = _enabled_connector_keys(scout_settings.companies, resolved_settings.radar.enabled_connectors)
     target_companies = tuple(
         TargetCompany(
             name=company.company,
@@ -634,6 +672,7 @@ async def build_effective_app_settings(settings: AppSettings | None = None) -> A
         radar=replace(
             resolved_settings.radar,
             primary_connector=scout_settings.primary_connector,
+            enabled_connectors=enabled_connectors,
             polling_interval_minutes=scout_settings.polling_interval_minutes,
             minimum_match_score=scout_settings.minimum_match_score,
             apply_now_threshold_score=scout_settings.apply_now_threshold_score,
@@ -648,5 +687,10 @@ async def build_effective_app_settings(settings: AppSettings | None = None) -> A
             preferred_work_arrangements=tuple(role.label for role in scout_settings.work_arrangements if role.enabled),
             preferred_experience_levels=tuple(role.label for role in scout_settings.experience_levels if role.enabled),
             excluded_keywords=tuple(scout_settings.excluded_keywords),
+            profile_text=scout_settings.profile_text,
+            resume_variants=tuple(scout_settings.resume_variants),
+            initial_alert_window_hours=scout_settings.initial_alert_window_hours,
+            initial_sync_openai_job_limit=scout_settings.initial_sync_openai_job_limit,
+            initial_sync_max_alerts=scout_settings.initial_sync_max_alerts,
         ),
     )

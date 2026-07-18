@@ -29,6 +29,23 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(greenhouse_boards["Databricks"], "databricks")
         self.assertEqual(effective.radar.selected_country, "US")
 
+    async def test_effective_settings_derive_enabled_connectors_from_catalog_not_env(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "JOB_RADAR_RUNTIME_MODE": "seed",
+                "JOB_RADAR_ENABLED_CONNECTORS": "workday,lever",
+            },
+            clear=True,
+        ):
+            get_settings.cache_clear()
+            effective = await build_effective_app_settings()
+        self.assertIn("greenhouse", effective.radar.enabled_connectors)
+        self.assertIn("company-api", effective.radar.enabled_connectors)
+        self.assertIn("google-careers", effective.radar.enabled_connectors)
+        self.assertIn("microsoft-careers", effective.radar.enabled_connectors)
+        self.assertNotIn("workday", effective.radar.enabled_connectors)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -374,9 +374,14 @@ class AggregatedSourcesRepository:
             """
             SELECT
                 COALESCE(SUM(jobs_inserted) FILTER (WHERE started_at >= date_trunc('day', NOW())), 0) AS new_jobs_today,
+                COALESCE(SUM(jobs_fetched) FILTER (WHERE started_at >= date_trunc('day', NOW())), 0) AS jobs_collected,
                 COALESCE(SUM(retries) FILTER (WHERE started_at >= date_trunc('day', NOW())), 0) AS retries_today,
+                AVG(EXTRACT(EPOCH FROM (finished_at - started_at))) FILTER (
+                    WHERE run_status = 'succeeded' AND finished_at IS NOT NULL
+                ) AS average_runtime_seconds,
                 MAX(started_at) AS last_run_at,
-                MAX(finished_at) FILTER (WHERE run_status = 'succeeded') AS last_successful_sync
+                MAX(finished_at) FILTER (WHERE run_status = 'succeeded') AS last_successful_sync,
+                MAX(finished_at) FILTER (WHERE run_status = 'failed') AS last_failed_sync
             FROM connector_runs
             WHERE connector_key = $1 OR connector_key LIKE $2
             """,
@@ -404,9 +409,21 @@ class AggregatedSourcesRepository:
         now = datetime.now(timezone.utc)
         last_run_at = aggregate["last_run_at"] if aggregate is not None else None
         last_successful_sync = aggregate["last_successful_sync"] if aggregate is not None else None
+        last_failed_sync = aggregate["last_failed_sync"] if aggregate is not None else None
         last_run_minutes_ago = _minutes_ago(last_run_at, now=now) if last_run_at is not None else None
         retries_today = int(aggregate["retries_today"] or 0) if aggregate is not None else 0
         new_jobs_today = int(aggregate["new_jobs_today"] or 0) if aggregate is not None else 0
+        jobs_collected = int(aggregate["jobs_collected"] or 0) if aggregate is not None else 0
+        average_runtime_seconds = (
+            int(float(aggregate["average_runtime_seconds"]))
+            if aggregate is not None and aggregate["average_runtime_seconds"] is not None
+            else None
+        )
+        next_scheduled_poll = (
+            (last_run_at + timedelta(minutes=settings.radar.polling_interval_minutes)).isoformat()
+            if enabled and last_run_at is not None
+            else None
+        )
 
         state = "healthy"
         lag_reason = None
@@ -431,6 +448,10 @@ class AggregatedSourcesRepository:
             last_run_minutes_ago=last_run_minutes_ago,
             retries_today=retries_today,
             last_successful_sync=last_successful_sync.isoformat() if last_successful_sync is not None else None,
+            jobs_collected=jobs_collected,
+            average_runtime_seconds=average_runtime_seconds,
+            last_failed_sync=last_failed_sync.isoformat() if last_failed_sync is not None else None,
+            next_scheduled_poll=next_scheduled_poll,
             lag_reason=lag_reason,
         )
 

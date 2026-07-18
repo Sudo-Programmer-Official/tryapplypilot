@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Literal
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from asyncpg import UniqueViolationError
 import jwt
 
+from app.audit_logs import list_audit_logs, record_audit_event
 from app.catalog import (
     list_companies as list_catalog_companies,
     list_watchlists as list_catalog_watchlists,
@@ -16,12 +18,20 @@ from app.catalog import (
     upsert_company,
     upsert_watchlist,
 )
+from app.company_requests import (
+    create_company_request,
+    list_company_requests,
+    list_user_company_requests,
+    review_company_request,
+)
 from app.auth import create_telegram_connect_token, decode_token, extract_telegram_start_token, role_allows
 from app.config import get_settings as get_app_settings
 from app.domain import CompanyPreference, UserAccount, Watchlist, WatchlistTerm
 from app.logging_utils import configure_logging
 from app.notifications.telegram import TelegramConfigurationError, TelegramDeliveryError, list_updates
 from app.repositories.postgres import list_user_alerts, list_user_jobs
+from app.resume_library import ResumeUploadError, list_user_resumes, upload_resume_for_user
+from app.saved_jobs import list_saved_jobs, remove_saved_job_for_user, save_job_for_user
 from app.services.dashboard import (
     build_dashboard_snapshot,
     build_health_snapshot,
@@ -44,7 +54,10 @@ from app.user_accounts import (
     rotate_refresh_token,
     set_user_telegram_chat,
     update_user_onboarding,
+    update_user_preferences,
+    update_user_profile,
 )
+from app.user_watchlists import create_user_watchlist, delete_user_watchlist, list_user_watchlists, update_user_watchlist
 
 
 class CompanyPayload(BaseModel):
@@ -86,6 +99,11 @@ class PreferencesPayload(BaseModel):
     work_arrangements: list[str] = Field(default_factory=list)
     experience_levels: list[str] = Field(default_factory=list)
     excluded_keywords: list[str] = Field(default_factory=list)
+    profile_text: str = ""
+    resume_variants: list[str] = Field(default_factory=list)
+    initial_alert_window_hours: int = Field(default=24, ge=1, le=24 * 14)
+    initial_sync_openai_job_limit: int = Field(default=20, ge=0, le=500)
+    initial_sync_max_alerts: int = Field(default=5, ge=0, le=500)
 
 
 class SignUpPayload(BaseModel):
@@ -127,10 +145,61 @@ class OnboardingPayload(BaseModel):
     experience_levels: list[str] = Field(default_factory=list)
     freshness_hours: int = Field(default=6, ge=1, le=168)
     minimum_match_score: int = Field(default=90, ge=0, le=100)
+    notification_frequency: str = "instant"
+
+
+class UserProfilePayload(BaseModel):
+    full_name: str = ""
+    linkedin_url: str = ""
+    portfolio_url: str = ""
+    github_url: str = ""
+    years_of_experience: int | None = Field(default=None, ge=0, le=60)
+    visa_status: str = ""
+    work_authorization: str = ""
+    resume_uploaded: bool = False
+
+
+class UserPreferencesPayload(BaseModel):
+    country: str = "US"
+    locations: list[str] = Field(default_factory=list)
+    preferred_companies: list[str] = Field(default_factory=list)
+    preferred_roles: list[str] = Field(default_factory=list)
+    skills: list[str] = Field(default_factory=list)
+    work_arrangements: list[str] = Field(default_factory=list)
+    experience_levels: list[str] = Field(default_factory=list)
+    freshness_hours: int = Field(default=6, ge=1, le=168)
+    minimum_match_score: int = Field(default=90, ge=0, le=100)
+    notification_frequency: str = "instant"
 
 
 class TelegramVerifyPayload(BaseModel):
     connect_token: str = Field(min_length=20)
+
+
+class CompanyRequestPayload(BaseModel):
+    company_name: str = Field(min_length=1)
+    career_url: str = ""
+    connector_suggestion: str = ""
+    external_identifier_suggestion: str = ""
+    notes: str = ""
+
+
+class CompanyRequestReviewPayload(BaseModel):
+    status: Literal["approved", "rejected"]
+    admin_notes: str = ""
+    connector: str = ""
+    external_identifier: str = ""
+    career_url: str = ""
+    tier: int = Field(default=3, ge=1, le=3)
+    priority: int = Field(default=999, ge=1, le=999)
+    poll_interval_minutes: int = Field(default=5, ge=1, le=1440)
+    country: str = "US"
+    enabled: bool = True
+    role_families: list[str] = Field(default_factory=list)
+
+
+class SavedJobPayload(BaseModel):
+    job_id: str = Field(min_length=1)
 
 
 security = HTTPBearer(auto_error=False)
@@ -246,6 +315,159 @@ async def current_user_alerts(user: UserAccount = Depends(_current_user)) -> dic
     return {"items": [alert.to_dict() for alert in await list_user_alerts(user.id)]}
 
 
+@app.get("/api/auth/me/resumes")
+async def current_user_resumes(user: UserAccount = Depends(_current_user)) -> dict[str, object]:
+    return {"items": [resume.to_dict() for resume in await list_user_resumes(user.id)]}
+
+
+@app.post("/api/auth/me/resumes")
+async def upload_current_user_resume(
+    file: UploadFile = File(...),
+    user: UserAccount = Depends(_current_user),
+) -> dict[str, object]:
+    try:
+        resume, updated_user = await upload_resume_for_user(user.id, file, settings=get_app_settings())
+    except ResumeUploadError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    await record_audit_event(
+        actor_user=updated_user,
+        event_type="resume.uploaded",
+        subject_type="resume",
+        subject_id=resume.id,
+        message=f"{updated_user.email} uploaded resume {resume.display_name}.",
+        metadata={"resume_id": resume.id, "role_focus": resume.role_focus},
+        settings=get_app_settings(),
+    )
+    await sync_recent_jobs_for_user(updated_user, get_app_settings())
+    return {
+        "item": resume.to_dict(),
+        "user": updated_user.to_dict(),
+    }
+
+
+@app.get("/api/auth/me/company-requests")
+async def current_user_company_requests(user: UserAccount = Depends(_current_user)) -> dict[str, object]:
+    return {"items": [item.to_dict() for item in await list_user_company_requests(user.id)]}
+
+
+@app.post("/api/auth/me/company-requests")
+async def create_current_user_company_request(
+    payload: CompanyRequestPayload,
+    user: UserAccount = Depends(_current_user),
+) -> dict[str, object]:
+    try:
+        item = await create_company_request(
+            user,
+            company_name=payload.company_name,
+            career_url=payload.career_url,
+            connector_suggestion=payload.connector_suggestion,
+            external_identifier_suggestion=payload.external_identifier_suggestion,
+            notes=payload.notes,
+            settings=get_app_settings(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    await record_audit_event(
+        actor_user=user,
+        event_type="company.requested",
+        subject_type="company_request",
+        subject_id=item.id,
+        message=f"{user.email} requested company coverage for {item.company_name}.",
+        metadata={"company_name": item.company_name, "status": item.status},
+        settings=get_app_settings(),
+    )
+    return {"item": item.to_dict()}
+
+
+@app.get("/api/auth/me/saved-jobs")
+async def current_user_saved_jobs(user: UserAccount = Depends(_current_user)) -> dict[str, object]:
+    return {"items": [item.to_dict() for item in await list_saved_jobs(user.id)]}
+
+
+@app.post("/api/auth/me/saved-jobs")
+async def save_current_user_job(payload: SavedJobPayload, user: UserAccount = Depends(_current_user)) -> dict[str, object]:
+    try:
+        item = await save_job_for_user(user.id, payload.job_id, settings=get_app_settings())
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return {"item": item.to_dict()}
+
+
+@app.delete("/api/auth/me/saved-jobs/{job_id}")
+async def delete_current_user_saved_job(job_id: str, user: UserAccount = Depends(_current_user)) -> dict[str, object]:
+    deleted = await remove_saved_job_for_user(user.id, job_id, settings=get_app_settings())
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Saved job not found.")
+    return {"ok": True}
+
+
+@app.get("/api/auth/me/watchlists")
+async def current_user_watchlists(user: UserAccount = Depends(_current_user)) -> dict[str, object]:
+    return {"items": [item.to_dict() for item in await list_user_watchlists(user.id, settings=get_app_settings())]}
+
+
+@app.post("/api/auth/me/watchlists")
+async def create_current_user_watchlist(
+    payload: WatchlistPayload,
+    user: UserAccount = Depends(_current_user),
+) -> dict[str, object]:
+    try:
+        item = await create_user_watchlist(
+            user.id,
+            name=payload.name,
+            enabled=payload.enabled,
+            terms=[
+                WatchlistTerm(
+                    term=term.term.strip(),
+                    company=term.company.strip(),
+                    enabled=term.enabled,
+                )
+                for term in payload.terms
+            ],
+            settings=get_app_settings(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return {"item": item.to_dict()}
+
+
+@app.patch("/api/auth/me/watchlists/{watchlist_id}")
+async def patch_current_user_watchlist(
+    watchlist_id: str,
+    payload: WatchlistPayload,
+    user: UserAccount = Depends(_current_user),
+) -> dict[str, object]:
+    try:
+        item = await update_user_watchlist(
+            user.id,
+            watchlist_id,
+            name=payload.name,
+            enabled=payload.enabled,
+            terms=[
+                WatchlistTerm(
+                    term=term.term.strip(),
+                    company=term.company.strip(),
+                    enabled=term.enabled,
+                )
+                for term in payload.terms
+            ],
+            settings=get_app_settings(),
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = status.HTTP_404_NOT_FOUND if detail == "Unknown watchlist." else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+    return {"item": item.to_dict()}
+
+
+@app.delete("/api/auth/me/watchlists/{watchlist_id}")
+async def delete_current_user_watchlist(watchlist_id: str, user: UserAccount = Depends(_current_user)) -> dict[str, object]:
+    deleted = await delete_user_watchlist(user.id, watchlist_id, settings=get_app_settings())
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Watchlist not found.")
+    return {"ok": True}
+
+
 @app.get("/api/auth/users")
 async def users_admin(_: UserAccount = Depends(require_admin)) -> dict[str, object]:
     return {"items": [user.to_dict() for user in await list_users()]}
@@ -254,6 +476,35 @@ async def users_admin(_: UserAccount = Depends(require_admin)) -> dict[str, obje
 @app.put("/api/auth/me/onboarding")
 async def update_onboarding(payload: OnboardingPayload, user: UserAccount = Depends(_current_user)) -> dict[str, object]:
     updated = await update_user_onboarding(user.id, payload.model_dump())
+    if updated is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+    await sync_recent_jobs_for_user(updated, get_app_settings())
+    return _auth_response(updated)
+
+
+@app.get("/api/auth/me/preferences")
+async def current_user_preferences(user: UserAccount = Depends(_current_user)) -> dict[str, object]:
+    return {"item": user.preferences}
+
+
+@app.put("/api/auth/me/preferences")
+async def update_preferences_for_current_user(
+    payload: UserPreferencesPayload,
+    user: UserAccount = Depends(_current_user),
+) -> dict[str, object]:
+    updated = await update_user_preferences(user.id, payload.model_dump(), settings=get_app_settings())
+    if updated is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+    await sync_recent_jobs_for_user(updated, get_app_settings())
+    return _auth_response(updated)
+
+
+@app.put("/api/auth/me/profile")
+async def update_profile_for_current_user(
+    payload: UserProfilePayload,
+    user: UserAccount = Depends(_current_user),
+) -> dict[str, object]:
+    updated = await update_user_profile(user.id, payload.model_dump(), settings=get_app_settings())
     if updated is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
     await sync_recent_jobs_for_user(updated, get_app_settings())
@@ -473,6 +724,52 @@ async def update_preferences(payload: PreferencesPayload, _: UserAccount = Depen
     return {"item": settings.to_dict()}
 
 
+@app.get("/api/catalog/company-requests")
+async def company_requests_catalog(_: UserAccount = Depends(require_admin)) -> dict[str, object]:
+    return {"items": [item.to_dict() for item in await list_company_requests()]}
+
+
+@app.put("/api/catalog/company-requests/{request_id}")
+async def review_catalog_company_request(
+    request_id: str,
+    payload: CompanyRequestReviewPayload,
+    reviewer: UserAccount = Depends(require_admin),
+) -> dict[str, object]:
+    try:
+        item = await review_company_request(
+            request_id,
+            reviewer=reviewer,
+            status=payload.status,
+            admin_notes=payload.admin_notes,
+            connector=payload.connector,
+            external_identifier=payload.external_identifier,
+            career_url=payload.career_url,
+            tier=payload.tier,
+            priority=payload.priority,
+            poll_interval_minutes=payload.poll_interval_minutes,
+            country=payload.country,
+            enabled=payload.enabled,
+            role_families=payload.role_families,
+            settings=get_app_settings(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    await record_audit_event(
+        actor_user=reviewer,
+        event_type=f"company.{payload.status}",
+        subject_type="company_request",
+        subject_id=item.id,
+        message=f"{reviewer.email} {payload.status} company request for {item.company_name}.",
+        metadata={
+            "company_name": item.company_name,
+            "status": item.status,
+            "approved_company_id": item.approved_company_id or "",
+        },
+        settings=get_app_settings(),
+    )
+    return {"item": item.to_dict()}
+
+
 @app.get("/api/alerts")
 async def alerts(_: UserAccount = Depends(require_admin)) -> dict[str, object]:
     return {"items": await list_alerts()}
@@ -481,3 +778,8 @@ async def alerts(_: UserAccount = Depends(require_admin)) -> dict[str, object]:
 @app.get("/api/sources")
 async def sources(_: UserAccount = Depends(require_admin)) -> dict[str, object]:
     return {"items": await list_sources()}
+
+
+@app.get("/api/audit-logs")
+async def audit_logs(_: UserAccount = Depends(require_admin)) -> dict[str, object]:
+    return {"items": [item.to_dict() for item in await list_audit_logs(settings=get_app_settings())]}

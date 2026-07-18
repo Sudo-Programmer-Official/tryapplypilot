@@ -80,4 +80,9 @@ def build_scout_settings(settings: AppSettings) -> ScoutSettings:
         selected_country=settings.radar.selected_country,
         alert_freshness_hours=settings.radar.alert_freshness_hours,
         dashboard_freshness_hours=settings.radar.dashboard_freshness_hours,
+        profile_text=settings.radar.profile_text,
+        resume_variants=list(settings.radar.resume_variants),
+        initial_alert_window_hours=settings.radar.initial_alert_window_hours,
+        initial_sync_openai_job_limit=settings.radar.initial_sync_openai_job_limit,
+        initial_sync_max_alerts=settings.radar.initial_sync_max_alerts,
     )

@@ -317,4 +317,9 @@ SETTINGS = ScoutSettings(
     selected_country="US",
     alert_freshness_hours=6,
     dashboard_freshness_hours=24,
+    profile_text="",
+    resume_variants=["Backend_AI_v5.pdf", "Platform_v4.pdf", "Distributed_Systems_v2.pdf"],
+    initial_alert_window_hours=24,
+    initial_sync_openai_job_limit=20,
+    initial_sync_max_alerts=5,
 )

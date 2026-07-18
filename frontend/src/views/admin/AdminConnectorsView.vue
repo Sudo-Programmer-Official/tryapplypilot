@@ -1,0 +1,118 @@
+<script setup lang="ts">
+import { computed, onMounted, ref } from "vue";
+
+import ConnectorHealthTable from "../../components/admin/ConnectorHealthTable.vue";
+import PageHeader from "../../components/layout/PageHeader.vue";
+import AppCard from "../../components/ui/AppCard.vue";
+import AppEmptyState from "../../components/ui/AppEmptyState.vue";
+import { fetchCatalogCompanies } from "../../api/companies.api";
+import { fetchConnectorSources } from "../../api/connectors.api";
+import type { CompanyPreference, SourceStatus } from "../../types";
+import { formatDateTime, formatDurationSeconds } from "../../utils/format";
+
+const sources = ref<SourceStatus[]>([]);
+const companies = ref<CompanyPreference[]>([]);
+const loading = ref(true);
+const error = ref<string | null>(null);
+
+const connectorCards = computed(() =>
+  sources.value.map((source) => {
+    const coverage = companies.value.filter((company) => company.connector === source.source);
+    return {
+      id: source.id,
+      source: source.source,
+      state: source.state,
+      enabledCompanies: coverage.filter((company) => company.enabled).length,
+      allCompanies: coverage.length,
+      cadence: source.cadence_minutes,
+      newJobsToday: source.new_jobs_today,
+      jobsCollected: source.jobs_collected,
+      averageRuntime: source.average_runtime_seconds,
+      nextScheduledPoll: source.next_scheduled_poll,
+      lastSuccess: source.last_successful_sync,
+    };
+  }),
+);
+
+async function load(): Promise<void> {
+  loading.value = true;
+  error.value = null;
+  try {
+    const [sourcesPayload, companiesPayload] = await Promise.all([fetchConnectorSources(), fetchCatalogCompanies()]);
+    sources.value = sourcesPayload.items;
+    companies.value = companiesPayload.items;
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : "Failed to load connector status.";
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(load);
+</script>
+
+<template>
+  <div class="page-stack">
+    <PageHeader
+      title="Connectors"
+      description="Track source health, cadence, and company coverage so expansion stays data-driven instead of hardcoded."
+    />
+
+    <AppEmptyState v-if="error" title="Connector data unavailable" :description="error" />
+
+    <template v-else>
+      <div class="connector-grid">
+        <AppCard
+          v-for="card in connectorCards"
+          :key="card.id"
+          :title="card.source"
+          :subtitle="`${card.enabledCompanies}/${card.allCompanies} enabled companies`"
+        >
+          <div class="connector-card__stats">
+            <div>
+              <span class="eyebrow">Last success</span>
+              <strong>{{ formatDateTime(card.lastSuccess) }}</strong>
+            </div>
+            <div>
+              <span class="eyebrow">Jobs collected</span>
+              <strong>{{ card.jobsCollected }}</strong>
+            </div>
+            <div>
+              <span class="eyebrow">Avg runtime</span>
+              <strong>{{ formatDurationSeconds(card.averageRuntime) }}</strong>
+            </div>
+            <div>
+              <span class="eyebrow">Next poll</span>
+              <strong>{{ formatDateTime(card.nextScheduledPoll) }}</strong>
+            </div>
+          </div>
+        </AppCard>
+      </div>
+
+      <ConnectorHealthTable :sources="sources" />
+    </template>
+  </div>
+</template>
+
+<style scoped>
+.page-stack,
+.connector-grid {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.connector-grid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.connector-card__stats {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.connector-card__stats strong {
+  display: block;
+  margin-top: var(--space-2);
+}
+</style>

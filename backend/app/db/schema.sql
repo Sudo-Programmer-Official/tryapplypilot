@@ -104,6 +104,16 @@ CREATE TABLE IF NOT EXISTS resumes (
 
 CREATE INDEX IF NOT EXISTS resumes_user_created_idx ON resumes (user_id, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS saved_jobs (
+    saved_job_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
+    job_id TEXT NOT NULL REFERENCES jobs (job_id) ON DELETE CASCADE,
+    saved_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT saved_jobs_user_job_unique UNIQUE (user_id, job_id)
+);
+
+CREATE INDEX IF NOT EXISTS saved_jobs_user_saved_idx ON saved_jobs (user_id, saved_at DESC);
+
 CREATE TABLE IF NOT EXISTS refresh_tokens (
     refresh_token_id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
@@ -210,6 +220,30 @@ CREATE TABLE IF NOT EXISTS watchlist_terms (
 
 CREATE INDEX IF NOT EXISTS watchlist_terms_watchlist_idx ON watchlist_terms (watchlist_id);
 
+CREATE TABLE IF NOT EXISTS user_watchlists (
+    user_watchlist_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT user_watchlists_user_name_unique UNIQUE (user_id, name)
+);
+
+CREATE INDEX IF NOT EXISTS user_watchlists_user_updated_idx ON user_watchlists (user_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS user_watchlist_terms (
+    user_watchlist_term_id TEXT PRIMARY KEY,
+    user_watchlist_id TEXT NOT NULL REFERENCES user_watchlists (user_watchlist_id) ON DELETE CASCADE,
+    term TEXT NOT NULL,
+    company_name TEXT NOT NULL DEFAULT '',
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS user_watchlist_terms_watchlist_idx ON user_watchlist_terms (user_watchlist_id);
+
 CREATE TABLE IF NOT EXISTS user_preferences (
     preference_key TEXT PRIMARY KEY,
     preference_value JSONB NOT NULL,
@@ -239,3 +273,17 @@ CREATE TABLE IF NOT EXISTS connector_runs (
 );
 
 CREATE INDEX IF NOT EXISTS connector_runs_connector_started_idx ON connector_runs (connector_key, started_at DESC);
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+    audit_log_id TEXT PRIMARY KEY,
+    actor_user_id TEXT REFERENCES users (user_id) ON DELETE SET NULL,
+    event_type TEXT NOT NULL,
+    subject_type TEXT NOT NULL,
+    subject_id TEXT NOT NULL DEFAULT '',
+    message TEXT NOT NULL,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS audit_logs_created_at_idx ON audit_logs (created_at DESC);
+CREATE INDEX IF NOT EXISTS audit_logs_event_created_at_idx ON audit_logs (event_type, created_at DESC);
