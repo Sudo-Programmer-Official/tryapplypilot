@@ -1,0 +1,73 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: #13212b;
+  background-color: #f5efe3;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  @apply font-sans text-ink;
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgba(217, 120, 69, 0.18), transparent 32%),
+    radial-gradient(circle at top right, rgba(47, 107, 92, 0.14), transparent 30%),
+    linear-gradient(180deg, #fbf7f0 0%, #f5efe3 48%, #eee3d0 100%);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+@layer components {
+  .panel {
+    @apply rounded-[28px] border border-white/60 bg-white/75 shadow-atmosphere backdrop-blur-xl;
+  }
+
+  .panel-title {
+    @apply font-display text-xl font-semibold tracking-tight text-ink;
+  }
+
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.28em] text-brass;
+  }
+
+  .metric-value {
+    @apply font-display text-4xl font-semibold tracking-tight;
+  }
+
+  .chip {
+    @apply inline-flex items-center rounded-full border border-ink/10 bg-white/80 px-3 py-1 text-xs font-medium text-ink/80;
+  }
+
+  .subtle-label {
+    @apply text-xs font-medium uppercase tracking-[0.2em] text-ink/45;
+  }
+
+  .priority-high {
+    @apply border-clay/25 bg-clay/10 text-clay;
+  }
+
+  .priority-medium {
+    @apply border-brass/25 bg-brass/10 text-brass;
+  }
+
+  .priority-low {
+    @apply border-moss/25 bg-moss/10 text-moss;
+  }
+}
+

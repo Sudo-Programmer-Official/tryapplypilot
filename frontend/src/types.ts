@@ -1,0 +1,238 @@
+export interface JobOpportunity {
+  id: string;
+  company: string;
+  title: string;
+  source: string;
+  location: string;
+  remote_policy: string;
+  posted_minutes_ago: number;
+  match_score: number;
+  decision: "APPLY_NOW" | "REVIEW" | "IGNORE";
+  why: string[];
+  recommended_resume: string;
+  duplicate_sources: number;
+  status: "new" | "seen" | "dismissed" | "skipped";
+  alert_sent: boolean;
+  apply_url: string;
+  gaps: string[];
+  country_code: string | null;
+  country_display: string;
+  freshness_label: string;
+  freshness_tone: "fresh" | "aging" | "stale";
+  recommendation: string;
+  recommendation_tone: "apply" | "review" | "skip";
+}
+
+export interface CompanyPreference {
+  id: string;
+  company: string;
+  enabled: boolean;
+  tier: number;
+  priority: number;
+  connector: string;
+  poll_interval_minutes: number;
+  country: string;
+  career_url: string;
+  external_identifier: string;
+  role_families: string[];
+}
+
+export interface RolePreference {
+  label: string;
+  enabled: boolean;
+}
+
+export interface NotificationChannel {
+  channel: "telegram" | "email" | "slack" | "desktop";
+  enabled: boolean;
+  destination: string;
+}
+
+export interface WatchlistTerm {
+  id: string;
+  term: string;
+  company: string;
+  enabled: boolean;
+}
+
+export interface Watchlist {
+  id: string;
+  name: string;
+  enabled: boolean;
+  terms: WatchlistTerm[];
+}
+
+export interface OnboardingStep {
+  id: string;
+  label: string;
+  completed: boolean;
+}
+
+export interface OnboardingStatus {
+  progress_percent: number;
+  steps: OnboardingStep[];
+}
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  role: "super_admin" | "admin" | "user";
+  full_name: string;
+  telegram_chat_id: string | null;
+  country: string;
+  profile: Record<string, unknown>;
+  preferences: Record<string, unknown>;
+  onboarding: OnboardingStatus;
+  created_at: string | null;
+  last_login_at: string | null;
+}
+
+export interface AuthTokens {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  expires_in_seconds: number;
+  refresh_expires_in_seconds: number;
+}
+
+export interface TelegramConnectSession {
+  connect_token: string;
+  connect_url: string;
+  bot_username: string;
+  expires_in_seconds: number;
+  already_connected: boolean;
+  delivery_chat_id: string | null;
+}
+
+export interface TelegramVerifyResult {
+  connected: boolean;
+  chat_id: string | null;
+  delivery_chat_id: string | null;
+  message?: string;
+  user: AuthUser;
+}
+
+export interface SourceStatus {
+  id: string;
+  source: string;
+  enabled: boolean;
+  rollout_stage: "live" | "next" | "later";
+  state: "healthy" | "lagging" | "degraded";
+  cadence_minutes: number;
+  new_jobs_today: number;
+  last_run_minutes_ago: number | null;
+  retries_today: number;
+  last_successful_sync: string | null;
+  lag_reason: string | null;
+}
+
+export interface AlertEvent {
+  id: string;
+  channel: "telegram" | "email" | "slack" | "desktop";
+  company: string;
+  title: string;
+  match_score: number;
+  decision: "APPLY_NOW" | "REVIEW" | "IGNORE";
+  posted_minutes_ago: number;
+  sent_minutes_ago: number;
+  why: string[];
+  recommended_resume: string;
+  apply_url: string;
+  gaps: string[];
+  country_code: string | null;
+  country_display: string;
+  freshness_label: string;
+  freshness_tone: "fresh" | "aging" | "stale";
+  recommendation: string;
+  recommendation_tone: "apply" | "review" | "skip";
+}
+
+export interface DashboardSummary {
+  todays_jobs: number;
+  apply_now_queue: number;
+  review_queue: number;
+  ignore_queue: number;
+  already_seen: number;
+  dismissed: number;
+  skipped: number;
+  alerts_sent: number;
+  configured_companies: number;
+  live_connectors: number;
+  next_connectors: number;
+  polling_interval_minutes: number;
+  notification_sla_minutes: number;
+  apply_now_threshold_score: number;
+  review_threshold_score: number;
+}
+
+export interface ProductInfo {
+  name: string;
+  phase: string;
+  goal: string;
+  focus: string;
+  implementation_order?: string;
+}
+
+export interface AgentSnapshot {
+  name: string;
+  state: "healthy" | "lagging" | "degraded";
+  current_connector: string;
+  polling_interval_minutes: number;
+  apply_now_threshold_score: number;
+  review_threshold_score: number;
+  last_run_minutes_ago: number;
+  next_run_minutes: number;
+  workflow: string[];
+}
+
+export interface ScoutSettings {
+  primary_connector: string;
+  apply_now_threshold_score: number;
+  review_threshold_score: number;
+  polling_interval_minutes: number;
+  companies: CompanyPreference[];
+  roles: RolePreference[];
+  notifications: NotificationChannel[];
+  role_families: RolePreference[];
+  work_arrangements: RolePreference[];
+  experience_levels: RolePreference[];
+  excluded_keywords: string[];
+  watchlists: Watchlist[];
+  minimum_match_score: number;
+  selected_country: string;
+  alert_freshness_hours: number;
+  dashboard_freshness_hours: number;
+}
+
+export interface SystemStatusComponent {
+  key: string;
+  label: string;
+  status: "healthy" | "lagging" | "degraded";
+  detail: string;
+}
+
+export interface SystemStatusStats {
+  jobs_collected: number;
+  new_today: number;
+  notifications_sent: number;
+  last_poll_at: string | null;
+  next_poll_at: string | null;
+}
+
+export interface SystemStatusSnapshot {
+  components: SystemStatusComponent[];
+  stats: SystemStatusStats;
+}
+
+export interface DashboardSnapshot {
+  generated_at: string;
+  product: ProductInfo;
+  agent: AgentSnapshot;
+  summary: DashboardSummary;
+  notification_preview: AlertEvent | null;
+  jobs: JobOpportunity[];
+  alerts: AlertEvent[];
+  sources: SourceStatus[];
+  settings: ScoutSettings;
+  system_status: SystemStatusSnapshot;
+}
