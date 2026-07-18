@@ -38,19 +38,38 @@ table {
 }
 
 th {
-  padding: 0 0 var(--space-4);
+  padding: 0 0 var(--content-gap);
   text-align: left;
   color: var(--color-text-muted);
-  font-size: 0.78rem;
+  font-size: var(--type-caption);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 
+:deep(tbody td) {
+  padding: var(--content-gap) 0;
+  border-top: 1px solid var(--color-border);
+  vertical-align: top;
+}
+
+:deep(tbody td p) {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-small);
+  line-height: 1.5;
+}
+
+:deep(.app-table__actions) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
 .app-table__empty {
-  padding: var(--space-8);
+  padding: var(--card-padding);
   border: 1px dashed var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--card-radius);
   text-align: center;
   color: var(--color-text-muted);
 }

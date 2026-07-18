@@ -3,7 +3,7 @@ import { computed } from "vue";
 
 const props = withDefaults(
   defineProps<{
-    variant?: "primary" | "secondary" | "ghost" | "danger";
+    variant?: "primary" | "secondary" | "ghost" | "danger" | "success";
     size?: "sm" | "md" | "lg";
     block?: boolean;
     disabled?: boolean;
@@ -44,10 +44,11 @@ const classes = computed(() => [
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  min-height: 44px;
-  padding: 0 var(--space-5);
+  min-height: 3rem;
+  padding: 0 1rem;
   border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  border-radius: 1rem;
+  font-size: var(--type-small);
   font-weight: 600;
   transition:
     transform var(--transition-fast),
@@ -62,6 +63,11 @@ const classes = computed(() => [
   transform: translateY(-1px);
 }
 
+.app-button :deep(svg) {
+  width: 18px;
+  height: 18px;
+}
+
 .app-button:disabled {
   opacity: 0.56;
   cursor: not-allowed;
@@ -74,7 +80,7 @@ const classes = computed(() => [
 .app-button--primary {
   background: var(--color-primary);
   color: white;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 12px 28px rgba(37, 99, 255, 0.22);
 }
 
 .app-button--primary:hover:not(:disabled) {
@@ -82,14 +88,14 @@ const classes = computed(() => [
 }
 
 .app-button--secondary {
-  background: var(--color-surface-muted);
+  background: rgba(255, 255, 255, 0.72);
   border-color: var(--color-border);
   color: var(--color-text);
 }
 
 .app-button--ghost {
   background: transparent;
-  border-color: var(--color-border);
+  border-color: transparent;
   color: var(--color-text);
 }
 
@@ -99,14 +105,25 @@ const classes = computed(() => [
   color: var(--color-danger);
 }
 
+.app-button--success {
+  background: var(--color-success-soft);
+  border-color: transparent;
+  color: var(--color-success);
+}
+
 .app-button--sm {
-  min-height: 40px;
-  padding: 0 var(--space-4);
-  font-size: 0.875rem;
+  min-height: 2.5rem;
+  padding: 0 0.875rem;
+}
+
+.app-button--md {
+  min-height: 3rem;
+  padding: 0 1rem;
 }
 
 .app-button--lg {
-  min-height: 48px;
-  padding: 0 var(--space-6);
+  min-height: 3.5rem;
+  padding: 0 1.25rem;
+  font-size: var(--type-body);
 }
 </style>

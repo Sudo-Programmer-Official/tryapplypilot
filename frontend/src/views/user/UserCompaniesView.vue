@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 
+import AppGrid from "../../components/layout/AppGrid.vue";
+import AppPage from "../../components/layout/AppPage.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
 import AppButton from "../../components/ui/AppButton.vue";
 import AppCard from "../../components/ui/AppCard.vue";
@@ -88,7 +90,7 @@ onMounted(load);
 </script>
 
 <template>
-  <div class="page-stack">
+  <AppPage>
     <PageHeader
       title="Target companies"
       description="Choose the companies you want monitored for your account, then request anything missing from the catalog."
@@ -100,14 +102,14 @@ onMounted(load);
 
     <AppEmptyState v-if="error" title="Companies unavailable" :description="error" />
 
-    <section v-else class="company-grid">
+    <AppGrid v-else as="section" columns="2">
       <AppCard title="Catalog companies" :subtitle="`${draft.preferred_companies.length} selected for your account.`">
         <AppEmptyState
           v-if="!loading && companies.length === 0"
           title="No companies in the catalog"
           description="Ask an admin to seed the catalog or submit your first request below."
         />
-        <div v-else class="company-list">
+        <div v-else class="app-form-grid">
           <div v-for="company in companies" :key="company.id" class="company-row">
             <AppCheckbox
               :model-value="draft.preferred_companies.includes(company.company)"
@@ -136,12 +138,12 @@ onMounted(load);
           <AppButton @click="submitRequest">Submit request</AppButton>
         </div>
       </AppCard>
-    </section>
+    </AppGrid>
 
     <AppCard title="Your requests" subtitle="Track approvals and rejections without needing direct admin help.">
       <AppTable :columns="requestColumns" :has-rows="requests.length > 0" empty-message="No company requests yet.">
         <tr v-for="request in requests" :key="request.id">
-          <td>
+          <td class="app-table__copy">
             <strong>{{ request.company_name }}</strong>
             <p>{{ request.connector_suggestion || "No connector hint" }}</p>
           </td>
@@ -150,46 +152,21 @@ onMounted(load);
         </tr>
       </AppTable>
     </AppCard>
-  </div>
+  </AppPage>
 </template>
 
 <style scoped>
-.page-stack,
-.company-list,
-.form-grid {
-  display: grid;
-  gap: var(--space-4);
-}
-
-.company-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.9fr);
-  gap: var(--space-4);
-}
-
 .company-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-4);
-  padding-bottom: var(--space-3);
+  gap: var(--content-gap);
+  padding-bottom: var(--content-gap);
   border-bottom: 1px solid var(--color-border);
 }
 
-.company-row__meta,
-td p {
+.company-row__meta {
   color: var(--color-text-muted);
-  font-size: 0.9rem;
-}
-
-td {
-  padding: var(--space-4) 0;
-  border-top: 1px solid var(--color-border);
-}
-
-@media (max-width: 1023px) {
-  .company-grid {
-    grid-template-columns: 1fr;
-  }
+  font-size: var(--type-small);
 }
 </style>

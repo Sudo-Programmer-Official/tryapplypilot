@@ -33,7 +33,7 @@ const columns = computed<TableColumn[]>(() => [
   <AppCard title="Pending Company Requests">
     <AppTable :columns="columns" :has-rows="requests.length > 0" empty-message="No company requests right now.">
       <tr v-for="request in requests" :key="request.id">
-        <td>
+        <td class="app-table__copy">
           <strong>{{ request.company_name }}</strong>
           <p>{{ request.notes || "No additional notes." }}</p>
         </td>
@@ -41,7 +41,7 @@ const columns = computed<TableColumn[]>(() => [
         <td><AppBadge tone="info">{{ request.connector_suggestion || "Unspecified" }}</AppBadge></td>
         <td>{{ formatDate(request.created_at) }}</td>
         <td v-if="showActions">
-          <div class="request-actions">
+          <div class="app-table__actions">
             <AppButton size="sm" variant="secondary" @click="$emit('edit', request)">Edit</AppButton>
             <AppButton size="sm" @click="$emit('approve', request)">Approve</AppButton>
             <AppButton size="sm" variant="danger" @click="$emit('reject', request)">Reject</AppButton>
@@ -52,22 +52,3 @@ const columns = computed<TableColumn[]>(() => [
     </AppTable>
   </AppCard>
 </template>
-
-<style scoped>
-td {
-  padding: var(--space-4) 0;
-  border-top: 1px solid var(--color-border);
-  vertical-align: top;
-}
-
-td p {
-  margin: var(--space-1) 0 0;
-  color: var(--color-text-muted);
-}
-
-.request-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-</style>

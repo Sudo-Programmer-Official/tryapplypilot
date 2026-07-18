@@ -53,11 +53,35 @@ onBeforeUnmount(() => {
   inset: 0;
   border: 0;
   background: rgba(7, 17, 34, 0.58);
+  animation: drawer-fade var(--transition-base);
 }
 
 .app-drawer__panel {
   position: relative;
   width: min(88vw, 21rem);
   height: 100%;
+  animation: drawer-slide var(--transition-slow);
+}
+
+@keyframes drawer-fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes drawer-slide {
+  from {
+    transform: translateX(-24px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 </style>

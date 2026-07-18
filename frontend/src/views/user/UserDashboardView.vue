@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { Bell, BriefcaseBusiness, Search, Send } from "lucide-vue-next";
 
 import SetupProgress from "../../components/dashboard/SetupProgress.vue";
 import ActivityList from "../../components/dashboard/ActivityList.vue";
 import MetricCard from "../../components/dashboard/MetricCard.vue";
 import StatusCard from "../../components/dashboard/StatusCard.vue";
+import AppGrid from "../../components/layout/AppGrid.vue";
+import AppPage from "../../components/layout/AppPage.vue";
 import JobCard from "../../components/jobs/JobCard.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
 import AppCard from "../../components/ui/AppCard.vue";
@@ -72,13 +73,13 @@ onMounted(load);
 </script>
 
 <template>
-  <div class="page-stack">
+  <AppPage>
     <PageHeader
       title="Your job radar"
       description="See what landed today, what deserves action now, and whether your alert pipeline is fully configured."
     />
 
-    <section class="dashboard-grid metrics-grid">
+    <AppGrid as="section" columns="4">
       <MetricCard
         icon="BriefcaseBusiness"
         label="New jobs"
@@ -108,14 +109,14 @@ onMounted(load);
         detail="Bookmarks synced to your account for your next pass."
         tone="info"
       />
-    </section>
+    </AppGrid>
 
-    <section class="dashboard-grid two-column-grid">
+    <AppGrid as="section" columns="2">
       <SetupProgress
         :progress="auth.user.value?.onboarding.progress_percent ?? 0"
         :steps="auth.user.value?.onboarding.steps ?? []"
       />
-      <div class="status-grid">
+      <AppGrid columns="2" gap="content">
         <StatusCard
           title="Telegram"
           :value="auth.user.value?.telegram_chat_id ? 'Connected' : 'Pending'"
@@ -128,10 +129,10 @@ onMounted(load);
           tone="info"
           :detail="`${auth.user.value?.preferences.country ?? auth.user.value?.country ?? 'US'} · ${auth.user.value?.preferences.freshness_hours ?? 6} hour freshness window`"
         />
-      </div>
-    </section>
+      </AppGrid>
+    </AppGrid>
 
-    <section class="dashboard-grid two-column-grid">
+    <AppGrid as="section" columns="2">
       <AppCard title="Top opportunities" subtitle="The highest scoring jobs currently in your personalized queue.">
         <AppEmptyState
           v-if="!loading && topJobs.length === 0"
@@ -157,44 +158,12 @@ onMounted(load);
         />
         <ActivityList v-else :items="activityItems" />
       </AppCard>
-    </section>
+    </AppGrid>
 
     <AppEmptyState
       v-if="error"
       title="Dashboard unavailable"
       :description="error"
     />
-  </div>
+  </AppPage>
 </template>
-
-<style scoped>
-.page-stack {
-  display: grid;
-  gap: var(--space-6);
-}
-
-.dashboard-grid {
-  display: grid;
-  gap: var(--space-4);
-}
-
-.metrics-grid {
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-}
-
-.two-column-grid {
-  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
-}
-
-.status-grid,
-.job-card-grid {
-  display: grid;
-  gap: var(--space-4);
-}
-
-@media (max-width: 1023px) {
-  .two-column-grid {
-    grid-template-columns: 1fr;
-  }
-}
-</style>

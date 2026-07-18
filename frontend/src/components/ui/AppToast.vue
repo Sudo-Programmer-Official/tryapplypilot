@@ -34,7 +34,7 @@ const { toasts, dismissToast } = useToast();
 }
 
 .app-toast {
-  padding: var(--space-4);
+  padding: var(--card-padding);
 }
 
 .app-toast__header {
@@ -47,7 +47,7 @@ const { toasts, dismissToast } = useToast();
 .app-toast p {
   margin: var(--space-2) 0 0;
   color: var(--color-text-muted);
-  font-size: 0.9rem;
+  font-size: var(--type-small);
 }
 
 .app-toast__close {

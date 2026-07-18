@@ -2,6 +2,9 @@
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 
+import AppGrid from "../../components/layout/AppGrid.vue";
+import AppPage from "../../components/layout/AppPage.vue";
+import AppSection from "../../components/layout/AppSection.vue";
 import AppBadge from "../../components/ui/AppBadge.vue";
 import AppButton from "../../components/ui/AppButton.vue";
 import AppCard from "../../components/ui/AppCard.vue";
@@ -37,18 +40,18 @@ const highlights = [
       </div>
     </header>
 
-    <main class="page-width landing__main">
+    <AppPage as="main" class="landing__main">
       <section class="landing__hero">
         <div class="landing__copy">
           <AppBadge tone="primary">AI Job Radar</AppBadge>
-          <h1>Never miss a job you&rsquo;re qualified for.</h1>
-          <p>
+          <h1 class="type-display-xl">Never miss a job you&rsquo;re qualified for.</h1>
+          <p class="type-body-lg">
             TryApplyPilot watches target companies, scores each new role against your profile, and sends the high-match
             openings to you before the queue gets crowded.
           </p>
           <div class="landing__actions">
-            <RouterLink :to="primaryRoute" class="landing__button landing__button--primary">{{ primaryLabel }}</RouterLink>
-            <RouterLink to="/auth/login" class="landing__button landing__button--secondary">See the user dashboard</RouterLink>
+            <AppButton size="lg" :href="primaryRoute">{{ primaryLabel }}</AppButton>
+            <AppButton size="lg" variant="secondary" href="/auth/login">See the user dashboard</AppButton>
           </div>
           <ul class="landing__list list-reset">
             <li v-for="step in steps" :key="step">{{ step }}</li>
@@ -59,7 +62,7 @@ const highlights = [
           <template #header>
             <div>
               <p class="eyebrow">Live signal</p>
-              <h2>What the product does every few minutes</h2>
+              <h2 class="type-heading">What the product does every few minutes</h2>
             </div>
           </template>
 
@@ -80,33 +83,29 @@ const highlights = [
           <div class="landing__stats">
             <div>
               <span class="eyebrow">Cadence</span>
-              <strong>5 min</strong>
+              <strong class="type-title">5 min</strong>
             </div>
             <div>
               <span class="eyebrow">Channels</span>
-              <strong>Telegram first</strong>
+              <strong class="type-title">Telegram first</strong>
             </div>
             <div>
               <span class="eyebrow">Scope</span>
-              <strong>User-specific alerts</strong>
+              <strong class="type-title">User-specific alerts</strong>
             </div>
           </div>
         </AppCard>
       </section>
 
-      <section class="landing__section">
-        <div class="landing__section-header">
-          <p class="eyebrow">How it works</p>
-          <h2>Built for the job seeker first</h2>
-        </div>
-        <div class="landing__grid">
+      <AppSection eyebrow="How it works" title="Built for the job seeker first">
+        <AppGrid class="landing__grid" columns="3">
           <AppCard v-for="highlight in highlights" :key="highlight.title" :title="highlight.title" :subtitle="highlight.detail" />
-        </div>
-      </section>
-    </main>
+        </AppGrid>
+      </AppSection>
+    </AppPage>
 
     <footer class="landing__footer page-width">
-      <span>Job discovery, scoring, and notifications focused on the user workflow.</span>
+      <span class="type-caption">Job discovery, scoring, and notifications focused on the user workflow.</span>
     </footer>
   </div>
 </template>
@@ -125,14 +124,14 @@ const highlights = [
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-4);
-  padding-top: var(--space-5);
-  padding-bottom: var(--space-5);
+  gap: var(--content-gap);
+  padding-top: var(--page-padding-y);
+  padding-bottom: var(--page-padding-y);
 }
 
 .landing__brand {
   font-family: var(--font-display);
-  font-size: 1.15rem;
+  font-size: var(--type-title);
   font-weight: 700;
 }
 
@@ -140,7 +139,7 @@ const highlights = [
 .landing__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
+  gap: var(--content-gap);
 }
 
 .landing__link {
@@ -148,57 +147,31 @@ const highlights = [
 }
 
 .landing__main {
-  display: grid;
-  gap: var(--space-8);
-  padding-bottom: var(--space-8);
+  align-content: center;
 }
 
 .landing__hero {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
-  gap: var(--space-6);
+  gap: calc(var(--section-gap) + var(--content-gap));
   align-items: center;
-  padding: var(--space-8) 0 var(--space-4);
+  min-height: min(72vh, 52rem);
 }
 
-.landing__copy h1 {
-  margin: var(--space-4) 0 var(--space-3);
-  font-family: var(--font-display);
-  font-size: clamp(2.8rem, 6vw, 4.7rem);
-  line-height: 0.96;
-  letter-spacing: -0.05em;
+.landing__copy {
+  display: grid;
+  gap: var(--content-gap);
+  max-width: var(--hero-copy-max-width);
 }
 
 .landing__copy p {
-  max-width: 42rem;
   color: var(--color-text-muted);
-  font-size: 1.02rem;
-}
-
-.landing__button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 46px;
-  padding: 0 var(--space-5);
-  border-radius: var(--radius-pill);
-  font-weight: 700;
-}
-
-.landing__button--primary {
-  background: var(--color-primary);
-  color: white;
-}
-
-.landing__button--secondary {
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-elevated);
 }
 
 .landing__list {
   display: grid;
-  gap: var(--space-3);
-  margin-top: var(--space-5);
+  gap: var(--content-gap);
+  margin-top: var(--content-gap);
 }
 
 .landing__list li {
@@ -217,29 +190,24 @@ const highlights = [
 }
 
 .landing__signal {
-  gap: var(--space-5);
-  padding: var(--space-6);
-}
-
-.landing__signal h2 {
-  margin: var(--space-2) 0 0;
-  font-family: var(--font-display);
-  font-size: 1.8rem;
+  gap: var(--card-gap);
+  max-width: var(--hero-card-max-width);
+  justify-self: end;
 }
 
 .landing__signal-flow {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--content-gap);
 }
 
 .landing__signal-flow span {
-  padding: var(--space-3) var(--space-4);
+  padding: var(--content-gap) var(--card-padding);
   border-radius: var(--radius-lg);
   background: var(--color-surface-muted);
 }
 
 .landing__alert {
-  padding: var(--space-5);
+  padding: var(--card-padding);
 }
 
 .landing__alert-title {
@@ -251,37 +219,28 @@ const highlights = [
 .landing__stats,
 .landing__grid {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--content-gap);
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
-.landing__stats strong {
+.landing__stats :deep(strong) {
   display: block;
   margin-top: var(--space-2);
-  font-family: var(--font-display);
-  font-size: 1.2rem;
-}
-
-.landing__section {
-  display: grid;
-  gap: var(--space-5);
-}
-
-.landing__section-header h2 {
-  margin: var(--space-2) 0 0;
-  font-family: var(--font-display);
-  font-size: 2rem;
 }
 
 .landing__footer {
   padding-top: 0;
   color: var(--color-text-muted);
-  font-size: 0.92rem;
 }
 
 @media (max-width: 1023px) {
   .landing__hero {
     grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
+  .landing__signal {
+    justify-self: stretch;
   }
 }
 

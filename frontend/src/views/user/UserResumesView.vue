@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 
+import AppGrid from "../../components/layout/AppGrid.vue";
+import AppPage from "../../components/layout/AppPage.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
 import AppBadge from "../../components/ui/AppBadge.vue";
 import AppButton from "../../components/ui/AppButton.vue";
@@ -57,14 +59,16 @@ onMounted(load);
 </script>
 
 <template>
-  <div class="page-stack">
+  <AppPage>
     <PageHeader
       title="Resume library"
       description="Upload resume variants so the matching engine has a stronger profile and can recommend the right version later."
     >
       <template #actions>
-        <label class="resume-upload surface-card">
-          <span>{{ uploading ? "Uploading..." : "Upload resume" }}</span>
+        <label class="resume-upload">
+          <AppButton type="button" :disabled="uploading">
+            {{ uploading ? "Uploading..." : "Upload resume" }}
+          </AppButton>
           <input type="file" accept=".pdf,.doc,.docx,.txt" :disabled="uploading" @change="handleFileChange" />
         </label>
       </template>
@@ -77,7 +81,7 @@ onMounted(load);
       description="Upload your first resume to improve matching quality and complete onboarding."
     />
 
-    <div v-else class="resume-grid">
+    <AppGrid v-else columns="3">
       <AppCard v-for="resume in resumes" :key="resume.id" :title="resume.display_name" :subtitle="resume.role_focus || 'General profile'" class="resume-card">
         <div class="resume-card__meta">
           <AppBadge tone="primary">{{ formatFileSize(resume.file_size_bytes) }}</AppBadge>
@@ -90,30 +94,16 @@ onMounted(load);
         </div>
         <p class="resume-card__preview">{{ resume.extracted_text_preview || "Text extraction is still running." }}</p>
       </AppCard>
-    </div>
-  </div>
+    </AppGrid>
+  </AppPage>
 </template>
 
 <style scoped>
-.page-stack,
-.resume-grid {
-  display: grid;
-  gap: var(--space-4);
-}
-
-.resume-grid {
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-}
-
 .resume-upload {
   position: relative;
   display: inline-flex;
   align-items: center;
-  min-height: 44px;
-  padding: 0 var(--space-4);
-  border-radius: var(--radius-md);
   cursor: pointer;
-  font-weight: 600;
 }
 
 .resume-upload input {
@@ -127,12 +117,13 @@ onMounted(load);
 .resume-card__skills {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  gap: var(--content-gap);
 }
 
 .resume-card__preview {
   margin: 0;
   color: var(--color-text-muted);
+  font-size: var(--type-small);
   line-height: 1.55;
 }
 </style>

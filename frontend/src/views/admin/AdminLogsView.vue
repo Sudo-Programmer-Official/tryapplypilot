@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 
 import ActivityList from "../../components/dashboard/ActivityList.vue";
+import AppPage from "../../components/layout/AppPage.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
 import AppCard from "../../components/ui/AppCard.vue";
 import AppEmptyState from "../../components/ui/AppEmptyState.vue";
@@ -58,7 +59,7 @@ onMounted(load);
 </script>
 
 <template>
-  <div class="page-stack">
+  <AppPage>
     <PageHeader title="Logs" description="A compact audit trail for user events, scheduler cycles, approvals, and connector failures." />
 
     <AppEmptyState v-if="error" title="Logs unavailable" :description="error" />
@@ -67,12 +68,5 @@ onMounted(load);
     <AppCard v-else title="Recent operational events" subtitle="Use this before digging into raw logs or database state.">
       <ActivityList :items="logItems" />
     </AppCard>
-  </div>
+  </AppPage>
 </template>
-
-<style scoped>
-.page-stack {
-  display: grid;
-  gap: var(--space-4);
-}
-</style>

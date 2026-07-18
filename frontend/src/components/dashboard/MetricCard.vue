@@ -26,7 +26,7 @@ const sparklinePoints = computed(() => {
   <AppCard class="metric-card">
     <div class="metric-card__header">
       <span class="metric-card__icon" :class="`metric-card__icon--${tone ?? 'primary'}`">
-        <component :is="icon" :size="20" />
+        <component :is="icon" />
       </span>
       <div>
         <p class="metric-card__label">{{ label }}</p>
@@ -61,9 +61,14 @@ const sparklinePoints = computed(() => {
 .metric-card__icon {
   display: grid;
   place-items: center;
-  width: 3rem;
-  height: 3rem;
-  border-radius: 1rem;
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 1.5rem;
+}
+
+.metric-card__icon :deep(svg) {
+  width: 48px;
+  height: 48px;
 }
 
 .metric-card__icon--primary {
@@ -96,7 +101,7 @@ const sparklinePoints = computed(() => {
   display: block;
   margin-top: var(--space-1);
   font-family: var(--font-display);
-  font-size: 2rem;
+  font-size: var(--type-display);
   letter-spacing: -0.04em;
 }
 

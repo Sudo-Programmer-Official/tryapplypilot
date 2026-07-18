@@ -2,6 +2,7 @@
 import { onMounted, ref } from "vue";
 
 import CompanyRequestTable from "../../components/admin/CompanyRequestTable.vue";
+import AppPage from "../../components/layout/AppPage.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
 import AppButton from "../../components/ui/AppButton.vue";
 import AppCheckbox from "../../components/ui/AppCheckbox.vue";
@@ -99,7 +100,7 @@ onMounted(load);
 </script>
 
 <template>
-  <div class="page-stack">
+  <AppPage>
     <PageHeader title="Company requests" description="Approve or reject user-submitted company requests without touching the database directly." />
 
     <CompanyRequestTable
@@ -120,7 +121,7 @@ onMounted(load);
       description="Finalize the connector and catalog metadata before approving or rejecting the request."
       @close="modalOpen = false"
     >
-      <div class="form-grid">
+      <div class="app-form-grid">
         <AppSelect
           :model-value="reviewStatus"
           label="Decision"
@@ -149,13 +150,5 @@ onMounted(load);
         <AppButton :disabled="submitting" @click="submitReview">{{ submitting ? "Saving..." : "Submit review" }}</AppButton>
       </div>
     </AppModal>
-  </div>
+  </AppPage>
 </template>
-
-<style scoped>
-.page-stack,
-.form-grid {
-  display: grid;
-  gap: var(--space-4);
-}
-</style>

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 
+import AppGrid from "../../components/layout/AppGrid.vue";
+import AppPage from "../../components/layout/AppPage.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
 import AppButton from "../../components/ui/AppButton.vue";
 import AppCard from "../../components/ui/AppCard.vue";
@@ -54,22 +56,22 @@ async function saveUserPreferences(): Promise<void> {
 </script>
 
 <template>
-  <div class="page-stack">
+  <AppPage>
     <PageHeader
       title="Preferences"
       description="Set the countries, locations, roles, and thresholds that define what counts as a high-fit opportunity for you."
     >
       <template #actions>
-        <div class="actions-row">
+        <div class="app-actions-row">
           <AppButton variant="secondary" @click="reset">Reset</AppButton>
           <AppButton :disabled="saving" @click="saveUserPreferences">{{ saving ? "Saving..." : "Save preferences" }}</AppButton>
         </div>
       </template>
     </PageHeader>
 
-    <section class="preferences-grid">
+    <AppGrid as="section" columns="2">
       <AppCard title="Location and thresholds" subtitle="Use these settings to limit notifications before scoring and delivery.">
-        <div class="form-grid">
+        <div class="app-form-grid">
           <AppSelect
             :model-value="draft.country"
             label="Country"
@@ -107,7 +109,7 @@ async function saveUserPreferences(): Promise<void> {
       </AppCard>
 
       <AppCard title="Role focus" subtitle="Give the matcher clear intent about what roles and skills matter most.">
-        <div class="form-grid">
+        <div class="app-form-grid">
           <AppTextArea
             v-model="rolesText"
             label="Preferred roles"
@@ -124,11 +126,11 @@ async function saveUserPreferences(): Promise<void> {
           />
         </div>
       </AppCard>
-    </section>
+    </AppGrid>
 
-    <section class="preferences-grid">
+    <AppGrid as="section" columns="2">
       <AppCard title="Work arrangement" subtitle="Choose which workplace models should stay in your radar.">
-        <div class="checkbox-grid">
+        <div class="app-actions-row">
           <AppCheckbox
             v-for="option in workArrangementOptions"
             :key="option"
@@ -140,7 +142,7 @@ async function saveUserPreferences(): Promise<void> {
       </AppCard>
 
       <AppCard title="Experience level" subtitle="Keep the alerts aligned with the level you want to target right now.">
-        <div class="checkbox-grid">
+        <div class="app-actions-row">
           <AppCheckbox
             v-for="option in experienceLevelOptions"
             :key="option"
@@ -150,27 +152,6 @@ async function saveUserPreferences(): Promise<void> {
           />
         </div>
       </AppCard>
-    </section>
-  </div>
+    </AppGrid>
+  </AppPage>
 </template>
-
-<style scoped>
-.page-stack,
-.form-grid {
-  display: grid;
-  gap: var(--space-4);
-}
-
-.preferences-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: var(--space-4);
-}
-
-.actions-row,
-.checkbox-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-}
-</style>

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 
+import AppGrid from "../../components/layout/AppGrid.vue";
+import AppPage from "../../components/layout/AppPage.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
 import AppButton from "../../components/ui/AppButton.vue";
 import AppCard from "../../components/ui/AppCard.vue";
@@ -76,7 +78,7 @@ onMounted(load);
 </script>
 
 <template>
-  <div class="page-stack">
+  <AppPage>
     <PageHeader title="Settings" description="Control shared runtime behavior, thresholds, and profile defaults from the database-backed admin workspace.">
       <template #actions>
         <AppButton :disabled="saving || !settings" @click="persist">{{ saving ? "Saving..." : "Save settings" }}</AppButton>
@@ -86,9 +88,9 @@ onMounted(load);
     <AppCard v-if="error" title="Settings unavailable" :subtitle="error" />
 
     <template v-else-if="settings">
-      <section class="settings-grid">
+      <AppGrid as="section" columns="2">
         <AppCard title="Runtime thresholds" subtitle="Core values that shape matching and polling behavior.">
-          <div class="form-grid">
+          <div class="app-form-grid">
             <AppSelect
               :model-value="settings.primary_connector"
               label="Primary connector"
@@ -150,7 +152,7 @@ onMounted(load);
         </AppCard>
 
         <AppCard title="Profile defaults" subtitle="Shared matching context for the initial resume-less profile and sync behavior.">
-          <div class="form-grid">
+          <div class="app-form-grid">
             <AppTextArea v-model="settings.profile_text" label="Profile text" :rows="5" />
             <AppTextArea
               v-model="resumeVariantsText"
@@ -187,11 +189,11 @@ onMounted(load);
             />
           </div>
         </AppCard>
-      </section>
+      </AppGrid>
 
-      <section class="settings-grid">
+      <AppGrid as="section" columns="2">
         <AppCard title="Role families" subtitle="Catalog-level role families exposed to admin and user flows.">
-          <div class="checkbox-grid">
+          <div class="app-actions-row">
             <AppCheckbox
               v-for="role in settings.role_families"
               :key="role.label"
@@ -203,7 +205,7 @@ onMounted(load);
         </AppCard>
 
         <AppCard title="Experience and work modes" subtitle="These defaults appear in the shared configuration and onboarding flow.">
-          <div class="checkbox-grid">
+          <div class="app-actions-row">
             <AppCheckbox
               v-for="role in settings.work_arrangements"
               :key="`work-${role.label}`"
@@ -220,26 +222,7 @@ onMounted(load);
             />
           </div>
         </AppCard>
-      </section>
+      </AppGrid>
     </template>
-  </div>
+  </AppPage>
 </template>
-
-<style scoped>
-.page-stack,
-.settings-grid,
-.form-grid {
-  display: grid;
-  gap: var(--space-4);
-}
-
-.settings-grid {
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-}
-
-.checkbox-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-}
-</style>

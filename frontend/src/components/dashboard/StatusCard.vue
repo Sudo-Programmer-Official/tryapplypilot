@@ -42,6 +42,7 @@ defineProps<{
 
 .status-card__value {
   font-family: var(--font-display);
-  font-size: 1.6rem;
+  font-size: var(--type-heading);
+  line-height: var(--line-heading);
 }
 </style>

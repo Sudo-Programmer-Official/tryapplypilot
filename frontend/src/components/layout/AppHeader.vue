@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { Bell, ChevronDown, Menu, Moon, Search, Sun } from "lucide-vue-next";
+import { Bell, ChevronDown, Menu, Search } from "lucide-vue-next";
 
 import AppIconButton from "../ui/AppIconButton.vue";
 import AppInput from "../ui/AppInput.vue";
@@ -31,11 +31,11 @@ const initials = computed(() => getInitials(props.user?.full_name || props.user?
   <header class="app-header surface-card">
     <div class="app-header__leading">
       <AppIconButton label="Toggle sidebar" @click="$emit('toggle-sidebar')">
-        <Menu :size="20" />
+        <Menu />
       </AppIconButton>
       <div>
-        <h1 class="app-header__title">{{ title }}</h1>
-        <p class="app-header__subtitle">Keep the workspace focused and current.</p>
+        <h1 class="app-header__title type-heading">{{ title }}</h1>
+        <p class="app-header__subtitle type-small">Keep the workspace focused and current.</p>
       </div>
     </div>
 
@@ -59,17 +59,17 @@ const initials = computed(() => getInitials(props.user?.full_name || props.user?
         @update:model-value="$emit('update:theme', $event as ThemeMode)"
       />
       <AppIconButton class="hide-tablet" label="Search">
-        <Search :size="18" />
+        <Search />
       </AppIconButton>
       <AppIconButton label="Notifications">
-        <Bell :size="18" />
+        <Bell />
         <span v-if="notificationsCount" class="app-header__counter">{{ notificationsCount }}</span>
       </AppIconButton>
       <div class="app-header__user-menu">
         <button class="app-header__user" @click="userMenuOpen = !userMenuOpen">
           <span class="app-header__avatar">{{ initials }}</span>
           <span class="hide-mobile">{{ props.user?.full_name || "Account" }}</span>
-          <ChevronDown :size="16" />
+          <ChevronDown class="app-header__chevron" />
         </button>
         <div v-if="userMenuOpen" class="app-header__user-panel surface-card">
           <strong>{{ props.user?.full_name || props.user?.email }}</strong>
@@ -84,38 +84,33 @@ const initials = computed(() => getInitials(props.user?.full_name || props.user?
 <style scoped>
 .app-header {
   position: sticky;
-  top: var(--space-4);
+  top: 0;
   z-index: 20;
   display: grid;
   grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto;
-  gap: var(--space-4);
+  gap: var(--content-gap);
   align-items: center;
-  padding: var(--space-4);
+  width: calc(100% - (var(--page-padding-x) * 2));
+  margin: var(--page-padding-y) var(--page-padding-x) 0;
+  padding: var(--content-gap) var(--card-padding);
+  backdrop-filter: blur(18px);
 }
 
 .app-header__leading {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-}
-
-.app-header__title {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 1.6rem;
-  line-height: 1.1;
+  gap: var(--content-gap);
 }
 
 .app-header__subtitle {
   margin: var(--space-1) 0 0;
   color: var(--color-text-muted);
-  font-size: 0.92rem;
 }
 
 .app-header__actions {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--content-gap);
 }
 
 .app-header__counter {
@@ -129,7 +124,7 @@ const initials = computed(() => getInitials(props.user?.full_name || props.user?
   border-radius: 50%;
   background: var(--color-danger);
   color: white;
-  font-size: 0.65rem;
+  font-size: var(--type-caption);
 }
 
 .app-header__user-menu {
@@ -139,9 +134,9 @@ const initials = computed(() => getInitials(props.user?.full_name || props.user?
 .app-header__user {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--content-gap);
   min-height: 44px;
-  padding: 0 var(--space-3);
+  padding: 0 var(--content-gap);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-pill);
   background: var(--color-surface-elevated);
@@ -159,19 +154,25 @@ const initials = computed(() => getInitials(props.user?.full_name || props.user?
   font-weight: 700;
 }
 
+.app-header__chevron {
+  width: 16px;
+  height: 16px;
+}
+
 .app-header__user-panel {
   position: absolute;
   right: 0;
   top: calc(100% + var(--space-2));
   min-width: 13rem;
-  padding: var(--space-4);
+  padding: var(--content-gap);
   display: grid;
   gap: var(--space-2);
+  animation: fade-in var(--transition-base);
 }
 
 .app-header__user-panel span {
   color: var(--color-text-muted);
-  font-size: 0.88rem;
+  font-size: var(--type-small);
 }
 
 .app-header__logout {
@@ -182,9 +183,23 @@ const initials = computed(() => getInitials(props.user?.full_name || props.user?
   cursor: pointer;
 }
 
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (max-width: 1023px) {
   .app-header {
     grid-template-columns: 1fr;
+    width: calc(100% - (var(--page-padding-x) * 2));
+    margin-inline: var(--page-padding-x);
   }
 
   .app-header__search {

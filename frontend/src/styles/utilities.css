@@ -1,27 +1,32 @@
-.app-page {
-  display: grid;
-  gap: var(--space-6);
-}
-
 .surface-card {
   border: 1px solid var(--color-border);
   background: var(--color-surface);
-  border-radius: var(--radius-lg);
+  border-radius: var(--card-radius);
   box-shadow: var(--shadow-sm);
   backdrop-filter: blur(14px);
+  transition:
+    box-shadow var(--transition-base),
+    transform var(--transition-base),
+    border-color var(--transition-base);
 }
 
 .surface-panel {
   border: 1px solid var(--color-border);
   background: var(--color-surface-elevated);
-  border-radius: var(--radius-xl);
+  border-radius: var(--card-radius);
   box-shadow: var(--shadow-md);
+}
+
+.surface-card:hover {
+  transform: var(--motion-card-hover);
+  box-shadow: var(--shadow-md);
+  border-color: var(--color-border-strong);
 }
 
 .section-title {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 1.25rem;
+  font-size: var(--type-title);
   font-weight: 700;
   letter-spacing: -0.02em;
 }
@@ -33,7 +38,7 @@
 
 .eyebrow {
   color: var(--color-text-muted);
-  font-size: 0.75rem;
+  font-size: var(--type-caption);
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -64,13 +69,8 @@
 
 .grid-auto-fit {
   display: grid;
-  gap: var(--space-5);
+  gap: var(--card-gap);
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-}
-
-.page-width {
-  width: min(100%, var(--max-content-width));
-  margin: 0 auto;
 }
 
 .inline-badge {

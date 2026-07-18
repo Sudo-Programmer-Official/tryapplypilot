@@ -7,6 +7,8 @@ import ActivityList from "../../components/dashboard/ActivityList.vue";
 import MetricCard from "../../components/dashboard/MetricCard.vue";
 import StatusCard from "../../components/dashboard/StatusCard.vue";
 import JobRow from "../../components/jobs/JobRow.vue";
+import AppGrid from "../../components/layout/AppGrid.vue";
+import AppPage from "../../components/layout/AppPage.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
 import AppCard from "../../components/ui/AppCard.vue";
 import AppEmptyState from "../../components/ui/AppEmptyState.vue";
@@ -48,7 +50,7 @@ onMounted(dashboard.load);
 </script>
 
 <template>
-  <div class="page-stack">
+  <AppPage>
     <PageHeader
       title="Admin dashboard"
       description="Watch the live pipeline, connector health, and notification output without leaving the operations workspace."
@@ -57,7 +59,7 @@ onMounted(dashboard.load);
     <AppEmptyState v-if="dashboard.error.value" title="Dashboard unavailable" :description="dashboard.error.value" />
 
     <template v-else-if="dashboard.snapshot.value">
-      <section class="metrics-grid">
+      <AppGrid as="section" columns="4">
         <MetricCard
           icon="BriefcaseBusiness"
           label="Jobs collected"
@@ -87,9 +89,9 @@ onMounted(dashboard.load);
           detail="Catalog companies currently available to users and admins."
           tone="info"
         />
-      </section>
+      </AppGrid>
 
-      <section class="status-grid">
+      <AppGrid as="section" columns="2">
         <StatusCard
           title="Agent"
           :value="dashboard.snapshot.value.agent.name"
@@ -102,19 +104,19 @@ onMounted(dashboard.load);
           tone="info"
           :detail="`Polling every ${dashboard.snapshot.value.agent.polling_interval_minutes} minutes.`"
         />
-      </section>
+      </AppGrid>
 
-      <section class="content-grid">
+      <AppGrid as="section" columns="2">
         <SystemStatus :snapshot="dashboard.snapshot.value.system_status" />
         <AppCard title="Recent alerts" subtitle="The latest alert decisions the system sent downstream.">
           <ActivityList :items="alertItems" />
         </AppCard>
-      </section>
+      </AppGrid>
 
       <ConnectorHealthTable :sources="dashboard.sources.value" />
 
       <AppCard title="Recent jobs" subtitle="Fresh jobs currently visible to the admin workspace.">
-        <div class="job-list">
+        <div class="app-stack app-stack--content">
           <JobRow
             v-for="job in dashboard.jobs.value.slice(0, 5)"
             :key="job.id"
@@ -125,38 +127,5 @@ onMounted(dashboard.load);
         </div>
       </AppCard>
     </template>
-  </div>
+  </AppPage>
 </template>
-
-<style scoped>
-.page-stack,
-.job-list {
-  display: grid;
-  gap: var(--space-4);
-}
-
-.metrics-grid,
-.status-grid,
-.content-grid {
-  display: grid;
-  gap: var(--space-4);
-}
-
-.metrics-grid {
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-}
-
-.status-grid {
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-}
-
-.content-grid {
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.9fr);
-}
-
-@media (max-width: 1023px) {
-  .content-grid {
-    grid-template-columns: 1fr;
-  }
-}
-</style>

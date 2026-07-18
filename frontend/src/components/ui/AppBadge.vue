@@ -29,12 +29,12 @@ withDefaults(
 
 .app-badge--sm {
   padding: 0.25rem 0.55rem;
-  font-size: 0.72rem;
+  font-size: var(--type-caption);
 }
 
 .app-badge--md {
   padding: 0.35rem 0.7rem;
-  font-size: 0.78rem;
+  font-size: var(--type-small);
 }
 
 .app-badge--neutral {

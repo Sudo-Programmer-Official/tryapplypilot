@@ -27,16 +27,25 @@ defineEmits<{
 }
 
 .app-field__label {
-  font-size: 0.84rem;
+  font-size: var(--type-small);
   font-weight: 600;
 }
 
 .app-select {
-  min-height: 44px;
-  padding: 0.75rem 0.9rem;
+  min-height: 3.25rem;
+  padding: 0.875rem 1rem;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: 1rem;
   background: var(--color-surface-elevated);
   color: var(--color-text);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.app-select:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 4px rgba(37, 99, 255, 0.12);
 }
 </style>

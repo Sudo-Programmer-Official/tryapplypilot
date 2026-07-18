@@ -42,7 +42,7 @@ defineProps<{
 <style scoped>
 .system-status__stats {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--content-gap);
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
 }
 
@@ -50,25 +50,26 @@ defineProps<{
   display: block;
   margin-top: var(--space-2);
   font-family: var(--font-display);
-  font-size: 1.25rem;
+  font-size: var(--type-title);
 }
 
 .system-status__list {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--content-gap);
 }
 
 .system-status__list li {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--space-4);
-  padding-top: var(--space-4);
+  gap: var(--content-gap);
+  padding-top: var(--content-gap);
   border-top: 1px solid var(--color-border);
 }
 
 .system-status__list p {
   margin: var(--space-1) 0 0;
   color: var(--color-text-muted);
+  font-size: var(--type-small);
 }
 </style>

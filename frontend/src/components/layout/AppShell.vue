@@ -112,12 +112,12 @@ function updateTheme(value: ThemeMode): void {
 }
 
 .app-shell__content {
-  padding: var(--space-4);
+  padding: 0;
   min-width: 0;
 }
 
 .app-shell__main {
-  padding: var(--space-5) 0 var(--space-8);
+  padding: 0 0 var(--page-padding-y);
 }
 
 @media (max-width: 1023px) {

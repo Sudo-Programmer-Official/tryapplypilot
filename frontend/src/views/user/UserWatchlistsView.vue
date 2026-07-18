@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 
+import AppGrid from "../../components/layout/AppGrid.vue";
+import AppPage from "../../components/layout/AppPage.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
 import AppButton from "../../components/ui/AppButton.vue";
 import AppCard from "../../components/ui/AppCard.vue";
@@ -108,7 +110,7 @@ onMounted(load);
 </script>
 
 <template>
-  <div class="page-stack">
+  <AppPage>
     <PageHeader
       title="Watchlists"
       description="Create personal company and keyword watchlists that stay attached to your account instead of onboarding state."
@@ -125,14 +127,14 @@ onMounted(load);
       description="Create your first personal watchlist to monitor a narrow set of teams, skills, or companies."
     />
 
-    <div v-else class="watchlist-grid">
+    <AppGrid v-else columns="3">
       <AppCard
         v-for="(watchlist, index) in watchlists"
         :key="watchlist.id || `draft-${index}`"
         :title="watchlist.name || 'New watchlist draft'"
         :subtitle="`${watchlist.terms.length} terms`"
       >
-        <div class="form-grid">
+        <div class="app-form-grid">
           <AppInput v-model="watchlist.name" label="Watchlist name" placeholder="AI platform targets" />
           <AppCheckbox :model-value="watchlist.enabled" label="Enabled" @update:model-value="watchlist.enabled = $event" />
           <AppTextArea
@@ -143,7 +145,7 @@ onMounted(load);
             :rows="5"
             @update:model-value="watchlist.terms = parseTerms($event)"
           />
-          <div class="watchlist-actions">
+          <div class="app-actions-row">
             <AppButton :disabled="savingWatchlistId === (watchlist.id || `draft-${index}`)" @click="persistWatchlist(index)">
               {{ savingWatchlistId === (watchlist.id || `draft-${index}`) ? "Saving..." : "Save watchlist" }}
             </AppButton>
@@ -153,25 +155,6 @@ onMounted(load);
           </div>
         </div>
       </AppCard>
-    </div>
-  </div>
+    </AppGrid>
+  </AppPage>
 </template>
-
-<style scoped>
-.page-stack,
-.watchlist-grid,
-.form-grid {
-  display: grid;
-  gap: var(--space-4);
-}
-
-.watchlist-grid {
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-}
-
-.watchlist-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-}
-</style>

@@ -2,6 +2,8 @@
 import { computed, ref } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 
+import AppGrid from "../../components/layout/AppGrid.vue";
+import AppPage from "../../components/layout/AppPage.vue";
 import AppBadge from "../../components/ui/AppBadge.vue";
 import AppButton from "../../components/ui/AppButton.vue";
 import AppCard from "../../components/ui/AppCard.vue";
@@ -84,96 +86,88 @@ async function handleSubmit(): Promise<void> {
 
 <template>
   <div class="auth">
-    <div class="auth__panel page-width">
-      <div class="auth__intro">
+    <AppPage class="auth__page" centered>
+      <AppGrid class="auth__panel" columns="2">
+        <div class="auth__intro">
         <RouterLink class="auth__brand" to="/">TryApplyPilot</RouterLink>
         <AppBadge :tone="isAdmin ? 'warning' : 'primary'">
           {{ isAdmin ? "Admin Portal" : "User Portal" }}
         </AppBadge>
-        <h1>{{ heading }}</h1>
-        <p>{{ description }}</p>
+        <h1 class="type-display">{{ heading }}</h1>
+        <p class="type-body-lg">{{ description }}</p>
         <ul class="auth__notes list-reset">
           <li>User login always lands on the job-seeker dashboard.</li>
           <li>Admin routes stay under <code>/admin/*</code> with role checks in the router.</li>
           <li>Telegram, resumes, companies, and preferences all stay on one shared account model.</li>
         </ul>
-      </div>
-
-      <AppCard class="auth__card">
-        <form class="auth__form" @submit.prevent="handleSubmit">
-          <AppInput v-if="isSignup" v-model="fullName" label="Full name" placeholder="Abhishek Kumar Jha" />
-          <AppInput v-model="email" label="Email" type="email" placeholder="you@example.com" />
-          <AppInput v-if="!isForgot" v-model="password" label="Password" type="password" placeholder="••••••••" />
-
-          <p v-if="error" class="auth__error">{{ error }}</p>
-          <p v-if="resetNotice" class="auth__notice">{{ resetNotice }}</p>
-
-          <AppButton :disabled="submitting" :block="true" type="submit">
-            {{ submitting ? "Working..." : submitLabel }}
-          </AppButton>
-        </form>
-
-        <div class="auth__links">
-          <template v-if="isLogin && !isAdmin">
-            <RouterLink to="/auth/forgot-password">Forgot password?</RouterLink>
-            <RouterLink to="/auth/signup">Create account</RouterLink>
-          </template>
-          <template v-else-if="isLogin && isAdmin">
-            <RouterLink to="/auth/login">Back to user login</RouterLink>
-          </template>
-          <template v-else-if="isSignup">
-            <RouterLink to="/auth/login">Already have an account?</RouterLink>
-          </template>
-          <template v-else>
-            <RouterLink to="/auth/login">Back to login</RouterLink>
-          </template>
         </div>
-      </AppCard>
-    </div>
+
+        <AppCard class="auth__card">
+          <form class="app-form-grid" @submit.prevent="handleSubmit">
+            <AppInput v-if="isSignup" v-model="fullName" label="Full name" placeholder="Abhishek Kumar Jha" />
+            <AppInput v-model="email" label="Email" type="email" placeholder="you@example.com" />
+            <AppInput v-if="!isForgot" v-model="password" label="Password" type="password" placeholder="••••••••" />
+
+            <p v-if="error" class="auth__error">{{ error }}</p>
+            <p v-if="resetNotice" class="auth__notice">{{ resetNotice }}</p>
+
+            <AppButton :disabled="submitting" :block="true" type="submit">
+              {{ submitting ? "Working..." : submitLabel }}
+            </AppButton>
+          </form>
+
+          <div class="app-form-grid auth__links">
+            <template v-if="isLogin && !isAdmin">
+              <RouterLink to="/auth/forgot-password">Forgot password?</RouterLink>
+              <RouterLink to="/auth/signup">Create account</RouterLink>
+            </template>
+            <template v-else-if="isLogin && isAdmin">
+              <RouterLink to="/auth/login">Back to user login</RouterLink>
+            </template>
+            <template v-else-if="isSignup">
+              <RouterLink to="/auth/login">Already have an account?</RouterLink>
+            </template>
+            <template v-else>
+              <RouterLink to="/auth/login">Back to login</RouterLink>
+            </template>
+          </div>
+        </AppCard>
+      </AppGrid>
+    </AppPage>
   </div>
 </template>
 
 <style scoped>
 .auth {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: var(--space-6) 0;
   background:
     radial-gradient(circle at top right, rgba(35, 98, 255, 0.16), transparent 26rem),
     radial-gradient(circle at bottom left, rgba(15, 163, 177, 0.12), transparent 30rem),
     var(--color-background);
 }
 
+.auth__page {
+  min-height: 100vh;
+}
+
 .auth__panel {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 28rem);
-  gap: var(--space-6);
   align-items: stretch;
 }
 
 .auth__intro,
 .auth__card {
-  padding: var(--space-6);
+  min-height: 100%;
 }
 
 .auth__intro {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--content-gap);
+  align-content: center;
 }
 
 .auth__brand {
   font-family: var(--font-display);
-  font-size: 1.15rem;
+  font-size: var(--type-title);
   font-weight: 700;
-}
-
-.auth__intro h1 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: clamp(2.4rem, 5vw, 3.8rem);
-  line-height: 0.95;
-  letter-spacing: -0.05em;
 }
 
 .auth__intro p,
@@ -183,19 +177,13 @@ async function handleSubmit(): Promise<void> {
 
 .auth__notes {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--content-gap);
 }
 
 .auth__notes li {
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-lg);
+  padding: var(--content-gap) var(--card-padding);
+  border-radius: var(--card-radius);
   background: var(--color-surface-muted);
-}
-
-.auth__form,
-.auth__links {
-  display: grid;
-  gap: var(--space-4);
 }
 
 .auth__links a {
@@ -210,11 +198,5 @@ async function handleSubmit(): Promise<void> {
 .auth__notice {
   margin: 0;
   color: var(--color-warning);
-}
-
-@media (max-width: 1023px) {
-  .auth__panel {
-    grid-template-columns: 1fr;
-  }
 }
 </style>

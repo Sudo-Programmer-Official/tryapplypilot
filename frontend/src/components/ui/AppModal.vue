@@ -101,21 +101,23 @@ const describedBy = computed(() => `${props.title.replace(/\s+/g, "-").toLowerCa
 .app-modal__panel {
   position: relative;
   width: min(100%, 40rem);
-  padding: var(--space-6);
+  padding: var(--card-padding);
 }
 
 .app-modal__header {
-  margin-bottom: var(--space-5);
+  margin-bottom: var(--card-gap);
 }
 
 .app-modal__title {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 1.4rem;
+  font-size: var(--type-title);
+  line-height: 1.2;
 }
 
 .app-modal__copy {
   margin: var(--space-2) 0 0;
   color: var(--color-text-muted);
+  font-size: var(--type-small);
 }
 </style>

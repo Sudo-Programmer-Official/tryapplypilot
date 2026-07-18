@@ -39,10 +39,3 @@ const columns: TableColumn[] = [
     </AppTable>
   </AppCard>
 </template>
-
-<style scoped>
-td {
-  padding: var(--space-4) 0;
-  border-top: 1px solid var(--color-border);
-}
-</style>

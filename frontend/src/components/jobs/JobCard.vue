@@ -42,12 +42,12 @@ defineEmits<{
 
     <div class="job-card__actions">
       <AppIconButton :label="saved ? 'Remove saved job' : 'Save job'" @click="$emit('toggle-save', job.id)">
-        <Bookmark :size="18" :fill="saved ? 'currentColor' : 'none'" />
+        <Bookmark :fill="saved ? 'currentColor' : 'none'" />
       </AppIconButton>
       <AppButton block :href="job.apply_url" target="_blank" rel="noreferrer">
         <span class="job-card__apply-link">
           Apply
-          <ExternalLink :size="16" />
+          <ExternalLink />
         </span>
       </AppButton>
     </div>
@@ -58,7 +58,7 @@ defineEmits<{
 .job-card__header {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: var(--space-3);
+  gap: var(--content-gap);
   align-items: center;
 }
 
@@ -73,11 +73,15 @@ defineEmits<{
 
 .job-card h3 {
   margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--type-title);
+  line-height: 1.2;
 }
 
 .job-card p {
   margin: var(--space-1) 0 0;
   color: var(--color-text-muted);
+  font-size: var(--type-small);
 }
 
 .job-card__meta,
@@ -85,7 +89,7 @@ defineEmits<{
 .job-card__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  gap: var(--content-gap);
 }
 
 .job-card__actions {

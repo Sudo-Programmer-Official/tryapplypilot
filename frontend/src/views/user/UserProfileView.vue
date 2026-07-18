@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 
+import AppGrid from "../../components/layout/AppGrid.vue";
+import AppPage from "../../components/layout/AppPage.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
 import AppBadge from "../../components/ui/AppBadge.vue";
 import AppButton from "../../components/ui/AppButton.vue";
@@ -61,7 +63,7 @@ async function verifyTelegram(): Promise<void> {
 </script>
 
 <template>
-  <div class="page-stack">
+  <AppPage>
     <PageHeader
       title="Profile"
       description="Keep your account details current and connect Telegram so the notification pipeline can deliver alerts privately."
@@ -71,9 +73,9 @@ async function verifyTelegram(): Promise<void> {
       </template>
     </PageHeader>
 
-    <section class="profile-grid">
+    <AppGrid as="section" columns="2">
       <AppCard title="Personal profile" subtitle="This information powers onboarding progress and future resume workflows.">
-        <div class="form-grid">
+        <div class="app-form-grid">
           <AppInput v-model="draft.full_name" label="Full name" placeholder="Abhishek Kumar Jha" />
           <AppInput v-model="draft.linkedin_url" label="LinkedIn URL" placeholder="https://linkedin.com/in/..." />
           <AppInput v-model="draft.github_url" label="GitHub URL" placeholder="https://github.com/..." />
@@ -90,13 +92,13 @@ async function verifyTelegram(): Promise<void> {
         </div>
       </AppCard>
 
-      <div class="profile-stack">
+      <div class="app-stack app-stack--card">
         <AppCard title="Telegram delivery" subtitle="Each user connects directly to the bot for private alerts.">
-          <div class="telegram-status">
+          <div class="app-actions-row">
             <AppBadge :tone="auth.user.value?.telegram_chat_id ? 'success' : 'warning'">{{ telegramStatus }}</AppBadge>
             <span v-if="auth.user.value?.telegram_chat_id">Chat ID {{ auth.user.value.telegram_chat_id }}</span>
           </div>
-          <div class="telegram-actions">
+          <div class="app-actions-row">
             <AppButton variant="secondary" :disabled="connecting" @click="startTelegramConnect">
               {{ connecting ? "Starting..." : auth.user.value?.telegram_chat_id ? "Reconnect Telegram" : "Connect Telegram" }}
             </AppButton>
@@ -115,7 +117,7 @@ async function verifyTelegram(): Promise<void> {
         </AppCard>
 
         <AppCard title="Account status" subtitle="Basic metadata for support and operations.">
-          <div class="account-meta">
+          <div class="app-meta-grid">
             <div>
               <span class="eyebrow">Email</span>
               <strong>{{ auth.user.value?.email }}</strong>
@@ -135,46 +137,13 @@ async function verifyTelegram(): Promise<void> {
           </div>
         </AppCard>
       </div>
-    </section>
-  </div>
+    </AppGrid>
+  </AppPage>
 </template>
 
 <style scoped>
-.page-stack,
-.form-grid,
-.profile-stack {
-  display: grid;
-  gap: var(--space-4);
-}
-
-.profile-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
-  gap: var(--space-4);
-}
-
-.telegram-status,
-.telegram-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.account-meta {
-  display: grid;
-  gap: var(--space-4);
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-}
-
-.account-meta strong {
+.app-meta-grid strong {
   display: block;
   margin-top: var(--space-2);
-}
-
-@media (max-width: 1023px) {
-  .profile-grid {
-    grid-template-columns: 1fr;
-  }
 }
 </style>

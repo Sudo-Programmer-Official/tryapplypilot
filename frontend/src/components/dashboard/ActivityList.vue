@@ -26,13 +26,13 @@ defineProps<{
 <style scoped>
 .activity-list {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--content-gap);
 }
 
 .activity-list__item {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: var(--space-3);
+  gap: var(--content-gap);
   align-items: start;
 }
 
@@ -63,6 +63,6 @@ defineProps<{
 .activity-list__age {
   margin: var(--space-1) 0 0;
   color: var(--color-text-muted);
-  font-size: 0.92rem;
+  font-size: var(--type-small);
 }
 </style>

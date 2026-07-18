@@ -20,7 +20,7 @@ const active = computed(() => route.path === props.item.to);
 <template>
   <AppTooltip :text="item.label" :disabled="!collapsed">
     <RouterLink class="sidebar-item" :class="{ 'sidebar-item--active': active }" :to="item.to">
-      <component :is="icon" :size="20" />
+      <component :is="icon" />
       <span v-if="!collapsed" class="sidebar-item__label">{{ item.label }}</span>
       <AppBadge v-if="item.badge && !collapsed" tone="info" size="sm">{{ item.badge }}</AppBadge>
     </RouterLink>
@@ -31,14 +31,19 @@ const active = computed(() => route.path === props.item.to);
 .sidebar-item {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--content-gap);
   min-height: 48px;
-  padding: 0 var(--space-4);
-  border-radius: var(--radius-md);
+  padding: 0 var(--content-gap);
+  border-radius: 1rem;
   color: var(--sidebar-text);
   transition:
     background var(--transition-fast),
     color var(--transition-fast);
+}
+
+.sidebar-item :deep(svg) {
+  width: 20px;
+  height: 20px;
 }
 
 .sidebar-item:hover {

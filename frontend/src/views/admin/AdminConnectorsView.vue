@@ -2,6 +2,8 @@
 import { computed, onMounted, ref } from "vue";
 
 import ConnectorHealthTable from "../../components/admin/ConnectorHealthTable.vue";
+import AppGrid from "../../components/layout/AppGrid.vue";
+import AppPage from "../../components/layout/AppPage.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
 import AppCard from "../../components/ui/AppCard.vue";
 import AppEmptyState from "../../components/ui/AppEmptyState.vue";
@@ -52,7 +54,7 @@ onMounted(load);
 </script>
 
 <template>
-  <div class="page-stack">
+  <AppPage>
     <PageHeader
       title="Connectors"
       description="Track source health, cadence, and company coverage so expansion stays data-driven instead of hardcoded."
@@ -61,7 +63,7 @@ onMounted(load);
     <AppEmptyState v-if="error" title="Connector data unavailable" :description="error" />
 
     <template v-else>
-      <div class="connector-grid">
+      <AppGrid columns="4">
         <AppCard
           v-for="card in connectorCards"
           :key="card.id"
@@ -87,27 +89,17 @@ onMounted(load);
             </div>
           </div>
         </AppCard>
-      </div>
+      </AppGrid>
 
       <ConnectorHealthTable :sources="sources" />
     </template>
-  </div>
+  </AppPage>
 </template>
 
 <style scoped>
-.page-stack,
-.connector-grid {
-  display: grid;
-  gap: var(--space-4);
-}
-
-.connector-grid {
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-}
-
 .connector-card__stats {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--content-gap);
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 

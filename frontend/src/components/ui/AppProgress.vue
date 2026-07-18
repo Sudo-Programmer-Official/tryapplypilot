@@ -51,11 +51,12 @@ const circleStyle = computed(() => ({
 
 .app-progress__inner strong {
   font-family: var(--font-display);
-  font-size: 2rem;
+  font-size: var(--type-heading);
   line-height: 1;
 }
 
 .app-progress__inner span {
   color: var(--color-text-muted);
+  font-size: var(--type-caption);
 }
 </style>

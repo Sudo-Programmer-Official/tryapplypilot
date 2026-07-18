@@ -3,11 +3,13 @@ const props = withDefaults(
   defineProps<{
     label: string;
     tone?: "default" | "soft";
+    size?: "sm" | "md";
     disabled?: boolean;
     type?: "button" | "submit";
   }>(),
   {
     tone: "default",
+    size: "md",
     disabled: false,
     type: "button",
   },
@@ -15,7 +17,7 @@ const props = withDefaults(
 </script>
 
 <template>
-  <button :type="type" :disabled="disabled" class="app-icon-button" :class="`app-icon-button--${tone}`" :aria-label="label">
+  <button :type="type" :disabled="disabled" class="app-icon-button" :class="[`app-icon-button--${tone}`, `app-icon-button--${size}`]" :aria-label="label">
     <slot />
   </button>
 </template>
@@ -43,6 +45,11 @@ const props = withDefaults(
   border-color: var(--color-border-strong);
 }
 
+.app-icon-button :deep(svg) {
+  width: 18px;
+  height: 18px;
+}
+
 .app-icon-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -50,5 +57,16 @@ const props = withDefaults(
 
 .app-icon-button--soft {
   background: var(--color-surface-muted);
+}
+
+.app-icon-button--sm {
+  width: 36px;
+  height: 36px;
+  border-radius: 0.875rem;
+}
+
+.app-icon-button--sm :deep(svg) {
+  width: 16px;
+  height: 16px;
 }
 </style>

@@ -4,6 +4,22 @@
   --font-body: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
 
+  --page-max-width: 1440px;
+  --page-padding-x: clamp(20px, 4vw, 40px);
+  --page-padding-y: 32px;
+  --section-gap: 32px;
+  --section-body-gap: 24px;
+  --card-gap: 24px;
+  --card-padding: 24px;
+  --card-radius: 20px;
+  --content-gap: 16px;
+  --hero-copy-max-width: 640px;
+  --hero-card-max-width: 560px;
+  --auth-card-max-width: 32rem;
+  --layout-max-width-laptop: 1280px;
+  --layout-breakpoint-tablet: 768px;
+  --layout-breakpoint-laptop: 1280px;
+
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
@@ -31,9 +47,8 @@
   --transition-slow: 320ms ease;
 
   --sidebar-collapsed-width: 4.5rem;
-  --sidebar-expanded-width: 15rem;
+  --sidebar-expanded-width: 17rem;
   --header-height: 5rem;
-  --max-content-width: 96rem;
 
   --color-background: #f3f6fb;
   --color-surface: rgba(255, 255, 255, 0.92);
@@ -66,4 +81,17 @@
   --gradient-page: radial-gradient(circle at top left, rgba(37, 99, 255, 0.12), transparent 28%),
     radial-gradient(circle at top right, rgba(36, 160, 237, 0.1), transparent 24%),
     linear-gradient(180deg, #f7faff 0%, #eef3fb 100%);
+
+  --type-display-xl: clamp(3.5rem, 7vw, 4.5rem);
+  --type-display: clamp(2.5rem, 4.8vw, 3.75rem);
+  --type-heading: clamp(1.75rem, 2.2vw, 2.25rem);
+  --type-title: 1.125rem;
+  --type-body-lg: 1.375rem;
+  --type-body: 1rem;
+  --type-small: 0.875rem;
+  --type-caption: 0.75rem;
+
+  --line-display: 0.95;
+  --line-heading: 1.08;
+  --line-body: 1.55;
 }

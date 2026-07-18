@@ -9,8 +9,8 @@ defineProps<{
   <div class="page-header">
     <div>
       <p class="eyebrow">TryApplyPilot</p>
-      <h2>{{ title }}</h2>
-      <p>{{ description }}</p>
+      <h1 class="type-heading">{{ title }}</h1>
+      <p class="type-small page-header__description">{{ description }}</p>
     </div>
     <div v-if="$slots.actions">
       <slot name="actions" />
@@ -23,17 +23,11 @@ defineProps<{
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--space-4);
+  gap: var(--content-gap);
 }
 
-.page-header h2 {
-  margin: 0.35rem 0 0;
-  font-family: var(--font-display);
-  font-size: 1.7rem;
-}
-
-.page-header p:last-child {
-  margin: var(--space-2) 0 0;
+.page-header__description {
+  margin-top: var(--space-2);
   color: var(--color-text-muted);
 }
 

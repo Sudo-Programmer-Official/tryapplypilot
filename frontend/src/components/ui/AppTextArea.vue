@@ -35,28 +35,38 @@ defineEmits<{
 }
 
 .app-field__label {
-  font-size: 0.84rem;
+  font-size: var(--type-small);
   font-weight: 600;
   color: var(--color-text);
 }
 
 .app-field__hint {
   color: var(--color-text-muted);
-  font-size: 0.78rem;
+  font-size: var(--type-caption);
 }
 
 .app-textarea {
   width: 100%;
-  padding: 0.75rem 0.9rem;
+  min-height: 3.25rem;
+  padding: 0.875rem 1rem;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: 1rem;
   background: var(--color-surface-elevated);
   color: var(--color-text);
   resize: vertical;
   font: inherit;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    background var(--transition-fast);
 }
 
 .app-textarea::placeholder {
   color: var(--color-text-muted);
+}
+
+.app-textarea:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 4px rgba(37, 99, 255, 0.12);
 }
 </style>

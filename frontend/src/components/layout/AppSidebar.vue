@@ -36,7 +36,7 @@ const showLabels = computed(() => props.expanded);
         <span>Find. Match. Apply.</span>
       </div>
       <AppIconButton v-if="showLabels" label="Pin sidebar" tone="soft" @click="$emit('toggle-pin')">
-        <Pin :size="18" />
+        <Pin />
       </AppIconButton>
     </div>
 
@@ -56,7 +56,7 @@ const showLabels = computed(() => props.expanded);
         <span v-if="showLabels">{{ footerBody }}</span>
       </div>
       <button class="app-sidebar__logout" @click="$emit('logout')">
-        <LogOut :size="18" />
+        <LogOut />
         <span v-if="showLabels">Logout</span>
       </button>
     </div>
@@ -68,8 +68,8 @@ const showLabels = computed(() => props.expanded);
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: var(--space-4);
-  gap: var(--space-5);
+  padding: var(--card-padding);
+  gap: var(--card-gap);
   color: var(--sidebar-text);
   background: var(--sidebar-background);
   border-right: 1px solid var(--sidebar-border);
@@ -82,7 +82,7 @@ const showLabels = computed(() => props.expanded);
 .app-sidebar__brand {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--content-gap);
 }
 
 .app-sidebar__brand-mark {
@@ -93,7 +93,7 @@ const showLabels = computed(() => props.expanded);
   border-radius: 50%;
   background: rgba(37, 99, 255, 0.18);
   color: white;
-  font-size: 1.2rem;
+  font-size: var(--type-title);
 }
 
 .app-sidebar__brand-copy {
@@ -110,12 +110,12 @@ const showLabels = computed(() => props.expanded);
 
 .app-sidebar__brand-row strong {
   font-family: var(--font-display);
-  font-size: 1.2rem;
+  font-size: var(--type-title);
 }
 
 .app-sidebar__brand-copy span {
   color: var(--sidebar-text-muted);
-  font-size: 0.85rem;
+  font-size: var(--type-small);
 }
 
 .app-sidebar__brand-badge {
@@ -123,7 +123,7 @@ const showLabels = computed(() => props.expanded);
   border-radius: var(--radius-pill);
   background: rgba(92, 141, 255, 0.24);
   color: white;
-  font-size: 0.72rem;
+  font-size: var(--type-caption);
   font-weight: 700;
 }
 
@@ -139,9 +139,9 @@ const showLabels = computed(() => props.expanded);
 }
 
 .app-sidebar__status {
-  padding: var(--space-4);
+  padding: var(--content-gap);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: var(--radius-lg);
+  border-radius: var(--card-radius);
   background: rgba(255, 255, 255, 0.04);
 }
 
@@ -152,20 +152,26 @@ const showLabels = computed(() => props.expanded);
 
 .app-sidebar__status span {
   color: var(--sidebar-text-muted);
-  font-size: 0.88rem;
+  font-size: var(--type-small);
 }
 
 .app-sidebar__logout {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--content-gap);
   min-height: 44px;
-  padding: 0 var(--space-4);
+  padding: 0 var(--content-gap);
   border: 0;
-  border-radius: var(--radius-md);
+  border-radius: 1rem;
   background: transparent;
   color: var(--sidebar-text);
   cursor: pointer;
+}
+
+.app-sidebar :deep(.app-icon-button svg),
+.app-sidebar__logout svg {
+  width: 20px;
+  height: 20px;
 }
 
 .app-sidebar__logout:hover {

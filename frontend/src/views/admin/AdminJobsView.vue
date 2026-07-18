@@ -3,6 +3,7 @@ import { onMounted, ref } from "vue";
 
 import JobFilters from "../../components/jobs/JobFilters.vue";
 import JobRow from "../../components/jobs/JobRow.vue";
+import AppPage from "../../components/layout/AppPage.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
 import AppEmptyState from "../../components/ui/AppEmptyState.vue";
 import { fetchAdminJobs } from "../../api/jobs.api";
@@ -32,7 +33,7 @@ onMounted(load);
 </script>
 
 <template>
-  <div class="page-stack">
+  <AppPage>
     <PageHeader
       title="Jobs"
       description="Inspect the shared opportunity pool across connectors, freshness windows, and recommendation decisions."
@@ -54,7 +55,7 @@ onMounted(load);
       description="The connector pipeline may still be syncing or the filter is too narrow."
     />
 
-    <div v-else class="job-list">
+    <div v-else class="app-stack app-stack--content">
       <JobRow
         v-for="job in filteredJobs"
         :key="job.id"
@@ -63,13 +64,5 @@ onMounted(load);
         @toggle-save="toggleSavedJob"
       />
     </div>
-  </div>
+  </AppPage>
 </template>
-
-<style scoped>
-.page-stack,
-.job-list {
-  display: grid;
-  gap: var(--space-4);
-}
-</style>

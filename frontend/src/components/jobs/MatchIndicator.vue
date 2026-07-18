@@ -38,12 +38,13 @@ const style = computed(() => ({
 }
 
 .match-indicator__inner strong {
-  font-size: 0.95rem;
+  font-family: var(--font-display);
+  font-size: var(--type-small);
   line-height: 1;
 }
 
 .match-indicator__inner span {
   color: var(--color-text-muted);
-  font-size: 0.7rem;
+  font-size: var(--type-caption);
 }
 </style>

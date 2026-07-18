@@ -28,7 +28,7 @@ defineEmits<{
           <AppBadge tone="success" size="sm">{{ job.freshness_label }}</AppBadge>
         </div>
         <p>{{ job.company }} · {{ job.source }}</p>
-        <span class="job-row__meta"><MapPin :size="14" /> {{ job.location || job.country_display }} ({{ job.remote_policy }})</span>
+        <span class="job-row__meta"><MapPin class="job-row__meta-icon" /> {{ job.location || job.country_display }} ({{ job.remote_policy }})</span>
       </div>
     </div>
 
@@ -41,12 +41,12 @@ defineEmits<{
 
     <div class="job-row__actions">
       <AppIconButton :label="saved ? 'Remove saved job' : 'Save job'" @click="$emit('toggle-save', job.id)">
-        <Bookmark :size="18" :fill="saved ? 'currentColor' : 'none'" />
+        <Bookmark :fill="saved ? 'currentColor' : 'none'" />
       </AppIconButton>
       <AppButton :href="job.apply_url" target="_blank" rel="noreferrer">
         <span class="job-row__apply-link">
           Apply
-          <ExternalLink :size="16" />
+          <ExternalLink />
         </span>
       </AppButton>
     </div>
@@ -56,8 +56,8 @@ defineEmits<{
 <style scoped>
 .job-row {
   display: grid;
-  gap: var(--space-4);
-  padding: var(--space-4);
+  gap: var(--card-gap);
+  padding: var(--card-padding);
   grid-template-columns: minmax(0, 1.6fr) auto auto;
   align-items: center;
 }
@@ -65,7 +65,7 @@ defineEmits<{
 .job-row__identity {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-4);
+  gap: var(--content-gap);
 }
 
 .job-row__mark {
@@ -80,20 +80,22 @@ defineEmits<{
 .job-row__title-row {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--content-gap);
   flex-wrap: wrap;
 }
 
 .job-row h3 {
   margin: 0;
-  font-size: 1.05rem;
+  font-family: var(--font-display);
+  font-size: var(--type-title);
+  line-height: 1.2;
 }
 
 .job-row p,
 .job-row__meta {
   margin: var(--space-1) 0 0;
   color: var(--color-text-muted);
-  font-size: 0.92rem;
+  font-size: var(--type-small);
 }
 
 .job-row__meta {
@@ -102,9 +104,14 @@ defineEmits<{
   gap: var(--space-2);
 }
 
+.job-row__meta-icon {
+  width: 16px;
+  height: 16px;
+}
+
 .job-row__match {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--content-gap);
   justify-items: center;
 }
 
@@ -117,7 +124,7 @@ defineEmits<{
 
 .job-row__actions {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--content-gap);
 }
 
 .job-row__apply-link {

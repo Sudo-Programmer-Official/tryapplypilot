@@ -28,24 +28,27 @@ defineProps<{
 <style scoped>
 .app-card {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--content-gap);
+  overflow: hidden;
+  height: 100%;
 }
 
 .app-card--padded {
-  padding: var(--space-5);
+  padding: var(--card-padding);
 }
 
 .app-card__header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--space-4);
+  gap: var(--content-gap);
 }
 
 .app-card__title {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 1.15rem;
+  font-size: var(--type-title);
+  line-height: 1.2;
   font-weight: 700;
   letter-spacing: -0.02em;
 }
@@ -53,6 +56,7 @@ defineProps<{
 .app-card__subtitle {
   margin: var(--space-1) 0 0;
   color: var(--color-text-muted);
-  font-size: 0.92rem;
+  font-size: var(--type-small);
+  line-height: 1.5;
 }
 </style>

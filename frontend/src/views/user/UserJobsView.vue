@@ -3,6 +3,7 @@ import { onMounted, ref } from "vue";
 
 import JobFilters from "../../components/jobs/JobFilters.vue";
 import JobRow from "../../components/jobs/JobRow.vue";
+import AppPage from "../../components/layout/AppPage.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
 import AppCard from "../../components/ui/AppCard.vue";
 import AppEmptyState from "../../components/ui/AppEmptyState.vue";
@@ -33,16 +34,16 @@ onMounted(load);
 </script>
 
 <template>
-  <div class="page-stack">
+  <AppPage>
     <PageHeader
       title="Jobs"
       description="Search, filter, and bookmark the roles that already passed your personalized scoring pipeline."
     >
       <template #actions>
-        <div class="jobs-summary surface-card">
-          <strong>{{ filteredJobs.length }}</strong>
-          <span>matching jobs · {{ savedJobs.length }} saved</span>
-        </div>
+        <AppCard class="jobs-summary" :padded="true">
+          <strong class="type-display">{{ filteredJobs.length }}</strong>
+          <span class="type-caption">matching jobs · {{ savedJobs.length }} saved</span>
+        </AppCard>
       </template>
     </PageHeader>
 
@@ -62,7 +63,7 @@ onMounted(load);
       description="Try lowering the score threshold or clearing the search to widen the queue."
     />
 
-    <div v-else class="job-list">
+    <div v-else class="app-stack app-stack--content">
       <JobRow
         v-for="job in filteredJobs"
         :key="job.id"
@@ -71,30 +72,14 @@ onMounted(load);
         @toggle-save="toggleSavedJob"
       />
     </div>
-  </div>
+  </AppPage>
 </template>
 
 <style scoped>
-.page-stack,
-.job-list {
-  display: grid;
-  gap: var(--space-4);
-}
-
 .jobs-summary {
   display: grid;
   gap: var(--space-1);
-  padding: var(--space-4);
   text-align: right;
-}
-
-.jobs-summary strong {
-  font-family: var(--font-display);
-  font-size: 1.6rem;
-}
-
-.jobs-summary span {
-  color: var(--color-text-muted);
-  font-size: 0.85rem;
+  min-width: 12rem;
 }
 </style>
