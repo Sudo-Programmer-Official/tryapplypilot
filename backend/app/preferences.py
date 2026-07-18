@@ -53,7 +53,11 @@ def build_scout_settings(settings: AppSettings) -> ScoutSettings:
         NotificationChannel(
             channel="telegram",
             enabled=settings.telegram.delivery_configured,
-            destination=settings.telegram.chat_id or "Telegram not configured",
+            destination=(
+                f"@{settings.telegram.bot_username}"
+                if settings.telegram.bot_username
+                else settings.telegram.chat_id or "Telegram bot not configured"
+            ),
         ),
         NotificationChannel(channel="email", enabled=False, destination="Primary inbox"),
         NotificationChannel(channel="slack", enabled=False, destination="#job-radar"),

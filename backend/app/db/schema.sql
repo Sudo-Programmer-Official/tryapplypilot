@@ -88,6 +88,22 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE INDEX IF NOT EXISTS users_role_idx ON users (role);
 CREATE INDEX IF NOT EXISTS users_created_at_idx ON users (created_at DESC);
 
+CREATE TABLE IF NOT EXISTS resumes (
+    resume_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
+    display_name TEXT NOT NULL,
+    original_filename TEXT NOT NULL,
+    storage_path TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    file_size_bytes BIGINT NOT NULL,
+    extracted_text TEXT NOT NULL DEFAULT '',
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS resumes_user_created_idx ON resumes (user_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS refresh_tokens (
     refresh_token_id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
@@ -139,6 +155,26 @@ CREATE TABLE IF NOT EXISTS user_alerts (
 
 CREATE INDEX IF NOT EXISTS user_alerts_created_at_idx ON user_alerts (created_at DESC);
 CREATE INDEX IF NOT EXISTS user_alerts_user_created_at_idx ON user_alerts (user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS company_requests (
+    company_request_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
+    company_name TEXT NOT NULL,
+    career_url TEXT NOT NULL DEFAULT '',
+    connector_suggestion TEXT NOT NULL DEFAULT '',
+    external_identifier_suggestion TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')),
+    admin_notes TEXT NOT NULL DEFAULT '',
+    reviewed_at TIMESTAMPTZ,
+    reviewed_by_user_id TEXT REFERENCES users (user_id) ON DELETE SET NULL,
+    approved_company_id TEXT REFERENCES companies (company_id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS company_requests_status_created_idx ON company_requests (status, created_at DESC);
+CREATE INDEX IF NOT EXISTS company_requests_user_created_idx ON company_requests (user_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS role_families (
     role_family_id TEXT PRIMARY KEY,

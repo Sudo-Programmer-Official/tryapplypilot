@@ -201,9 +201,9 @@ async def build_dashboard_snapshot(now: datetime | None = None) -> dict[str, Any
                     "label": "Telegram",
                     "status": "healthy" if runtime.settings.telegram.delivery_configured else "lagging",
                     "detail": (
-                        "Bot token and chat destination are connected."
+                        "Bot is configured for user-linked Telegram delivery."
                         if runtime.settings.telegram.delivery_configured
-                        else "Telegram bot or chat destination is missing."
+                        else "Telegram bot credentials are missing."
                     ),
                 },
             ],

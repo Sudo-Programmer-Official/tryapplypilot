@@ -9,6 +9,7 @@ JobState = Literal["new", "seen", "dismissed", "skipped"]
 MatchDecision = Literal["APPLY_NOW", "REVIEW", "IGNORE"]
 NotificationChannelName = Literal["telegram", "email", "slack", "desktop"]
 UserRole = Literal["super_admin", "admin", "user"]
+CompanyRequestStatus = Literal["pending", "approved", "rejected"]
 
 
 @dataclass(frozen=True)
@@ -143,6 +144,46 @@ class AuthTokens:
     token_type: str
     expires_in_seconds: int
     refresh_expires_in_seconds: int
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class ResumeAsset:
+    id: str
+    user_id: str
+    display_name: str
+    original_filename: str
+    storage_path: str
+    mime_type: str
+    file_size_bytes: int
+    extracted_text_preview: str
+    extracted_skills: list[str]
+    role_focus: str
+    created_at: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class CompanyRequest:
+    id: str
+    user_id: str
+    requester_email: str
+    company_name: str
+    career_url: str
+    connector_suggestion: str
+    external_identifier_suggestion: str
+    notes: str
+    status: CompanyRequestStatus
+    admin_notes: str = ""
+    reviewed_at: str | None = None
+    reviewed_by_user_id: str | None = None
+    approved_company_id: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)

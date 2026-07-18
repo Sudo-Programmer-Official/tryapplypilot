@@ -46,6 +46,16 @@ uvicorn app.main:app --reload
 
 The API will be available at `http://localhost:8000`.
 
+### Deploy backend on Render
+
+This repo is a monorepo, so the safest Render setup is:
+
+- `Root Directory`: `backend`
+- `Build Command`: `pip install -r requirements.txt`
+- `Start Command`: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+
+If you leave `Root Directory` blank and deploy from the repo root, the committed top-level `requirements.txt` installs the backend package with `pip install -r requirements.txt`, so the same start command still works.
+
 ### Frontend
 
 ```bash

@@ -123,11 +123,10 @@ async def sync_recent_jobs_for_user(user: UserAccount, settings: AppSettings | N
             """
             SELECT *
             FROM jobs
-            WHERE COALESCE(published_at, first_seen_at) >= NOW() - ($1::interval)
+            WHERE COALESCE(published_at, first_seen_at) >= NOW() - INTERVAL '14 days'
             ORDER BY COALESCE(published_at, first_seen_at) DESC
             LIMIT 100
-            """,
-            f"{resolved_settings.radar.dashboard_freshness_hours} hours",
+            """
         )
 
         for row in rows:
