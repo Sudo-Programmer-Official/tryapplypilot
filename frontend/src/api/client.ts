@@ -1,6 +1,18 @@
 import type { AuthTokens, AuthUser } from "../types";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+function resolveApiBaseUrl(): string {
+  const configuredUrl = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL;
+  if (typeof configuredUrl === "string" && configuredUrl.trim()) {
+    return configuredUrl.trim().replace(/\/+$/, "");
+  }
+  if (import.meta.env.DEV) {
+    return "http://localhost:8000";
+  }
+  console.warn("Missing Vite API base URL. Set VITE_API_BASE_URL or VITE_API_URL for production builds.");
+  return "";
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
 const ACCESS_TOKEN_KEY = "tryapplypilot-access-token";
 const REFRESH_TOKEN_KEY = "tryapplypilot-refresh-token";
 
