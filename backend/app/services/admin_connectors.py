@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import date, datetime, timedelta, timezone
 import json
 import re
@@ -8,7 +9,18 @@ from typing import Any
 from app.catalog import list_companies as list_catalog_companies, upsert_company
 from app.company_catalog_defaults import AI_COMPANY_COLLECTIONS, ai_company_collections_for_company
 from app.config import AppSettings, get_settings
+from app.connectors.amazon_jobs import AmazonJobsConnector, build_amazon_career_site
+from app.connectors.ashby import AshbyBoard, AshbyJobConnector
+from app.connectors.comeet import ComeetJobConnector, build_comeet_site
+from app.connectors.google_careers import GoogleCareersJobConnector, build_google_career_site
+from app.connectors.icims import ICIMSJobConnector, build_icims_career_site
+from app.connectors.jobvite import JobviteJobConnector, build_jobvite_site
+from app.connectors.microsoft_careers import MicrosoftCareerSite, MicrosoftCareersJobConnector
+from app.connectors.oracle_recruiting_cloud import OracleRecruitingCloudConnector, build_oracle_recruiting_cloud_site
 from app.connectors.registry import build_default_registry
+from app.connectors.smartrecruiters import SmartRecruitersJobConnector, build_smartrecruiters_site
+from app.connectors.successfactors import SuccessFactorsJobConnector, build_successfactors_site
+from app.connectors.workday import WorkdayJobConnector, build_workday_career_site
 from app.db.client import connection
 from app.domain import CompanyPreference
 from app.maintenance_service import get_maintenance_service
@@ -16,7 +28,23 @@ from app.market_scout import MarketScoutAgent
 from app.runtime import get_runtime
 
 ATS_IDENTIFIER_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
-RUNTIME_SUPPORTED_CONNECTORS = frozenset({"greenhouse", "lever", "ashby", "microsoft-careers"})
+RUNTIME_SUPPORTED_CONNECTORS = frozenset(
+    {
+        "greenhouse",
+        "lever",
+        "ashby",
+        "microsoft-careers",
+        "workday",
+        "smartrecruiters",
+        "icims",
+        "jobvite",
+        "comeet",
+        "oracle-recruiting-cloud",
+        "successfactors",
+        "google-careers",
+        "amazon-jobs",
+    }
+)
 
 
 def _json_object(value: object) -> dict[str, object]:
@@ -43,10 +71,130 @@ def _monitoring_reason(
         return ("disabled", "Monitoring is disabled. Enable the company to resume polling.")
     if definition is None:
         return ("connector_unavailable", "No connector definition exists for this company.")
+    if company.connector == "bamboohr":
+        return (
+            "planned",
+            "BambooHR's official ATS API requires authenticated company credentials, and a reusable public candidate feed is not validated yet.",
+        )
     if definition.admin_status == "planned":
         return ("planned", "This connector is still planned and cannot poll yet.")
     if company.connector not in RUNTIME_SUPPORTED_CONNECTORS:
         return ("connector_unavailable", "The connector is registered but not implemented in the live runtime yet.")
+    if company.connector == "workday" and not company.career_url.strip():
+        return ("missing_career_url", "The Workday career URL is missing.")
+    if company.connector == "workday":
+        try:
+            build_workday_career_site(
+                company=company.company,
+                career_url=company.career_url,
+                external_identifier=company.external_identifier.strip(),
+                country=company.country,
+                role_families=tuple(company.role_families),
+            )
+        except ValueError:
+            return ("invalid_career_url", "The Workday career URL or identifier could not be parsed.")
+    if company.connector == "smartrecruiters":
+        try:
+            build_smartrecruiters_site(
+                company=company.company,
+                career_url=company.career_url,
+                external_identifier=company.external_identifier.strip(),
+                country=company.country,
+                role_families=tuple(company.role_families),
+            )
+        except ValueError:
+            return ("invalid_career_url", "The SmartRecruiters URL or identifier could not be parsed.")
+    if company.connector == "icims" and not (company.career_url.strip() or company.external_identifier.strip()):
+        return ("missing_career_url", "The iCIMS career URL or site identifier is missing.")
+    if company.connector == "icims":
+        try:
+            build_icims_career_site(
+                company=company.company,
+                career_url=company.career_url,
+                external_identifier=company.external_identifier.strip(),
+                country=company.country,
+                role_families=tuple(company.role_families),
+            )
+        except ValueError:
+            return ("invalid_career_url", "The iCIMS career URL or site identifier could not be parsed.")
+    if company.connector == "jobvite" and not (company.career_url.strip() or company.external_identifier.strip()):
+        return ("missing_career_url", "The Jobvite career URL or board identifier is missing.")
+    if company.connector == "jobvite":
+        try:
+            build_jobvite_site(
+                company=company.company,
+                career_url=company.career_url,
+                external_identifier=company.external_identifier.strip(),
+                country=company.country,
+                role_families=tuple(company.role_families),
+            )
+        except ValueError:
+            return ("invalid_career_url", "The Jobvite career URL or board identifier could not be parsed.")
+    if company.connector == "comeet" and not (company.external_identifier.strip() or company.career_url.strip()):
+        return ("missing_identifier", "The Comeet company UID and public token are missing.")
+    if company.connector == "comeet":
+        try:
+            build_comeet_site(
+                company=company.company,
+                career_url=company.career_url,
+                external_identifier=company.external_identifier.strip(),
+                country=company.country,
+                role_families=tuple(company.role_families),
+            )
+        except ValueError:
+            return ("invalid_career_url", "The Comeet company UID, token, or career URL could not be parsed.")
+    if company.connector == "oracle-recruiting-cloud" and not company.career_url.strip():
+        return ("missing_career_url", "The Oracle Recruiting Cloud career URL is missing.")
+    if company.connector == "oracle-recruiting-cloud" and not company.external_identifier.strip():
+        return ("missing_identifier", "The Oracle Recruiting Cloud site number is missing.")
+    if company.connector == "oracle-recruiting-cloud":
+        try:
+            build_oracle_recruiting_cloud_site(
+                company=company.company,
+                career_url=company.career_url,
+                external_identifier=company.external_identifier.strip(),
+                country=company.country,
+                role_families=tuple(company.role_families),
+            )
+        except ValueError:
+            return ("invalid_career_url", "The Oracle Recruiting Cloud URL or site number could not be parsed.")
+    if company.connector == "successfactors" and not company.career_url.strip():
+        return ("missing_career_url", "The SuccessFactors career URL is missing.")
+    if company.connector == "successfactors":
+        try:
+            build_successfactors_site(
+                company=company.company,
+                career_url=company.career_url,
+                external_identifier=company.external_identifier.strip(),
+                country=company.country,
+                role_families=tuple(company.role_families),
+            )
+        except ValueError:
+            return ("invalid_career_url", "The SuccessFactors career URL could not be parsed.")
+    if company.connector == "google-careers" and not company.career_url.strip():
+        return ("missing_career_url", "The Google Careers URL is missing.")
+    if company.connector == "google-careers":
+        try:
+            build_google_career_site(
+                company=company.company,
+                career_url=company.career_url,
+                external_identifier=company.external_identifier.strip(),
+                country=company.country,
+                role_families=tuple(company.role_families),
+            )
+        except ValueError:
+            return ("invalid_career_url", "The Google Careers URL or identifier could not be parsed.")
+    if company.connector == "amazon-jobs":
+        try:
+            build_amazon_career_site(
+                company=company.company,
+                career_url=company.career_url,
+                external_identifier=company.external_identifier.strip(),
+                country=company.country,
+                role_families=tuple(company.role_families),
+            )
+        except ValueError:
+            return ("invalid_career_url", "The Amazon Jobs URL or identifier could not be parsed.")
     if company.connector in {"greenhouse", "lever", "ashby"} and not company.external_identifier.strip():
         return ("missing_identifier", "The ATS board identifier is missing.")
     if company.connector in {"greenhouse", "lever", "ashby"} and not ATS_IDENTIFIER_PATTERN.match(company.external_identifier.strip()):
@@ -64,6 +212,10 @@ def _recommended_action(reason: str, connector: str) -> str:
         return "Enable monitoring"
     if reason == "missing_identifier":
         return "Add the external board identifier"
+    if reason == "missing_career_url":
+        return "Add the career URL"
+    if reason == "invalid_career_url":
+        return "Correct the career URL or identifier and re-validate"
     if reason == "invalid_board":
         return "Correct the board identifier and re-validate"
     if reason == "validation_failed":
@@ -121,6 +273,202 @@ def _quality_grade(score: float, roadmap_status: str) -> str:
     if score >= 70:
         return "C"
     return "D"
+
+
+def _readiness_check(key: str, label: str, status: str, detail: str) -> dict[str, str]:
+    return {
+        "key": key,
+        "label": label,
+        "status": status,
+        "detail": detail,
+    }
+
+
+def _absolute_http_url(value: object) -> bool:
+    text = str(value or "").strip()
+    return text.startswith("https://") or text.startswith("http://")
+
+
+def _build_production_readiness(
+    company: CompanyPreference,
+    *,
+    validation_payload: dict[str, object] | None,
+    run_stats: dict[str, object] | None,
+    job_stats: dict[str, object] | None,
+) -> dict[str, object]:
+    registry = build_default_registry()
+    definition = registry.get(company.connector)
+    validation = validation_payload or {}
+    runs = run_stats or {}
+    jobs = job_stats or {}
+    monitoring_reason, monitoring_detail = _monitoring_reason(company, validation_payload=validation_payload)
+
+    validation_passed = str(validation.get("status") or "") == "passed"
+    jobs_fetched = int(validation.get("jobs_fetched") or 0)
+    pages_scanned = int(validation.get("pages_scanned") or 0)
+    expected_pages = int(validation.get("expected_pages") or 0)
+    partial_reason = str(validation.get("partial_reason") or "")
+    inventory_complete = bool(validation.get("inventory_complete"))
+    sample_job_title = str(validation.get("sample_job_title") or "").strip()
+    sample_apply_url = str(validation.get("sample_apply_url") or "").strip()
+    sample_description_present = bool(validation.get("sample_description_present"))
+    sample_company_name = str(validation.get("sample_company_name") or "").strip()
+    sample_location = str(validation.get("sample_location") or "").strip()
+
+    successful_runs = int(runs.get("successful_runs", 0) or 0)
+    finished_runs = int(runs.get("finished_runs", 0) or 0)
+    manual_successes = int(runs.get("manual_successes", 0) or 0)
+    scheduled_successes = int(runs.get("scheduled_successes", 0) or 0)
+    max_pages_scanned = int(runs.get("max_pages_scanned", 0) or 0)
+    max_expected_pages = int(runs.get("max_expected_pages", 0) or 0)
+    matched_total = int(runs.get("matched_total", 0) or 0)
+    alerts_sent_total = int(runs.get("alerts_sent_total", 0) or 0)
+    jobs_inserted_total = int(runs.get("jobs_inserted_total", 0) or 0)
+    jobs_updated_total = int(runs.get("jobs_updated_total", 0) or 0)
+    jobs_ignored_total = int(runs.get("jobs_ignored_total", 0) or 0)
+    any_complete_inventory = bool(runs.get("any_complete_inventory")) or inventory_complete
+    retry_evidence = bool(runs.get("retry_evidence"))
+    total_non_active_jobs = (
+        int(jobs.get("stale_jobs", 0) or 0)
+        + int(jobs.get("closed_jobs", 0) or 0)
+        + int(jobs.get("expired_jobs", 0) or 0)
+        + int(jobs.get("archived_jobs", 0) or 0)
+    )
+
+    blocked = monitoring_reason != "monitored"
+    checks: list[dict[str, str]] = []
+
+    if blocked:
+        for key, label in (
+            ("discovery", "Discovery works"),
+            ("pagination", "Pagination works"),
+            ("job_details", "Job detail extraction works"),
+            ("metadata", "Company metadata is normalized"),
+            ("apply_url", "Apply URL is correct"),
+            ("deduplication", "Deduplication works"),
+            ("lifecycle", "Lifecycle transitions work"),
+            ("inventory", "Inventory reconciliation works"),
+            ("scheduler", "Scheduler execution works"),
+            ("manual_run", "Manual Run now works"),
+            ("retry", "Retry logic works"),
+            ("metrics", "Metrics are recorded"),
+            ("history", "Run history is complete"),
+            ("matching", "Matching pipeline works"),
+            ("telegram", "Telegram notification works"),
+        ):
+            checks.append(_readiness_check(key, label, "blocked", monitoring_detail))
+    else:
+        if validation_passed and jobs_fetched > 0:
+            checks.append(_readiness_check("discovery", "Discovery works", "passed", f"Fetched {jobs_fetched} job(s) during live validation."))
+        elif validation:
+            checks.append(_readiness_check("discovery", "Discovery works", "blocked", str(validation.get("message") or "Live validation did not fetch jobs.")))
+        else:
+            checks.append(_readiness_check("discovery", "Discovery works", "pending_evidence", "Run live validation to confirm job discovery."))
+
+        if definition is not None and definition.pagination_mode == "none":
+            checks.append(_readiness_check("pagination", "Pagination works", "not_applicable", "This connector returns a full board without pagination."))
+        elif max_pages_scanned > 1 or max_expected_pages > 1 or pages_scanned > 1 or expected_pages > 1 or partial_reason == "page_limit_reached":
+            checks.append(_readiness_check("pagination", "Pagination works", "passed", "Multi-page inventory evidence was captured."))
+        elif validation and validation_passed:
+            checks.append(_readiness_check("pagination", "Pagination works", "pending_evidence", "A multi-page board or page-limit sample has not been observed yet."))
+        else:
+            checks.append(_readiness_check("pagination", "Pagination works", "pending_evidence", "Validate or run the connector against a paginated board."))
+
+        if validation_passed and sample_job_title and sample_description_present:
+            checks.append(_readiness_check("job_details", "Job detail extraction works", "passed", "Live validation returned a sample job title and description."))
+        elif validation_passed:
+            checks.append(_readiness_check("job_details", "Job detail extraction works", "pending_evidence", "Discovery succeeded, but sample description evidence is missing."))
+        else:
+            checks.append(_readiness_check("job_details", "Job detail extraction works", "pending_evidence", "Run live validation to confirm detail extraction."))
+
+        if validation_passed and sample_company_name == company.company and sample_location:
+            checks.append(_readiness_check("metadata", "Company metadata is normalized", "passed", f"Sample job normalized to {sample_company_name} in {sample_location}."))
+        elif validation_passed and sample_location:
+            checks.append(_readiness_check("metadata", "Company metadata is normalized", "pending_evidence", "Location normalized, but company-name normalization evidence is incomplete."))
+        else:
+            checks.append(_readiness_check("metadata", "Company metadata is normalized", "pending_evidence", "Run live validation to confirm normalized metadata."))
+
+        if validation_passed and _absolute_http_url(sample_apply_url):
+            checks.append(_readiness_check("apply_url", "Apply URL is correct", "passed", f"Sample apply URL resolved to {sample_apply_url}."))
+        elif validation_passed:
+            checks.append(_readiness_check("apply_url", "Apply URL is correct", "blocked", "Validation returned a non-absolute or missing apply URL."))
+        else:
+            checks.append(_readiness_check("apply_url", "Apply URL is correct", "pending_evidence", "Run live validation to confirm the apply URL."))
+
+        if successful_runs >= 2 and (jobs_updated_total > 0 or jobs_ignored_total > 0):
+            checks.append(_readiness_check("deduplication", "Deduplication works", "passed", "Repeated successful runs updated or ignored existing jobs instead of duplicating them."))
+        elif successful_runs >= 1:
+            checks.append(_readiness_check("deduplication", "Deduplication works", "pending_evidence", "Need at least two successful runs with repeat inventory evidence."))
+        else:
+            checks.append(_readiness_check("deduplication", "Deduplication works", "pending_evidence", "The connector has not completed enough successful runs yet."))
+
+        if any_complete_inventory and (total_non_active_jobs > 0 or successful_runs >= 2):
+            checks.append(_readiness_check("lifecycle", "Lifecycle transitions work", "passed", "Lifecycle-safe inventory data exists and the connector has enough successful runs to reconcile job state."))
+        elif any_complete_inventory:
+            checks.append(_readiness_check("lifecycle", "Lifecycle transitions work", "pending_evidence", "Complete inventory metadata exists, but no lifecycle transition evidence has been observed yet."))
+        else:
+            checks.append(_readiness_check("lifecycle", "Lifecycle transitions work", "pending_evidence", "A complete inventory run is required before lifecycle transitions can be trusted."))
+
+        if any_complete_inventory and successful_runs >= 1:
+            checks.append(_readiness_check("inventory", "Inventory reconciliation works", "passed", "At least one successful complete inventory run is recorded."))
+        elif successful_runs >= 1:
+            checks.append(_readiness_check("inventory", "Inventory reconciliation works", "pending_evidence", "Successful runs exist, but none have confirmed a complete inventory yet."))
+        else:
+            checks.append(_readiness_check("inventory", "Inventory reconciliation works", "pending_evidence", "No successful inventory run is recorded yet."))
+
+        if scheduled_successes > 0:
+            checks.append(_readiness_check("scheduler", "Scheduler execution works", "passed", "At least one scheduled connector run succeeded."))
+        else:
+            checks.append(_readiness_check("scheduler", "Scheduler execution works", "pending_evidence", "No successful scheduled run is recorded for this company yet."))
+
+        if manual_successes > 0:
+            checks.append(_readiness_check("manual_run", "Manual Run now works", "passed", "The admin run-now path succeeded at least once."))
+        else:
+            checks.append(_readiness_check("manual_run", "Manual Run now works", "pending_evidence", "Trigger a successful manual run to validate operator control."))
+
+        if retry_evidence:
+            checks.append(_readiness_check("retry", "Retry logic works", "passed", "Connector retries were exercised during runtime."))
+        else:
+            checks.append(_readiness_check("retry", "Retry logic works", "pending_evidence", "No recorded retry evidence yet."))
+
+        if finished_runs > 0:
+            checks.append(_readiness_check("metrics", "Metrics are recorded", "passed", "Connector runs are writing runtime metrics."))
+            checks.append(_readiness_check("history", "Run history is complete", "passed", "Connector runs are recorded with completion metadata."))
+        else:
+            checks.append(_readiness_check("metrics", "Metrics are recorded", "pending_evidence", "No finished run has written metrics yet."))
+            checks.append(_readiness_check("history", "Run history is complete", "pending_evidence", "No finished run is visible in run history yet."))
+
+        if matched_total > 0:
+            checks.append(_readiness_check("matching", "Matching pipeline works", "passed", f"{matched_total} matched job(s) were recorded for this connector company."))
+        else:
+            checks.append(_readiness_check("matching", "Matching pipeline works", "pending_evidence", "No matched jobs have been recorded for this company yet."))
+
+        if alerts_sent_total > 0:
+            checks.append(_readiness_check("telegram", "Telegram notification works", "passed", f"{alerts_sent_total} Telegram alert(s) were sent from this connector company."))
+        else:
+            checks.append(_readiness_check("telegram", "Telegram notification works", "pending_evidence", "No Telegram delivery evidence exists for this connector company yet."))
+
+    applicable_total = sum(1 for check in checks if check["status"] != "not_applicable")
+    passed_total = sum(1 for check in checks if check["status"] == "passed")
+    blocked_total = sum(1 for check in checks if check["status"] == "blocked")
+    pending_total = sum(1 for check in checks if check["status"] == "pending_evidence")
+
+    if blocked_total > 0:
+        status = "blocked"
+    elif pending_total > 0:
+        status = "pending"
+    else:
+        status = "ready"
+
+    return {
+        "status": status,
+        "passed": passed_total,
+        "total": applicable_total,
+        "blocked": blocked_total,
+        "pending": pending_total,
+        "summary": f"{passed_total}/{applicable_total} checks passed",
+        "checks": checks,
+    }
 
 
 def _trend_label(day: date) -> str:
@@ -286,12 +634,35 @@ async def build_admin_connectors_workspace(settings: AppSettings | None = None) 
                 ) AS recent_runs,
                 COUNT(*) FILTER (
                     WHERE run_status = 'succeeded'
+                ) AS successful_runs,
+                COUNT(*) FILTER (
+                    WHERE finished_at IS NOT NULL
+                ) AS finished_runs,
+                COUNT(*) FILTER (
+                    WHERE run_status = 'succeeded'
                       AND started_at >= NOW() - INTERVAL '14 days'
                 ) AS recent_successes,
                 COUNT(*) FILTER (
+                    WHERE run_status = 'succeeded'
+                      AND trigger = 'manual'
+                ) AS manual_successes,
+                COUNT(*) FILTER (
+                    WHERE run_status = 'succeeded'
+                      AND trigger <> 'manual'
+                ) AS scheduled_successes,
+                COUNT(*) FILTER (
                     WHERE run_status = 'failed'
                       AND started_at >= NOW() - INTERVAL '7 days'
-                ) AS recent_failures
+                ) AS recent_failures,
+                COALESCE(SUM(jobs_inserted) FILTER (WHERE run_status = 'succeeded'), 0) AS jobs_inserted_total,
+                COALESCE(SUM(jobs_updated) FILTER (WHERE run_status = 'succeeded'), 0) AS jobs_updated_total,
+                COALESCE(SUM(jobs_ignored) FILTER (WHERE run_status = 'succeeded'), 0) AS jobs_ignored_total,
+                COALESCE(SUM(jobs_matched) FILTER (WHERE run_status = 'succeeded'), 0) AS matched_total,
+                COALESCE(SUM(alerts_sent) FILTER (WHERE run_status = 'succeeded'), 0) AS alerts_sent_total,
+                BOOL_OR(inventory_complete) FILTER (WHERE run_status = 'succeeded') AS any_complete_inventory,
+                BOOL_OR(COALESCE(retries, 0) > 0) AS retry_evidence,
+                MAX(COALESCE(pages_scanned, 0)) FILTER (WHERE run_status = 'succeeded') AS max_pages_scanned,
+                MAX(COALESCE(expected_pages, 0)) FILTER (WHERE run_status = 'succeeded') AS max_expected_pages
             FROM connector_runs
             GROUP BY company_id, split_part(connector_key, ':', 1)
             """
@@ -323,6 +694,7 @@ async def build_admin_connectors_workspace(settings: AppSettings | None = None) 
                 COALESCE(SUM(jobs_archived) FILTER (WHERE started_at >= date_trunc('day', NOW())), 0) AS jobs_archived_today,
                 COALESCE(SUM(jobs_ignored) FILTER (WHERE started_at >= date_trunc('day', NOW())), 0) AS jobs_ignored_today,
                 COALESCE(SUM(alerts_sent) FILTER (WHERE started_at >= date_trunc('day', NOW())), 0) AS alerts_sent_today,
+                COALESCE(SUM(requests_made) FILTER (WHERE started_at >= date_trunc('day', NOW())), 0) AS requests_made_today,
                 COALESCE(SUM(retries) FILTER (WHERE started_at >= date_trunc('day', NOW())), 0) AS retries_today,
                 AVG(EXTRACT(EPOCH FROM (finished_at - started_at))) FILTER (
                     WHERE run_status = 'succeeded'
@@ -375,9 +747,14 @@ async def build_admin_connectors_workspace(settings: AppSettings | None = None) 
                 cr.jobs_matched,
                 cr.alerts_sent,
                 cr.alerts_failed,
+                cr.requests_made,
                 cr.companies_scanned,
                 cr.retries,
                 cr.trigger,
+                cr.inventory_complete,
+                cr.pages_scanned,
+                cr.expected_pages,
+                cr.partial_reason,
                 cr.error_message
             FROM connector_runs cr
             LEFT JOIN companies c ON c.company_id = cr.company_id
@@ -457,6 +834,19 @@ async def build_admin_connectors_workspace(settings: AppSettings | None = None) 
             "recent_failures": int(row["recent_failures"] or 0),
             "recent_runs": int(row["recent_runs"] or 0),
             "recent_successes": int(row["recent_successes"] or 0),
+            "successful_runs": int(row["successful_runs"] or 0),
+            "finished_runs": int(row["finished_runs"] or 0),
+            "manual_successes": int(row["manual_successes"] or 0),
+            "scheduled_successes": int(row["scheduled_successes"] or 0),
+            "jobs_inserted_total": int(row["jobs_inserted_total"] or 0),
+            "jobs_updated_total": int(row["jobs_updated_total"] or 0),
+            "jobs_ignored_total": int(row["jobs_ignored_total"] or 0),
+            "matched_total": int(row["matched_total"] or 0),
+            "alerts_sent_total": int(row["alerts_sent_total"] or 0),
+            "any_complete_inventory": bool(row["any_complete_inventory"]),
+            "retry_evidence": bool(row["retry_evidence"]),
+            "max_pages_scanned": int(row["max_pages_scanned"] or 0),
+            "max_expected_pages": int(row["max_expected_pages"] or 0),
         }
 
     connector_aggregate_stats = {
@@ -473,6 +863,7 @@ async def build_admin_connectors_workspace(settings: AppSettings | None = None) 
             "jobs_archived_today": int(row["jobs_archived_today"] or 0),
             "jobs_ignored_today": int(row["jobs_ignored_today"] or 0),
             "alerts_sent_today": int(row["alerts_sent_today"] or 0),
+            "requests_made_today": int(row["requests_made_today"] or 0),
             "retries_today": int(row["retries_today"] or 0),
             "average_runtime_seconds_14d": (
                 round(float(row["average_runtime_seconds_14d"]), 1)
@@ -501,6 +892,12 @@ async def build_admin_connectors_workspace(settings: AppSettings | None = None) 
         job_stats = company_job_stats.get(
             company.id,
             {"active_jobs": 0, "stale_jobs": 0, "closed_jobs": 0, "expired_jobs": 0, "archived_jobs": 0},
+        )
+        production_readiness = _build_production_readiness(
+            company,
+            validation_payload=validation_payload,
+            run_stats=run_stats,
+            job_stats=job_stats,
         )
         source = source_by_key.get(company.connector)
         monitoring_state = "monitored" if reason == "monitored" else "catalog_only"
@@ -533,6 +930,13 @@ async def build_admin_connectors_workspace(settings: AppSettings | None = None) 
             "validation_reason": str(validation_payload.get("reason") or reason),
             "validation_message": str(validation_payload.get("message") or reason_detail),
             "validated_at": validation_payload.get("validated_at"),
+            "production_readiness_status": production_readiness["status"],
+            "production_readiness_summary": production_readiness["summary"],
+            "production_readiness_passed": production_readiness["passed"],
+            "production_readiness_total": production_readiness["total"],
+            "production_readiness_blocked": production_readiness["blocked"],
+            "production_readiness_pending": production_readiness["pending"],
+            "production_readiness_checks": production_readiness["checks"],
             "active_jobs": job_stats["active_jobs"],
             "stale_jobs": job_stats["stale_jobs"],
             "closed_jobs": job_stats["closed_jobs"],
@@ -596,6 +1000,7 @@ async def build_admin_connectors_workspace(settings: AppSettings | None = None) 
                 "jobs_archived_today": int(aggregate.get("jobs_archived_today", 0) or 0),
                 "jobs_ignored_today": int(aggregate.get("jobs_ignored_today", 0) or 0),
                 "alerts_sent_today": int(aggregate.get("alerts_sent_today", 0) or 0),
+                "requests_made_today": int(aggregate.get("requests_made_today", 0) or 0),
                 "retries_today": int(aggregate.get("retries_today", 0) or 0),
                 "average_runtime_seconds_14d": aggregate.get("average_runtime_seconds_14d"),
                 **connector_stats,
@@ -660,8 +1065,13 @@ async def build_admin_connectors_workspace(settings: AppSettings | None = None) 
             "jobs_matched": int(row["jobs_matched"] or 0),
             "alerts_sent": int(row["alerts_sent"] or 0),
             "alerts_failed": int(row["alerts_failed"] or 0),
+            "requests_made": int(row["requests_made"] or 0),
             "retries": int(row["retries"] or 0),
             "trigger": str(row["trigger"] or "scheduled"),
+            "inventory_complete": bool(row["inventory_complete"]),
+            "pages_scanned": int(row["pages_scanned"] or 0),
+            "expected_pages": int(row["expected_pages"]) if row["expected_pages"] is not None else None,
+            "partial_reason": str(row["partial_reason"]) if row["partial_reason"] is not None else None,
             "error_message": str(row["error_message"]) if row["error_message"] is not None else None,
             "duration_seconds": (
                 max(0.0, float((row["finished_at"] - row["started_at"]).total_seconds()))
@@ -732,6 +1142,168 @@ async def build_admin_connectors_workspace(settings: AppSettings | None = None) 
     }
 
 
+async def _live_validation_payload(company: CompanyPreference, settings: AppSettings) -> dict[str, object] | None:
+    if company.connector == "ashby":
+        connector = AshbyJobConnector(
+            board=AshbyBoard(
+                company=company.company,
+                token=company.external_identifier.strip(),
+                country=company.country,
+            ),
+            connector_settings=settings.connectors,
+        )
+    elif company.connector == "microsoft-careers":
+        connector = MicrosoftCareersJobConnector(
+            site=MicrosoftCareerSite(
+                company=company.company,
+                domain=company.external_identifier.strip(),
+                country=company.country,
+                role_families=tuple(company.role_families),
+                max_pages_per_run=1,
+                max_detail_requests_per_run=2,
+            ),
+            connector_settings=settings.connectors,
+        )
+    elif company.connector == "workday":
+        connector = WorkdayJobConnector(
+            site=build_workday_career_site(
+                company=company.company,
+                career_url=company.career_url,
+                external_identifier=company.external_identifier.strip(),
+                country=company.country,
+                role_families=tuple(company.role_families),
+                max_pages_per_run=1,
+                max_detail_requests_per_run=2,
+            ),
+            connector_settings=settings.connectors,
+        )
+    elif company.connector == "smartrecruiters":
+        connector = SmartRecruitersJobConnector(
+            site=build_smartrecruiters_site(
+                company=company.company,
+                career_url=company.career_url,
+                external_identifier=company.external_identifier.strip(),
+                country=company.country,
+                role_families=tuple(company.role_families),
+                max_pages_per_run=1,
+                max_detail_requests_per_run=2,
+            ),
+            connector_settings=settings.connectors,
+        )
+    elif company.connector == "icims":
+        connector = ICIMSJobConnector(
+            site=build_icims_career_site(
+                company=company.company,
+                career_url=company.career_url,
+                external_identifier=company.external_identifier.strip(),
+                country=company.country,
+                role_families=tuple(company.role_families),
+                max_pages_per_run=1,
+            ),
+            connector_settings=settings.connectors,
+        )
+    elif company.connector == "jobvite":
+        connector = JobviteJobConnector(
+            site=build_jobvite_site(
+                company=company.company,
+                career_url=company.career_url,
+                external_identifier=company.external_identifier.strip(),
+                country=company.country,
+                role_families=tuple(company.role_families),
+                max_detail_requests_per_run=2,
+            ),
+            connector_settings=settings.connectors,
+        )
+    elif company.connector == "comeet":
+        connector = ComeetJobConnector(
+            site=build_comeet_site(
+                company=company.company,
+                career_url=company.career_url,
+                external_identifier=company.external_identifier.strip(),
+                country=company.country,
+                role_families=tuple(company.role_families),
+            ),
+            connector_settings=settings.connectors,
+        )
+    elif company.connector == "oracle-recruiting-cloud":
+        connector = OracleRecruitingCloudConnector(
+            site=build_oracle_recruiting_cloud_site(
+                company=company.company,
+                career_url=company.career_url,
+                external_identifier=company.external_identifier.strip(),
+                country=company.country,
+                role_families=tuple(company.role_families),
+                max_pages_per_run=1,
+            ),
+            connector_settings=settings.connectors,
+        )
+    elif company.connector == "successfactors":
+        connector = SuccessFactorsJobConnector(
+            site=build_successfactors_site(
+                company=company.company,
+                career_url=company.career_url,
+                external_identifier=company.external_identifier.strip(),
+                country=company.country,
+                role_families=tuple(company.role_families),
+                max_pages_per_run=1,
+                max_detail_requests_per_run=2,
+            ),
+            connector_settings=settings.connectors,
+        )
+    elif company.connector == "google-careers":
+        connector = GoogleCareersJobConnector(
+            site=build_google_career_site(
+                company=company.company,
+                career_url=company.career_url,
+                external_identifier=company.external_identifier.strip(),
+                country=company.country,
+                role_families=tuple(company.role_families),
+                max_pages_per_run=1,
+            ),
+            connector_settings=settings.connectors,
+        )
+    elif company.connector == "amazon-jobs":
+        connector = AmazonJobsConnector(
+            site=build_amazon_career_site(
+                company=company.company,
+                career_url=company.career_url,
+                external_identifier=company.external_identifier.strip(),
+                country=company.country,
+                role_families=tuple(company.role_families),
+                max_pages_per_run=1,
+            ),
+            connector_settings=settings.connectors,
+        )
+    else:
+        return None
+
+    result = await asyncio.to_thread(connector.collect)
+    sample_job = result.jobs[0] if result.jobs else None
+    reason = "validated_live" if result.exhausted else "inventory_partial"
+    message = (
+        "Live validation succeeded with a complete inventory sample."
+        if result.exhausted
+        else "Live validation succeeded, but the connector only sampled a partial inventory."
+    )
+    return {
+        "status": "passed",
+        "reason": reason,
+        "message": message,
+        "validated_at": datetime.now(timezone.utc).isoformat(),
+        "jobs_fetched": len(result.jobs),
+        "requests_made": result.requests_made,
+        "inventory_complete": result.exhausted,
+        "pages_scanned": result.pages_scanned,
+        "expected_pages": result.expected_pages,
+        "partial_reason": result.partial_reason,
+        "sample_job_title": sample_job.title if sample_job is not None else None,
+        "sample_apply_url": sample_job.apply_url if sample_job is not None else None,
+        "sample_description_present": bool(sample_job.description_text.strip()) if sample_job is not None else False,
+        "sample_company_name": sample_job.company if sample_job is not None else None,
+        "sample_location": sample_job.location if sample_job is not None else None,
+    }
+
+
 async def validate_company_connector(company_id: str, settings: AppSettings | None = None) -> dict[str, object]:
     resolved_settings = settings or get_settings()
     companies = {company.id: company for company in await list_catalog_companies(resolved_settings)}
@@ -739,13 +1311,36 @@ async def validate_company_connector(company_id: str, settings: AppSettings | No
     if company is None:
         raise ValueError("Unknown company.")
     reason, message = _monitoring_reason(company, validation_payload=None)
-    status = "passed" if reason == "monitored" else "failed"
-    payload = {
-        "status": status,
-        "reason": reason,
-        "message": message,
-        "validated_at": datetime.now(timezone.utc).isoformat(),
-    }
+    if reason == "monitored":
+        try:
+            payload = await _live_validation_payload(company, resolved_settings)
+        except Exception as exc:  # noqa: BLE001
+            payload = {
+                "status": "failed",
+                "reason": "validation_failed",
+                "message": str(exc)[:300],
+                "validated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        if payload is None:
+            payload = {
+                "status": "passed",
+                "reason": reason,
+                "message": message,
+                "validated_at": datetime.now(timezone.utc).isoformat(),
+            }
+    else:
+        payload = {
+            "status": "failed",
+            "reason": reason,
+            "message": message,
+            "validated_at": datetime.now(timezone.utc).isoformat(),
+        }
+    payload["production_readiness"] = _build_production_readiness(
+        company,
+        validation_payload=payload,
+        run_stats={},
+        job_stats={},
+    )
     async with connection() as conn:
         await conn.execute(
             """

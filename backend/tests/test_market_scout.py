@@ -26,6 +26,24 @@ if "jwt" not in sys.modules:
     jwt_stub.decode = lambda token, secret, algorithms=None, issuer=None: {"type": "access"}
     sys.modules["jwt"] = jwt_stub
 
+if "argon2" not in sys.modules:
+    argon2_stub = types.ModuleType("argon2")
+    argon2_exceptions_stub = types.ModuleType("argon2.exceptions")
+
+    class _PasswordHasher:
+        def hash(self, password: str) -> str:
+            return f"hashed:{password}"
+
+        def verify(self, hashed: str, password: str) -> bool:
+            return hashed == f"hashed:{password}"
+
+    argon2_stub.PasswordHasher = _PasswordHasher
+    argon2_exceptions_stub.VerifyMismatchError = type("VerifyMismatchError", (Exception,), {})
+    argon2_exceptions_stub.InvalidHashError = type("InvalidHashError", (Exception,), {})
+    argon2_stub.exceptions = argon2_exceptions_stub
+    sys.modules["argon2"] = argon2_stub
+    sys.modules["argon2.exceptions"] = argon2_exceptions_stub
+
 from app.config import get_settings
 from app.connectors.base import NormalizedJobRecord
 from app.domain import CompanyPreference, UserAccount
@@ -157,6 +175,7 @@ class MarketScoutTests(unittest.IsolatedAsyncioTestCase):
                     jobs_matched=8,
                     alerts_sent=2,
                     alerts_failed=1,
+                    requests_made=5,
                 ),
                 ConnectorRunSummary(
                     connector_key="greenhouse:anthropic",
@@ -167,6 +186,7 @@ class MarketScoutTests(unittest.IsolatedAsyncioTestCase):
                     jobs_matched=6,
                     alerts_sent=1,
                     alerts_failed=0,
+                    requests_made=4,
                     failed=True,
                     error_message="sample failure",
                 ),
@@ -179,6 +199,7 @@ class MarketScoutTests(unittest.IsolatedAsyncioTestCase):
                     jobs_matched=3,
                     alerts_sent=1,
                     alerts_failed=0,
+                    requests_made=2,
                 ),
             ],
             enabled_company_counts={"greenhouse": 3, "lever": 1},
@@ -203,6 +224,7 @@ class MarketScoutTests(unittest.IsolatedAsyncioTestCase):
                     "jobs_matched": 14,
                     "alerts_sent": 3,
                     "alerts_failed": 1,
+                    "requests_made": 9,
                     "retries": 0,
                     "failures": 1,
                 },
@@ -221,6 +243,7 @@ class MarketScoutTests(unittest.IsolatedAsyncioTestCase):
                     "jobs_matched": 3,
                     "alerts_sent": 1,
                     "alerts_failed": 0,
+                    "requests_made": 2,
                     "retries": 0,
                     "failures": 0,
                 },
@@ -332,6 +355,7 @@ class MarketScoutTests(unittest.IsolatedAsyncioTestCase):
                 next_cursor=None,
                 next_published_at=None,
                 retry_count=0,
+                requests_made=3,
                 inventory_complete=False,
                 pages_scanned=4,
                 expected_pages=12,

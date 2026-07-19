@@ -14,6 +14,17 @@ if "asyncpg" not in sys.modules:
     asyncpg_stub.connect = None
     sys.modules["asyncpg"] = asyncpg_stub
 
+if "jwt" not in sys.modules:
+    jwt_stub = types.ModuleType("jwt")
+
+    class _InvalidTokenError(Exception):
+        pass
+
+    jwt_stub.InvalidTokenError = _InvalidTokenError
+    jwt_stub.encode = lambda payload, secret, algorithm=None: "stub-token"
+    jwt_stub.decode = lambda token, secret, algorithms=None, issuer=None: {"type": "access"}
+    sys.modules["jwt"] = jwt_stub
+
 from app.config import get_settings
 from app.company_catalog_defaults import ai_company_collections_for_company
 from app.domain import CompanyPreference
@@ -68,7 +79,7 @@ class JobLifecycleTests(unittest.TestCase):
         )
         self.assertEqual(monitored, "monitored")
 
-        planned, _ = _monitoring_reason(
+        monitored_beta, _ = _monitoring_reason(
             CompanyPreference(
                 id="microsoft",
                 company="Microsoft",
@@ -78,7 +89,7 @@ class JobLifecycleTests(unittest.TestCase):
             ),
             validation_payload=None,
         )
-        self.assertEqual(planned, "planned")
+        self.assertEqual(monitored_beta, "monitored")
 
         disabled, _ = _monitoring_reason(
             CompanyPreference(

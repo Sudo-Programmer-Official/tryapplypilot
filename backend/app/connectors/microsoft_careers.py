@@ -3,7 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
+import html
 from math import ceil
+import re
 from urllib.parse import urlencode
 
 from app.config import ConnectorSettings
@@ -20,6 +22,7 @@ _BROWSER_HEADERS = {
 }
 _DEFAULT_PAGE_SIZE = 10
 _MAX_PAGES_PER_RUN = 15
+_MAX_DETAIL_REQUESTS_PER_RUN = 10
 _ENGINEERING_ROLE_FAMILIES = frozenset(
     {
         "backend engineering",
@@ -34,6 +37,8 @@ _ENGINEERING_ROLE_FAMILIES = frozenset(
         "reliability",
     }
 )
+_TAG_RE = re.compile(r"<[^>]+>")
+_WHITESPACE_RE = re.compile(r"\s+")
 
 
 def _parse_timestamp(value: object) -> datetime | None:
@@ -57,6 +62,12 @@ def _remote_policy(work_location_option: str, location_flexibility: str | None, 
     if "hybrid" in haystack or "days / week in-office" in haystack:
         return "Hybrid"
     return "Onsite"
+
+
+def _strip_html(value: str) -> str:
+    unescaped = html.unescape(value)
+    without_tags = _TAG_RE.sub(" ", unescaped)
+    return _WHITESPACE_RE.sub(" ", without_tags).strip()
 
 
 def _matches_company_country(
@@ -88,6 +99,57 @@ def _build_query_params(site: "MicrosoftCareerSite", start: int) -> str:
     return urlencode(params)
 
 
+def _build_detail_query_params(site: "MicrosoftCareerSite", position_id: str) -> str:
+    return urlencode((("domain", site.domain), ("position_id", position_id)))
+
+
+def _extract_detail_payload(payload: object) -> dict[str, object]:
+    if not isinstance(payload, dict):
+        return {}
+    detail_payload = payload.get("data")
+    if isinstance(detail_payload, dict):
+        return detail_payload
+    return payload
+
+
+def _normalize_apply_url(value: str) -> str:
+    normalized = value.strip()
+    if not normalized:
+        return ""
+    if normalized.startswith("http"):
+        return normalized
+    return f"https://apply.careers.microsoft.com{normalized}"
+
+
+def _description_text(item: dict[str, object], detail_payload: dict[str, object], location: str) -> str:
+    detailed_description = _strip_html(str(detail_payload.get("jobDescription") or detail_payload.get("description") or ""))
+    description_parts = [
+        detailed_description,
+        f"Department: {str(item.get('department', '')).strip()}",
+        f"Location: {location}",
+        f"Work location option: {str(item.get('workLocationOption', '')).strip()}",
+        f"Location flexibility: {str(item.get('locationFlexibility', '')).strip()}",
+        f"Display job id: {str(item.get('displayJobId', '')).strip()}",
+        f"ATS job id: {str(item.get('atsJobId', '')).strip()}",
+    ]
+    return "\n".join(part for part in description_parts if part and (":" not in part or part.split(":", 1)[1].strip()))
+
+
+def _request_position_detail(
+    site: "MicrosoftCareerSite",
+    position_id: str,
+    connector_settings: ConnectorSettings,
+) -> dict[str, object]:
+    payload = request_json(
+        "GET",
+        f"https://apply.careers.microsoft.com/api/pcsx/position_details?{_build_detail_query_params(site, position_id)}",
+        timeout_seconds=connector_settings.request_timeout_seconds,
+        tls=HttpTlsSettings(ca_bundle_path=None, skip_ssl_verify=False),
+        headers=_BROWSER_HEADERS,
+    )
+    return _extract_detail_payload(payload)
+
+
 @dataclass(frozen=True)
 class MicrosoftCareerSite:
     company: str
@@ -95,6 +157,7 @@ class MicrosoftCareerSite:
     country: str = "US"
     role_families: tuple[str, ...] = ()
     max_pages_per_run: int = _MAX_PAGES_PER_RUN
+    max_detail_requests_per_run: int = _MAX_DETAIL_REQUESTS_PER_RUN
 
 
 @dataclass(frozen=True)
@@ -113,7 +176,6 @@ class MicrosoftCareersJobConnector(JobConnector):
     )
 
     def collect(self, cursor: ConnectorCursor | None = None) -> ConnectorRunResult:
-        del cursor
         jobs: list[NormalizedJobRecord] = []
         latest_seen_at: datetime | None = None
         requests_made = 0
@@ -123,6 +185,8 @@ class MicrosoftCareersJobConnector(JobConnector):
         inventory_complete = True
         partial_reason: str | None = None
         seen_job_ids: set[str] = set()
+        detail_requests_made = 0
+        last_published_cursor = cursor.last_published_at if cursor is not None else None
 
         while True:
             payload = request_json(
@@ -160,21 +224,22 @@ class MicrosoftCareersJobConnector(JobConnector):
                 published_at = _parse_timestamp(item.get("postedTs") or item.get("creationTs"))
                 if published_at is not None and (latest_seen_at is None or published_at > latest_seen_at):
                     latest_seen_at = published_at
-                apply_path = str(item.get("positionUrl") or "").strip()
-                apply_url = (
-                    apply_path
-                    if apply_path.startswith("http")
-                    else f"https://apply.careers.microsoft.com{apply_path}"
+                detail_payload: dict[str, object] = {}
+                should_fetch_detail = detail_requests_made < self.site.max_detail_requests_per_run
+                if should_fetch_detail and last_published_cursor is not None and published_at is not None:
+                    should_fetch_detail = published_at >= last_published_cursor
+                if should_fetch_detail:
+                    try:
+                        detail_payload = _request_position_detail(self.site, external_job_id, self.connector_settings)
+                    except Exception:  # noqa: BLE001
+                        detail_payload = {}
+                    finally:
+                        requests_made += 1
+                        detail_requests_made += 1
+                apply_url = _normalize_apply_url(
+                    str(detail_payload.get("publicUrl") or detail_payload.get("positionUrl") or item.get("positionUrl") or "")
                 )
-                description_parts = [
-                    f"Department: {str(item.get('department', '')).strip()}",
-                    f"Location: {location}",
-                    f"Work location option: {str(item.get('workLocationOption', '')).strip()}",
-                    f"Location flexibility: {str(item.get('locationFlexibility', '')).strip()}",
-                    f"Display job id: {str(item.get('displayJobId', '')).strip()}",
-                    f"ATS job id: {str(item.get('atsJobId', '')).strip()}",
-                ]
-                description_text = "\n".join(part for part in description_parts if part.split(":", 1)[1].strip())
+                description_text = _description_text(item, detail_payload, location)
                 if not _matches_company_country(
                     self.site.country,
                     item.get("standardizedLocations"),
@@ -213,13 +278,20 @@ class MicrosoftCareersJobConnector(JobConnector):
                         apply_url=apply_url,
                         description_text=description_text,
                         job_fingerprint=hashlib.sha256(fingerprint_input.encode("utf-8")).hexdigest(),
-                        raw_payload=item,
+                        raw_payload={"search": item, "detail": detail_payload},
                     )
                 )
 
-            if not positions or len(positions) < _DEFAULT_PAGE_SIZE:
+            next_start = start + len(positions)
+            has_more_results = bool(total_count and next_start < total_count)
+            if not positions:
+                if has_more_results:
+                    inventory_complete = False
+                    partial_reason = partial_reason or "empty_page_before_inventory_complete"
                 break
-            start += len(positions)
+            if not has_more_results and len(positions) < _DEFAULT_PAGE_SIZE:
+                break
+            start = next_start
             if total_count and start >= total_count:
                 break
             if pages_scanned >= self.site.max_pages_per_run:

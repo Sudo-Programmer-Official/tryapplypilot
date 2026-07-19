@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import timezone
 import unittest
+from urllib.parse import parse_qs, urlsplit
 from unittest.mock import patch
 
 from app.config import ConnectorSettings
@@ -34,6 +35,7 @@ class MicrosoftConnectorTests(unittest.TestCase):
                 country="US",
                 role_families=("Platform Engineering",),
                 max_pages_per_run=5,
+                max_detail_requests_per_run=2,
             ),
             connector_settings=ConnectorSettings(
                 request_timeout_seconds=20,
@@ -45,7 +47,7 @@ class MicrosoftConnectorTests(unittest.TestCase):
             ),
         )
         calls: list[str] = []
-        payloads = [
+        search_payloads = [
             {
                 "data": {
                     "count": 12,
@@ -59,29 +61,43 @@ class MicrosoftConnectorTests(unittest.TestCase):
                 }
             },
         ]
+        search_index = {"value": 0}
 
         def _request_json(*args, **kwargs):
             url = str(kwargs.get("url") or args[1])
             calls.append(url)
-            return payloads[len(calls) - 1]
+            if "position_details" in url:
+                query = parse_qs(urlsplit(url).query)
+                position_id = query["position_id"][0]
+                return {
+                    "data": {
+                        "jobDescription": f"<p>Detailed backend platform description for role {position_id}</p>",
+                        "publicUrl": f"https://careers.microsoft.com/us/en/job/{position_id}",
+                    }
+                }
+            payload = search_payloads[search_index["value"]]
+            search_index["value"] += 1
+            return payload
 
         with patch("app.connectors.microsoft_careers.request_json", side_effect=_request_json):
             result = connector.collect()
 
         self.assertEqual(len(result.jobs), 11)
-        self.assertEqual(result.requests_made, 2)
+        self.assertEqual(result.requests_made, 4)
         self.assertTrue(result.exhausted)
         self.assertEqual(result.pages_scanned, 2)
         self.assertEqual(result.expected_pages, 2)
         self.assertIsNone(result.partial_reason)
         self.assertIn("filter_career_discipline=Software+Engineering", calls[0])
-        self.assertIn("start=10", calls[1])
+        self.assertTrue(any("start=10" in call for call in calls))
+        self.assertEqual(sum(1 for call in calls if "position_details" in call), 2)
         first_job = result.jobs[0]
         self.assertEqual(first_job.connector_key, "microsoft-careers:microsoft.com")
         self.assertEqual(first_job.company, "Microsoft")
         self.assertEqual(first_job.remote_policy, "Remote")
         self.assertEqual(first_job.published_at.tzinfo, timezone.utc)
-        self.assertTrue(first_job.apply_url.startswith("https://apply.careers.microsoft.com/careers/job/"))
+        self.assertEqual(first_job.apply_url, "https://careers.microsoft.com/us/en/job/1")
+        self.assertIn("Detailed backend platform description", first_job.description_text)
 
     def test_collect_marks_partial_when_page_limit_is_reached(self) -> None:
         connector = MicrosoftCareersJobConnector(
@@ -91,6 +107,7 @@ class MicrosoftConnectorTests(unittest.TestCase):
                 country="US",
                 role_families=("Platform Engineering",),
                 max_pages_per_run=1,
+                max_detail_requests_per_run=1,
             ),
             connector_settings=ConnectorSettings(
                 request_timeout_seconds=20,
@@ -108,11 +125,23 @@ class MicrosoftConnectorTests(unittest.TestCase):
             }
         }
 
-        with patch("app.connectors.microsoft_careers.request_json", return_value=payload):
+        def _request_json(*args, **kwargs):
+            url = str(kwargs.get("url") or args[1])
+            if "position_details" in url:
+                return {
+                    "data": {
+                        "jobDescription": "<p>Detailed description</p>",
+                        "publicUrl": "https://careers.microsoft.com/us/en/job/1",
+                    }
+                }
+            return payload
+
+        with patch("app.connectors.microsoft_careers.request_json", side_effect=_request_json):
             result = connector.collect()
 
         self.assertEqual(len(result.jobs), 10)
         self.assertFalse(result.exhausted)
+        self.assertEqual(result.requests_made, 2)
         self.assertEqual(result.pages_scanned, 1)
         self.assertEqual(result.expected_pages, 3)
         self.assertEqual(result.partial_reason, "page_limit_reached")

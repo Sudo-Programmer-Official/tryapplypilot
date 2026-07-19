@@ -79,17 +79,38 @@ RECOMMENDED_COMPANY_DEFAULTS: tuple[CompanyCatalogDefault, ...] = (
         2,
         16,
     ),
-    _company("Amazon", "company-api", "amazon", "https://www.amazon.jobs/", 2, 17),
+    _company(
+        "Amazon",
+        "amazon-jobs",
+        "amazon",
+        "https://www.amazon.jobs/en/search?base_query=software+development+engineer&country=USA&sort=recent",
+        2,
+        17,
+    ),
     _company("Meta", "company-api", "meta", "https://www.metacareers.com/jobs/", 2, 18),
     _company("Apple", "company-api", "apple", "https://jobs.apple.com/", 2, 19),
-    _company("NVIDIA", "company-api", "nvidia", "https://www.nvidia.com/en-us/about-nvidia/careers/", 2, 20),
+    _company(
+        "NVIDIA",
+        "workday",
+        "nvidia/NVIDIAExternalCareerSite",
+        "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite",
+        2,
+        20,
+    ),
     _company("Netflix", "company-api", "netflix", "https://jobs.netflix.com/", 2, 21),
     _company("Airbnb", "company-api", "airbnb", "https://careers.airbnb.com/", 2, 22),
     _company("Uber", "company-api", "uber", "https://www.uber.com/global/en/careers/list/", 2, 23),
     _company("Twilio", "company-api", "twilio", "https://www.twilio.com/company/jobs", 2, 24),
     _company("Salesforce", "company-api", "salesforce", "https://careers.salesforce.com/en/jobs/", 2, 25),
-    _company("Oracle", "company-api", "oracle", "https://careers.oracle.com/", 2, 26),
-    _company("ServiceNow", "company-api", "servicenow", "https://careers.servicenow.com/", 2, 27),
+    _company(
+        "Oracle",
+        "oracle-recruiting-cloud",
+        "CX_45001",
+        "https://eeho.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/jobsearch/jobs",
+        2,
+        26,
+    ),
+    _company("ServiceNow", "smartrecruiters", "ServiceNow", "https://careers.smartrecruiters.com/ServiceNow", 2, 27),
     _company("HashiCorp", "company-api", "hashicorp", "https://www.hashicorp.com/careers", 2, 28),
     _company("Elastic", "greenhouse", "elastic", "https://job-boards.greenhouse.io/elastic", 2, 29),
     _company("Grafana Labs", "greenhouse", "grafanalabs", "https://job-boards.greenhouse.io/grafanalabs", 2, 30),
@@ -151,12 +172,29 @@ RECOMMENDED_COMPANY_DEFAULTS: tuple[CompanyCatalogDefault, ...] = (
         2,
         81,
     ),
+    _company("iCIMS", "icims", "careers.icims.com", "https://careers.icims.com/careers-home", 3, 82),
+    _company("Progress", "jobvite", "progress", "https://jobs.jobvite.com/careers/progress/jobs", 3, 83),
+    _company("SAP", "successfactors", "sap", "https://jobs.sap.com/search/?sortColumn=referencedate&sortDirection=desc", 2, 84),
 )
 
 ENABLED_COMPANY_NAMES = {
     spec.name
     for spec in RECOMMENDED_COMPANY_DEFAULTS
-    if spec.connector in {"greenhouse", "lever", "ashby", "microsoft-careers"}
+    if spec.connector in {
+        "greenhouse",
+        "lever",
+        "ashby",
+        "microsoft-careers",
+        "workday",
+        "smartrecruiters",
+        "icims",
+        "jobvite",
+        "comeet",
+        "oracle-recruiting-cloud",
+        "successfactors",
+        "google-careers",
+        "amazon-jobs",
+    }
 }
 
 AI_PLATFORM_COMPANIES = {
@@ -229,7 +267,10 @@ PLATFORM_ENGINEERING_COMPANIES = {
     "microsoft",
     "google",
     "amazon",
+    "oracle",
+    "sap",
     "nvidia",
+    "progress",
     "hashicorp",
     "digitalocean",
     "supabase",
@@ -245,6 +286,7 @@ CLOUD_INFRASTRUCTURE_COMPANIES = {
     "microsoft",
     "google",
     "amazon",
+    "oracle",
     "cloudflare",
     "hashicorp",
     "digitalocean",
@@ -273,6 +315,7 @@ DEVELOPER_EXPERIENCE_COMPANIES = {
 }
 
 PRODUCT_ENGINEERING_COMPANIES = {
+    "icims",
     "figma",
     "notion",
     "airtable",

@@ -60,9 +60,15 @@ def _minutes_ago(instant: datetime | None, *, now: datetime) -> int:
 def _connector_source_label(connector_key: str) -> str:
     connector_name = connector_key.split(":", 1)[0]
     special_labels = {
+        "amazon-jobs": "Amazon Jobs",
         "greenhouse": "Greenhouse",
         "google-careers": "Google Careers",
+        "comeet": "Comeet",
+        "oracle-recruiting-cloud": "Oracle Recruiting Cloud",
+        "jobvite": "Jobvite",
         "microsoft-careers": "Microsoft Careers",
+        "successfactors": "SuccessFactors",
+        "workday": "Workday",
         "smartrecruiters": "SmartRecruiters",
         "company-api": "Company APIs",
     }

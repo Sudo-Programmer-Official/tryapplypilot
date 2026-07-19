@@ -218,6 +218,16 @@ function validationTone(status: string): "success" | "warning" | "info" | "neutr
   return "danger";
 }
 
+function readinessTone(status: string): "success" | "warning" | "danger" {
+  if (status === "ready") {
+    return "success";
+  }
+  if (status === "pending") {
+    return "warning";
+  }
+  return "danger";
+}
+
 function connectorTone(connector: AdminConnectorWorkspaceConnector): "success" | "warning" | "danger" | "neutral" {
   const tone = sourceStatusTone(connector);
   if (tone === "healthy") {
@@ -738,7 +748,15 @@ onMounted(load);
                 </td>
                 <td>
                   <AppBadge :tone="validationTone(company.validation_status)">{{ company.validation_status }}</AppBadge>
+                  <AppBadge :tone="readinessTone(company.production_readiness_status)">
+                    {{ company.production_readiness_status }}
+                  </AppBadge>
                   <p>{{ company.validation_message }}</p>
+                  <p>
+                    {{ company.production_readiness_summary }}
+                    · {{ company.production_readiness_pending }} pending
+                    · {{ company.production_readiness_blocked }} blocked
+                  </p>
                 </td>
                 <td>
                   <strong>{{ company.active_jobs }} active</strong>

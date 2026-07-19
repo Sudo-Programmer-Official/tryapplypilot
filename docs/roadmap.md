@@ -1,5 +1,7 @@
 # Phase 1 Roadmap
 
+This document is the detailed execution plan for the active `Phase 1` build. For the full multi-phase product roadmap, see [../ROADMAP.md](../ROADMAP.md).
+
 ## Current goal
 
 Run the entire job radar locally until the end-to-end flow is stable.
@@ -21,6 +23,28 @@ Success means:
 - new jobs are stored in PostgreSQL
 - high-match jobs trigger Telegram notifications
 - logs clearly show each pipeline step
+
+## Current connector frontier
+
+Implemented or active in the current Phase 1 code path:
+
+- `Greenhouse`
+- `Lever`
+- `Ashby`
+- `Workday`
+- `SmartRecruiters`
+- `iCIMS`
+- `Microsoft Careers`
+- `Google Careers`
+- `Amazon Jobs`
+
+Still planned:
+
+- `Meta Careers`
+- `Jobvite`
+- `BambooHR`
+- `Comeet`
+- additional dedicated company collectors after the current set is stable
 
 ## Local development stack
 
@@ -135,7 +159,7 @@ LLM matching with structured JSON output:
 
 Connector enablement must come from configuration, not code changes.
 
-Today that means the local env should decide which sources are active. Enabling Microsoft later should be a config update, not a new architecture pass.
+The company catalog in PostgreSQL is now the source of truth for which companies are enabled, which connector they use, and how often they are polled. Environment variables should only provide infrastructure settings and safe bootstrap defaults, not per-company monitoring lists.
 
 ## Health dashboard requirement
 

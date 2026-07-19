@@ -111,6 +111,11 @@ def infer_country_code(location: str, description_text: str = "") -> ResolvedCou
         return "US"
     if trailing in _US_STATE_NAMES or trailing in _US_STATE_CODES:
         return "US"
+    segments = [segment.strip() for segment in haystack.split(",") if segment.strip()]
+    if any(segment in {"us", "usa", "united states"} for segment in segments):
+        return "US"
+    if any(segment in {"in", "india"} for segment in segments):
+        return "IN"
 
     if any(token in haystack for token in _CANADA_HINTS):
         return "CA"

@@ -5,6 +5,7 @@ As of July 18, 2026, this repo is intentionally scoped to Phase 1 only: one agen
 - `backend/`: FastAPI service modeling the `Market Scout Agent`, supported sources, user settings, job scoring, and alerts.
 - `frontend/`: Vue 3 + TypeScript radar dashboard for configuration, live opportunities, source health, and notification previews.
 - `docs/`: MVP roadmap and architecture notes for the Phase 1 build.
+- [ROADMAP.md](ROADMAP.md): multi-phase product roadmap from Job Discovery to AI Career Operating System.
 
 ## MVP philosophy
 
@@ -21,6 +22,8 @@ Until this works reliably, nothing else matters. The system should:
 5. Notify only when a role clears the configured threshold.
 
 No resume tailoring, cover letters, CRM, or application tracking are part of the active build target. The Version 1 boundary and the Version 2 roadmap live in [docs/v2.md](docs/v2.md).
+
+The broader product roadmap lives in [ROADMAP.md](ROADMAP.md). This repo is still executing the `Phase 1` slice of that plan.
 
 ## What is implemented
 
@@ -86,6 +89,8 @@ python3 -m unittest discover -s tests
 ```
 
 ## Phase roadmap
+
+The full company roadmap is in [ROADMAP.md](ROADMAP.md). The sprint-level execution plan for the active phase remains in [docs/roadmap.md](docs/roadmap.md).
 
 `Phase 1` now starts with `Phase 1.0`: one real source end-to-end.
 

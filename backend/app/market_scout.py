@@ -12,11 +12,20 @@ from uuid import uuid4, uuid5, NAMESPACE_URL
 from app.audit_logs import record_audit_event
 from app.catalog import build_effective_app_settings
 from app.config import AppSettings, GreenhouseBoard, get_settings
+from app.connectors.amazon_jobs import AmazonJobsConnector, build_amazon_career_site
 from app.connectors.ashby import AshbyBoard, AshbyJobConnector
 from app.connectors.base import ConnectorCursor, NormalizedJobRecord
+from app.connectors.comeet import ComeetJobConnector, build_comeet_site
 from app.connectors.greenhouse import GreenhouseJobConnector
+from app.connectors.google_careers import GoogleCareersJobConnector, build_google_career_site
+from app.connectors.icims import ICIMSJobConnector, build_icims_career_site
+from app.connectors.jobvite import JobviteJobConnector, build_jobvite_site
 from app.connectors.lever import LeverBoard, LeverJobConnector
 from app.connectors.microsoft_careers import MicrosoftCareerSite, MicrosoftCareersJobConnector
+from app.connectors.oracle_recruiting_cloud import OracleRecruitingCloudConnector, build_oracle_recruiting_cloud_site
+from app.connectors.smartrecruiters import SmartRecruitersJobConnector, build_smartrecruiters_site
+from app.connectors.successfactors import SuccessFactorsJobConnector, build_successfactors_site
+from app.connectors.workday import WorkdayJobConnector, build_workday_career_site
 from app.db.client import connection
 from app.domain import CompanyPreference, UserAccount
 from app.job_lifecycle import content_hash_for_job, lifecycle_for_missed_syncs
@@ -51,6 +60,7 @@ class ConnectorRunSummary:
     jobs_matched: int
     alerts_sent: int
     alerts_failed: int
+    requests_made: int = 0
     jobs_closed: int = 0
     jobs_archived: int = 0
     jobs_ignored: int = 0
@@ -76,6 +86,7 @@ class ConnectorRunSummary:
             "jobs_matched": self.jobs_matched,
             "alerts_sent": self.alerts_sent,
             "alerts_failed": self.alerts_failed,
+            "requests_made": self.requests_made,
             "companies_scanned": self.companies_scanned,
             "retries": self.retries,
             "inventory_complete": self.inventory_complete,
@@ -130,6 +141,10 @@ class MarketScoutRunSummary:
         return sum(run.alerts_failed for run in self.runs)
 
     @property
+    def requests_made(self) -> int:
+        return sum(run.requests_made for run in self.runs)
+
+    @property
     def companies_scanned(self) -> int:
         return sum(run.companies_scanned for run in self.runs)
 
@@ -155,6 +170,7 @@ class MarketScoutRunSummary:
             "jobs_matched": self.jobs_matched,
             "alerts_sent": self.alerts_sent,
             "alerts_failed": self.alerts_failed,
+            "requests_made": self.requests_made,
             "companies_scanned": self.companies_scanned,
             "retries": self.retries,
             "connector_failures": self.connector_failures,
@@ -178,7 +194,19 @@ class UserMatchContext:
 
 def _company_connector_run_key(company: CompanyPreference) -> str:
     connector_key = company.connector.strip().casefold()
-    company_key = company.external_identifier.strip() or company.company.casefold().replace(" ", "-")
+    if connector_key == "comeet":
+        try:
+            company_key = build_comeet_site(
+                company=company.company,
+                career_url=company.career_url,
+                external_identifier=company.external_identifier.strip(),
+                country=company.country,
+                role_families=tuple(company.role_families),
+            ).identifier
+        except ValueError:
+            company_key = company.company.casefold().replace(" ", "-")
+    else:
+        company_key = company.external_identifier.strip() or company.company.casefold().replace(" ", "-")
     return f"{connector_key}:{company_key}"
 
 
@@ -310,6 +338,7 @@ class MarketScoutAgent:
                                 jobs_matched=0,
                                 alerts_sent=0,
                                 alerts_failed=0,
+                                requests_made=0,
                                 error_message="Collector not implemented for this connector.",
                             )
                             for company in companies
@@ -339,6 +368,7 @@ class MarketScoutAgent:
                                 jobs_matched=0,
                                 alerts_sent=0,
                                 alerts_failed=0,
+                                requests_made=0,
                                 retries=0,
                                 failed=True,
                                 error_message=str(exc)[:1000],
@@ -424,6 +454,7 @@ class MarketScoutAgent:
                     jobs_matched=0,
                     alerts_sent=0,
                     alerts_failed=0,
+                    requests_made=0,
                     failed=True,
                     error_message="Collector not implemented for this connector.",
                 )
@@ -444,6 +475,7 @@ class MarketScoutAgent:
                             jobs_matched=0,
                             alerts_sent=0,
                             alerts_failed=0,
+                            requests_made=0,
                             retries=0,
                             failed=True,
                             error_message=str(exc)[:1000],
@@ -470,7 +502,14 @@ class MarketScoutAgent:
             connector_key = company.connector.strip().casefold()
             if not company.enabled or not connector_key:
                 continue
-            if connector_key in {"greenhouse", "lever", "ashby", "microsoft-careers", "google-careers"} and not company.external_identifier.strip():
+            if connector_key in {
+                "greenhouse",
+                "lever",
+                "ashby",
+                "microsoft-careers",
+                "google-careers",
+                "oracle-recruiting-cloud",
+            } and not company.external_identifier.strip():
                 self.logger.warning(
                     "Skipping enabled company without external identifier",
                     extra={
@@ -480,6 +519,156 @@ class MarketScoutAgent:
                     },
                 )
                 continue
+            if connector_key in {
+                "workday",
+                "google-careers",
+                "amazon-jobs",
+                "oracle-recruiting-cloud",
+                "successfactors",
+            } and not company.career_url.strip():
+                self.logger.warning(
+                    "Skipping enabled company without career URL",
+                    extra={
+                        "operation_name": "market_scout.company.invalid",
+                        "connector_key": connector_key,
+                        "company": company.company,
+                    },
+                )
+                continue
+            if connector_key == "icims" and not (company.career_url.strip() or company.external_identifier.strip()):
+                self.logger.warning(
+                    "Skipping enabled company without iCIMS site configuration",
+                    extra={
+                        "operation_name": "market_scout.company.invalid",
+                        "connector_key": connector_key,
+                        "company": company.company,
+                    },
+                )
+                continue
+            if connector_key == "jobvite" and not (company.career_url.strip() or company.external_identifier.strip()):
+                self.logger.warning(
+                    "Skipping enabled company without Jobvite site configuration",
+                    extra={
+                        "operation_name": "market_scout.company.invalid",
+                        "connector_key": connector_key,
+                        "company": company.company,
+                    },
+                )
+                continue
+            if connector_key == "smartrecruiters":
+                try:
+                    build_smartrecruiters_site(
+                        company=company.company,
+                        career_url=company.career_url,
+                        external_identifier=company.external_identifier.strip(),
+                        country=company.country,
+                        role_families=tuple(company.role_families),
+                    )
+                except ValueError:
+                    self.logger.warning(
+                        "Skipping enabled SmartRecruiters company with invalid configuration",
+                        extra={
+                            "operation_name": "market_scout.company.invalid",
+                            "connector_key": connector_key,
+                            "company": company.company,
+                        },
+                    )
+                    continue
+            if connector_key == "icims":
+                try:
+                    build_icims_career_site(
+                        company=company.company,
+                        career_url=company.career_url,
+                        external_identifier=company.external_identifier.strip(),
+                        country=company.country,
+                        role_families=tuple(company.role_families),
+                    )
+                except ValueError:
+                    self.logger.warning(
+                        "Skipping enabled iCIMS company with invalid configuration",
+                        extra={
+                            "operation_name": "market_scout.company.invalid",
+                            "connector_key": connector_key,
+                            "company": company.company,
+                        },
+                    )
+                    continue
+            if connector_key == "jobvite":
+                try:
+                    build_jobvite_site(
+                        company=company.company,
+                        career_url=company.career_url,
+                        external_identifier=company.external_identifier.strip(),
+                        country=company.country,
+                        role_families=tuple(company.role_families),
+                    )
+                except ValueError:
+                    self.logger.warning(
+                        "Skipping enabled Jobvite company with invalid configuration",
+                        extra={
+                            "operation_name": "market_scout.company.invalid",
+                            "connector_key": connector_key,
+                            "company": company.company,
+                        },
+                    )
+                    continue
+            if connector_key == "comeet":
+                try:
+                    build_comeet_site(
+                        company=company.company,
+                        career_url=company.career_url,
+                        external_identifier=company.external_identifier.strip(),
+                        country=company.country,
+                        role_families=tuple(company.role_families),
+                    )
+                except ValueError:
+                    self.logger.warning(
+                        "Skipping enabled Comeet company with invalid configuration",
+                        extra={
+                            "operation_name": "market_scout.company.invalid",
+                            "connector_key": connector_key,
+                            "company": company.company,
+                        },
+                    )
+                    continue
+            if connector_key == "oracle-recruiting-cloud":
+                try:
+                    build_oracle_recruiting_cloud_site(
+                        company=company.company,
+                        career_url=company.career_url,
+                        external_identifier=company.external_identifier.strip(),
+                        country=company.country,
+                        role_families=tuple(company.role_families),
+                    )
+                except ValueError:
+                    self.logger.warning(
+                        "Skipping enabled Oracle Recruiting Cloud company with invalid configuration",
+                        extra={
+                            "operation_name": "market_scout.company.invalid",
+                            "connector_key": connector_key,
+                            "company": company.company,
+                        },
+                    )
+                    continue
+            if connector_key == "successfactors":
+                try:
+                    build_successfactors_site(
+                        company=company.company,
+                        career_url=company.career_url,
+                        external_identifier=company.external_identifier.strip(),
+                        country=company.country,
+                        role_families=tuple(company.role_families),
+                    )
+                except ValueError:
+                    self.logger.warning(
+                        "Skipping enabled SuccessFactors company with invalid configuration",
+                        extra={
+                            "operation_name": "market_scout.company.invalid",
+                            "connector_key": connector_key,
+                            "company": company.company,
+                        },
+                    )
+                    continue
             run_key = _company_connector_run_key(company)
             enabled_company_counts[connector_key] = enabled_company_counts.get(connector_key, 0) + 1
             candidates.append((connector_key, run_key, company))
@@ -542,6 +731,7 @@ class MarketScoutAgent:
                     "jobs_matched": 0,
                     "alerts_sent": 0,
                     "alerts_failed": 0,
+                    "requests_made": 0,
                     "retries": 0,
                     "failures": 0,
                 }
@@ -565,6 +755,7 @@ class MarketScoutAgent:
             summary["jobs_matched"] = int(summary["jobs_matched"]) + run.jobs_matched
             summary["alerts_sent"] = int(summary["alerts_sent"]) + run.alerts_sent
             summary["alerts_failed"] = int(summary["alerts_failed"]) + run.alerts_failed
+            summary["requests_made"] = int(summary["requests_made"]) + run.requests_made
             summary["retries"] = int(summary["retries"]) + run.retries
             summary["failures"] = int(summary["failures"]) + (1 if run.failed else 0)
 
@@ -582,6 +773,24 @@ class MarketScoutAgent:
             return self._run_lever_company
         if connector_key == "microsoft-careers":
             return self._run_microsoft_company
+        if connector_key == "workday":
+            return self._run_workday_company
+        if connector_key == "smartrecruiters":
+            return self._run_smartrecruiters_company
+        if connector_key == "icims":
+            return self._run_icims_company
+        if connector_key == "jobvite":
+            return self._run_jobvite_company
+        if connector_key == "comeet":
+            return self._run_comeet_company
+        if connector_key == "oracle-recruiting-cloud":
+            return self._run_oracle_company
+        if connector_key == "successfactors":
+            return self._run_successfactors_company
+        if connector_key == "google-careers":
+            return self._run_google_company
+        if connector_key == "amazon-jobs":
+            return self._run_amazon_company
         return None
 
     async def _reconcile_connector_inventory(
@@ -734,6 +943,7 @@ class MarketScoutAgent:
                     "operation_name": "market_scout.connector.collect",
                     "connector_key": connector_key,
                     "jobs_fetched": len(result.jobs),
+                    "requests_made": result.requests_made,
                     "retries": retry_count,
                     "inventory_complete": result.exhausted,
                     "pages_scanned": result.pages_scanned,
@@ -750,6 +960,7 @@ class MarketScoutAgent:
                 next_cursor=result.next_cursor.cursor,
                 next_published_at=result.next_cursor.last_published_at,
                 retry_count=retry_count,
+                requests_made=result.requests_made,
                 inventory_complete=result.exhausted,
                 pages_scanned=result.pages_scanned,
                 expected_pages=result.expected_pages,
@@ -769,6 +980,7 @@ class MarketScoutAgent:
                     "jobs_ignored": summary.jobs_ignored,
                     "alerts_sent": summary.alerts_sent,
                     "alerts_failed": summary.alerts_failed,
+                    "requests_made": summary.requests_made,
                     "retries": summary.retries,
                     "inventory_complete": summary.inventory_complete,
                     "pages_scanned": summary.pages_scanned,
@@ -854,6 +1066,150 @@ class MarketScoutAgent:
             collect_fn=connector.collect,
         )
 
+    async def _run_workday_company(self, company: CompanyPreference) -> ConnectorRunSummary:
+        site = build_workday_career_site(
+            company=company.company,
+            career_url=company.career_url,
+            external_identifier=company.external_identifier.strip(),
+            country=company.country,
+            role_families=tuple(company.role_families),
+        )
+        connector = WorkdayJobConnector(site=site, connector_settings=self.settings.connectors)
+        return await self._run_company_connector(
+            company=company,
+            connector_key=f"workday:{site.identifier}",
+            collect_operation_name=f"workday.collect.{site.identifier}",
+            collect_fn=connector.collect,
+        )
+
+    async def _run_smartrecruiters_company(self, company: CompanyPreference) -> ConnectorRunSummary:
+        site = build_smartrecruiters_site(
+            company=company.company,
+            career_url=company.career_url,
+            external_identifier=company.external_identifier.strip(),
+            country=company.country,
+            role_families=tuple(company.role_families),
+        )
+        connector = SmartRecruitersJobConnector(site=site, connector_settings=self.settings.connectors)
+        return await self._run_company_connector(
+            company=company,
+            connector_key=f"smartrecruiters:{site.identifier}",
+            collect_operation_name=f"smartrecruiters.collect.{site.identifier}",
+            collect_fn=connector.collect,
+        )
+
+    async def _run_google_company(self, company: CompanyPreference) -> ConnectorRunSummary:
+        site = build_google_career_site(
+            company=company.company,
+            career_url=company.career_url,
+            external_identifier=company.external_identifier.strip(),
+            country=company.country,
+            role_families=tuple(company.role_families),
+        )
+        connector = GoogleCareersJobConnector(site=site, connector_settings=self.settings.connectors)
+        return await self._run_company_connector(
+            company=company,
+            connector_key=f"google-careers:{site.identifier}",
+            collect_operation_name=f"google-careers.collect.{site.identifier}",
+            collect_fn=connector.collect,
+        )
+
+    async def _run_icims_company(self, company: CompanyPreference) -> ConnectorRunSummary:
+        site = build_icims_career_site(
+            company=company.company,
+            career_url=company.career_url,
+            external_identifier=company.external_identifier.strip(),
+            country=company.country,
+            role_families=tuple(company.role_families),
+        )
+        connector = ICIMSJobConnector(site=site, connector_settings=self.settings.connectors)
+        return await self._run_company_connector(
+            company=company,
+            connector_key=f"icims:{site.identifier}",
+            collect_operation_name=f"icims.collect.{site.identifier}",
+            collect_fn=connector.collect,
+        )
+
+    async def _run_jobvite_company(self, company: CompanyPreference) -> ConnectorRunSummary:
+        site = build_jobvite_site(
+            company=company.company,
+            career_url=company.career_url,
+            external_identifier=company.external_identifier.strip(),
+            country=company.country,
+            role_families=tuple(company.role_families),
+        )
+        connector = JobviteJobConnector(site=site, connector_settings=self.settings.connectors)
+        return await self._run_company_connector(
+            company=company,
+            connector_key=f"jobvite:{site.identifier}",
+            collect_operation_name=f"jobvite.collect.{site.identifier}",
+            collect_fn=connector.collect,
+        )
+
+    async def _run_comeet_company(self, company: CompanyPreference) -> ConnectorRunSummary:
+        site = build_comeet_site(
+            company=company.company,
+            career_url=company.career_url,
+            external_identifier=company.external_identifier.strip(),
+            country=company.country,
+            role_families=tuple(company.role_families),
+        )
+        connector = ComeetJobConnector(site=site, connector_settings=self.settings.connectors)
+        return await self._run_company_connector(
+            company=company,
+            connector_key=f"comeet:{site.identifier}",
+            collect_operation_name=f"comeet.collect.{site.identifier}",
+            collect_fn=connector.collect,
+        )
+
+    async def _run_oracle_company(self, company: CompanyPreference) -> ConnectorRunSummary:
+        site = build_oracle_recruiting_cloud_site(
+            company=company.company,
+            career_url=company.career_url,
+            external_identifier=company.external_identifier.strip(),
+            country=company.country,
+            role_families=tuple(company.role_families),
+        )
+        connector = OracleRecruitingCloudConnector(site=site, connector_settings=self.settings.connectors)
+        return await self._run_company_connector(
+            company=company,
+            connector_key=f"oracle-recruiting-cloud:{site.identifier}",
+            collect_operation_name=f"oracle-recruiting-cloud.collect.{site.identifier}",
+            collect_fn=connector.collect,
+        )
+
+    async def _run_successfactors_company(self, company: CompanyPreference) -> ConnectorRunSummary:
+        site = build_successfactors_site(
+            company=company.company,
+            career_url=company.career_url,
+            external_identifier=company.external_identifier.strip(),
+            country=company.country,
+            role_families=tuple(company.role_families),
+        )
+        connector = SuccessFactorsJobConnector(site=site, connector_settings=self.settings.connectors)
+        return await self._run_company_connector(
+            company=company,
+            connector_key=f"successfactors:{site.identifier}",
+            collect_operation_name=f"successfactors.collect.{site.identifier}",
+            collect_fn=connector.collect,
+        )
+
+    async def _run_amazon_company(self, company: CompanyPreference) -> ConnectorRunSummary:
+        site = build_amazon_career_site(
+            company=company.company,
+            career_url=company.career_url,
+            external_identifier=company.external_identifier.strip(),
+            country=company.country,
+            role_families=tuple(company.role_families),
+        )
+        connector = AmazonJobsConnector(site=site, connector_settings=self.settings.connectors)
+        return await self._run_company_connector(
+            company=company,
+            connector_key=f"amazon-jobs:{site.identifier}",
+            collect_operation_name=f"amazon-jobs.collect.{site.identifier}",
+            collect_fn=connector.collect,
+        )
+
     async def _persist_connector_result(
         self,
         *,
@@ -865,6 +1221,7 @@ class MarketScoutAgent:
         next_cursor: str | None,
         next_published_at: datetime | None,
         retry_count: int,
+        requests_made: int,
         inventory_complete: bool,
         pages_scanned: int,
         expected_pages: int | None,
@@ -1276,12 +1633,13 @@ class MarketScoutAgent:
                     jobs_matched = $8,
                     alerts_sent = $9,
                     alerts_failed = $10,
-                    retries = $11,
-                    cursor_after = $12,
-                    inventory_complete = $13,
-                    pages_scanned = $14,
-                    expected_pages = $15,
-                    partial_reason = $16
+                    requests_made = $11,
+                    retries = $12,
+                    cursor_after = $13,
+                    inventory_complete = $14,
+                    pages_scanned = $15,
+                    expected_pages = $16,
+                    partial_reason = $17
                 WHERE run_id = $1
                 """,
                 run_id,
@@ -1294,6 +1652,7 @@ class MarketScoutAgent:
                 jobs_matched,
                 alerts_sent,
                 alerts_failed,
+                requests_made,
                 retry_count,
                 next_cursor,
                 inventory_complete,
@@ -1314,6 +1673,7 @@ class MarketScoutAgent:
                 jobs_matched=jobs_matched,
                 alerts_sent=alerts_sent,
                 alerts_failed=alerts_failed,
+                requests_made=requests_made,
                 retries=retry_count,
                 inventory_complete=inventory_complete,
                 pages_scanned=pages_scanned,

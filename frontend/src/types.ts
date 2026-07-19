@@ -301,6 +301,18 @@ export interface AdminConnectorWorkspaceCompany {
   validation_reason: string;
   validation_message: string;
   validated_at: string | null;
+  production_readiness_status: "ready" | "pending" | "blocked";
+  production_readiness_summary: string;
+  production_readiness_passed: number;
+  production_readiness_total: number;
+  production_readiness_blocked: number;
+  production_readiness_pending: number;
+  production_readiness_checks: Array<{
+    key: string;
+    label: string;
+    status: "passed" | "pending_evidence" | "blocked" | "not_applicable";
+    detail: string;
+  }>;
   active_jobs: number;
   stale_jobs: number;
   closed_jobs: number;

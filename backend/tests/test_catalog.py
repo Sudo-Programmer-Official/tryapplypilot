@@ -59,9 +59,15 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("greenhouse", effective.radar.enabled_connectors)
         self.assertIn("ashby", effective.radar.enabled_connectors)
         self.assertIn("microsoft-careers", effective.radar.enabled_connectors)
+        self.assertIn("workday", effective.radar.enabled_connectors)
+        self.assertIn("smartrecruiters", effective.radar.enabled_connectors)
+        self.assertIn("icims", effective.radar.enabled_connectors)
+        self.assertIn("jobvite", effective.radar.enabled_connectors)
+        self.assertIn("oracle-recruiting-cloud", effective.radar.enabled_connectors)
+        self.assertIn("successfactors", effective.radar.enabled_connectors)
+        self.assertIn("google-careers", effective.radar.enabled_connectors)
+        self.assertIn("amazon-jobs", effective.radar.enabled_connectors)
         self.assertNotIn("company-api", effective.radar.enabled_connectors)
-        self.assertNotIn("google-careers", effective.radar.enabled_connectors)
-        self.assertNotIn("workday", effective.radar.enabled_connectors)
 
     def test_recommended_catalog_fingerprint_is_stable_and_live_defaults_are_greenhouse(self) -> None:
         first = recommended_company_catalog_fingerprint()
@@ -71,7 +77,20 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(len(enabled_companies), 0)
         self.assertEqual(
             {company.connector for company in enabled_companies},
-            {"greenhouse", "lever", "ashby", "microsoft-careers"},
+            {
+                "greenhouse",
+                "lever",
+                "ashby",
+                "microsoft-careers",
+                "workday",
+                "smartrecruiters",
+                "icims",
+                "jobvite",
+                "oracle-recruiting-cloud",
+                "successfactors",
+                "google-careers",
+                "amazon-jobs",
+            },
         )
 
     def test_preference_defaults_payload_covers_all_seed_keys(self) -> None:

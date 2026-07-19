@@ -14,6 +14,7 @@ from app.job_metadata import (
 class JobMetadataTests(unittest.TestCase):
     def test_infer_country_code_recognizes_us_location(self) -> None:
         self.assertEqual(infer_country_code("San Francisco, CA"), "US")
+        self.assertEqual(infer_country_code("Newtown Square, PA, US, 19073"), "US")
 
     def test_infer_country_code_recognizes_explicit_other_country(self) -> None:
         self.assertEqual(infer_country_code("Tokyo, Japan"), "OTHER")

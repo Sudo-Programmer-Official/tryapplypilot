@@ -52,7 +52,23 @@ PREFERENCE_DEFAULTS = (
 )
 
 RECOMMENDED_COMPANY_CATALOG_FINGERPRINT_KEY = "recommended_company_catalog_fingerprint"
-IMPLEMENTED_CONNECTOR_KEYS = frozenset({"greenhouse", "lever", "ashby", "microsoft-careers"})
+IMPLEMENTED_CONNECTOR_KEYS = frozenset(
+    {
+        "greenhouse",
+        "lever",
+        "ashby",
+        "microsoft-careers",
+        "workday",
+        "smartrecruiters",
+        "icims",
+        "jobvite",
+        "comeet",
+        "oracle-recruiting-cloud",
+        "successfactors",
+        "google-careers",
+        "amazon-jobs",
+    }
+)
 logger = get_logger("app.catalog")
 
 
