@@ -30,6 +30,17 @@ CREATE TABLE IF NOT EXISTS jobs (
     CONSTRAINT jobs_connector_external_unique UNIQUE (connector_key, external_job_id)
 );
 
+ALTER TABLE jobs
+    ADD COLUMN IF NOT EXISTS company_id TEXT,
+    ADD COLUMN IF NOT EXISTS last_changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS consecutive_missed_syncs INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS lifecycle_status TEXT NOT NULL DEFAULT 'active',
+    ADD COLUMN IF NOT EXISTS source_status TEXT NOT NULL DEFAULT 'observed',
+    ADD COLUMN IF NOT EXISTS content_hash TEXT NOT NULL DEFAULT '';
+
 CREATE INDEX IF NOT EXISTS jobs_company_idx ON jobs (company);
 CREATE INDEX IF NOT EXISTS jobs_decision_idx ON jobs (decision);
 CREATE INDEX IF NOT EXISTS jobs_published_at_idx ON jobs (published_at DESC);
@@ -301,6 +312,14 @@ CREATE TABLE IF NOT EXISTS connector_runs (
     error_message TEXT
 );
 
+ALTER TABLE connector_runs
+    ADD COLUMN IF NOT EXISTS company_id TEXT,
+    ADD COLUMN IF NOT EXISTS trigger TEXT NOT NULL DEFAULT 'scheduled',
+    ADD COLUMN IF NOT EXISTS jobs_updated INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS jobs_matched INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS alerts_sent INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS alerts_failed INTEGER NOT NULL DEFAULT 0;
+
 CREATE INDEX IF NOT EXISTS connector_runs_connector_started_idx ON connector_runs (connector_key, started_at DESC);
 CREATE INDEX IF NOT EXISTS connector_runs_company_started_idx ON connector_runs (company_id, started_at DESC);
 
@@ -317,22 +336,3 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 
 CREATE INDEX IF NOT EXISTS audit_logs_created_at_idx ON audit_logs (created_at DESC);
 CREATE INDEX IF NOT EXISTS audit_logs_event_created_at_idx ON audit_logs (event_type, created_at DESC);
-
-ALTER TABLE jobs
-    ADD COLUMN IF NOT EXISTS company_id TEXT,
-    ADD COLUMN IF NOT EXISTS last_changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ,
-    ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ,
-    ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ,
-    ADD COLUMN IF NOT EXISTS consecutive_missed_syncs INTEGER NOT NULL DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS lifecycle_status TEXT NOT NULL DEFAULT 'active',
-    ADD COLUMN IF NOT EXISTS source_status TEXT NOT NULL DEFAULT 'observed',
-    ADD COLUMN IF NOT EXISTS content_hash TEXT NOT NULL DEFAULT '';
-
-ALTER TABLE connector_runs
-    ADD COLUMN IF NOT EXISTS company_id TEXT,
-    ADD COLUMN IF NOT EXISTS trigger TEXT NOT NULL DEFAULT 'scheduled',
-    ADD COLUMN IF NOT EXISTS jobs_updated INTEGER NOT NULL DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS jobs_matched INTEGER NOT NULL DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS alerts_sent INTEGER NOT NULL DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS alerts_failed INTEGER NOT NULL DEFAULT 0;

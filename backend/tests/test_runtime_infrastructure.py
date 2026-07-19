@@ -48,6 +48,17 @@ class RuntimeInfrastructureTests(unittest.TestCase):
         self.assertIn("CREATE TABLE IF NOT EXISTS user_watchlists", schema_sql)
         self.assertIn("CREATE TABLE IF NOT EXISTS audit_logs", schema_sql)
 
+    def test_schema_applies_column_backfills_before_dependent_indexes(self) -> None:
+        schema_sql = load_schema_sql()
+        self.assertLess(
+            schema_sql.index("ALTER TABLE jobs"),
+            schema_sql.index("CREATE INDEX IF NOT EXISTS jobs_company_lifecycle_idx"),
+        )
+        self.assertLess(
+            schema_sql.index("ALTER TABLE connector_runs"),
+            schema_sql.index("CREATE INDEX IF NOT EXISTS connector_runs_company_started_idx"),
+        )
+
     def test_runtime_exposes_schema_tables_and_database_target(self) -> None:
         with patch.dict(os.environ, {"JOB_RADAR_RUNTIME_MODE": "seed"}, clear=True):
             get_settings.cache_clear()
