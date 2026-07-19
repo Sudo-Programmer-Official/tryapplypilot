@@ -279,6 +279,7 @@ SETTINGS = ScoutSettings(
     minimum_match_score=90,
     selected_country="US",
     alert_freshness_hours=6,
+    recovery_alert_freshness_hours=24 * 7,
     dashboard_freshness_hours=24,
     resume_variants=["Backend_AI_v5.pdf", "Platform_v4.pdf", "Distributed_Systems_v2.pdf"],
     initial_alert_window_hours=24,

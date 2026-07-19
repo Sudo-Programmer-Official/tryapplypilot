@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import json
 import re
 from typing import Any
 
 from app.catalog import list_companies as list_catalog_companies, upsert_company
+from app.company_catalog_defaults import AI_COMPANY_COLLECTIONS, ai_company_collections_for_company
 from app.config import AppSettings, get_settings
 from app.connectors.registry import build_default_registry
 from app.db.client import connection
@@ -15,7 +16,7 @@ from app.market_scout import MarketScoutAgent
 from app.runtime import get_runtime
 
 ATS_IDENTIFIER_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
-RUNTIME_SUPPORTED_CONNECTORS = frozenset({"greenhouse", "lever"})
+RUNTIME_SUPPORTED_CONNECTORS = frozenset({"greenhouse", "lever", "ashby", "microsoft-careers"})
 
 
 def _json_object(value: object) -> dict[str, object]:
@@ -74,6 +75,166 @@ def _recommended_action(reason: str, connector: str) -> str:
     return "Monitoring healthy"
 
 
+def _percent(numerator: int | float, denominator: int | float) -> float:
+    if denominator <= 0:
+        return 0.0
+    return round((float(numerator) / float(denominator)) * 100, 1)
+
+
+def _uptime_percent(
+    *,
+    state: str,
+    enabled: bool,
+    last_run_minutes_ago: int | None,
+    cadence_minutes: int,
+) -> float:
+    if not enabled:
+        return 0.0
+    if last_run_minutes_ago is None:
+        return 0.0
+    if state == "degraded":
+        return 45.0
+    if state == "lagging":
+        return 72.0
+    if last_run_minutes_ago <= cadence_minutes:
+        return 100.0
+    if last_run_minutes_ago <= cadence_minutes * 2:
+        return 90.0
+    return 75.0
+
+
+def _quality_grade(score: float, roadmap_status: str) -> str:
+    if roadmap_status == "planned":
+        return "Planned"
+    if roadmap_status == "disabled":
+        return "Disabled"
+    if score >= 95:
+        return "A"
+    if score >= 90:
+        return "A-"
+    if score >= 85:
+        return "B+"
+    if score >= 80:
+        return "B"
+    if score >= 75:
+        return "C+"
+    if score >= 70:
+        return "C"
+    return "D"
+
+
+def _trend_label(day: date) -> str:
+    return f"{day.strftime('%b')} {day.day}"
+
+
+def _dense_trends(
+    rows: list[Any],
+    *,
+    days: int = 14,
+) -> list[dict[str, object]]:
+    today = datetime.now(timezone.utc).date()
+    by_day: dict[date, dict[str, object]] = {}
+    for row in rows:
+        row_day = row["day"]
+        if isinstance(row_day, datetime):
+            row_day = row_day.date()
+        by_day[row_day] = {
+            "date": row_day.isoformat(),
+            "label": _trend_label(row_day),
+            "jobs_fetched": int(row["jobs_fetched"] or 0),
+            "jobs_inserted": int(row["jobs_inserted"] or 0),
+            "jobs_closed": int(row["jobs_closed"] or 0),
+            "jobs_archived": int(row["jobs_archived"] or 0),
+            "jobs_ignored": int(row["jobs_ignored"] or 0),
+            "alerts_sent": int(row["alerts_sent"] or 0),
+            "failures": int(row["failures"] or 0),
+            "retries": int(row["retries"] or 0),
+            "average_runtime_seconds": (
+                round(float(row["average_runtime_seconds"]), 1)
+                if row["average_runtime_seconds"] is not None
+                else None
+            ),
+        }
+    points: list[dict[str, object]] = []
+    for offset in range(days - 1, -1, -1):
+        day = today - timedelta(days=offset)
+        points.append(
+            by_day.get(
+                day,
+                {
+                    "date": day.isoformat(),
+                    "label": _trend_label(day),
+                    "jobs_fetched": 0,
+                    "jobs_inserted": 0,
+                    "jobs_closed": 0,
+                    "jobs_archived": 0,
+                    "jobs_ignored": 0,
+                    "alerts_sent": 0,
+                    "failures": 0,
+                    "retries": 0,
+                    "average_runtime_seconds": None,
+                },
+            )
+        )
+    return points
+
+
+def _build_ai_coverage(companies: list[dict[str, object]]) -> dict[str, object]:
+    unique_company_state: dict[str, str] = {}
+    unique_company_name: dict[str, str] = {}
+    collections_summary: list[dict[str, object]] = []
+    for collection_name, members in AI_COMPANY_COLLECTIONS.items():
+        collection_rows = [
+            row
+            for row in companies
+            if str(row["company"]).casefold() in members
+        ]
+        if not collection_rows:
+            continue
+        covered = 0
+        planned = 0
+        missing = 0
+        for row in collection_rows:
+            normalized_name = str(row["company"]).casefold()
+            monitoring_reason = str(row["monitoring_reason"])
+            roadmap_status = str(row["roadmap_status"])
+            if monitoring_reason == "monitored":
+                state = "covered"
+                covered += 1
+            elif monitoring_reason in {"planned", "connector_unavailable"} or roadmap_status in {"planned", "beta"}:
+                state = "planned"
+                planned += 1
+            else:
+                state = "missing"
+                missing += 1
+            unique_company_state.setdefault(normalized_name, state)
+            unique_company_name.setdefault(normalized_name, str(row["company"]))
+            if state == "covered":
+                unique_company_state[normalized_name] = "covered"
+            elif state == "planned" and unique_company_state[normalized_name] != "covered":
+                unique_company_state[normalized_name] = "planned"
+        collections_summary.append(
+            {
+                "name": collection_name,
+                "total": len(collection_rows),
+                "covered": covered,
+                "planned": planned,
+                "missing": missing,
+            }
+        )
+
+    covered_total = sum(1 for state in unique_company_state.values() if state == "covered")
+    planned_total = sum(1 for state in unique_company_state.values() if state == "planned")
+    missing_total = sum(1 for state in unique_company_state.values() if state == "missing")
+    return {
+        "total": len(unique_company_state),
+        "covered": covered_total,
+        "planned": planned_total,
+        "missing": missing_total,
+        "collections": sorted(collections_summary, key=lambda item: str(item["name"])),
+    }
+
+
 async def build_admin_connectors_workspace(settings: AppSettings | None = None) -> dict[str, object]:
     resolved_settings = settings or get_settings()
     runtime = get_runtime()
@@ -121,11 +282,77 @@ async def build_admin_connectors_workspace(settings: AppSettings | None = None) 
                 MAX(finished_at) FILTER (WHERE run_status = 'succeeded') AS last_successful_sync,
                 MAX(finished_at) FILTER (WHERE run_status = 'failed') AS last_failed_sync,
                 COUNT(*) FILTER (
+                    WHERE started_at >= NOW() - INTERVAL '14 days'
+                ) AS recent_runs,
+                COUNT(*) FILTER (
+                    WHERE run_status = 'succeeded'
+                      AND started_at >= NOW() - INTERVAL '14 days'
+                ) AS recent_successes,
+                COUNT(*) FILTER (
                     WHERE run_status = 'failed'
                       AND started_at >= NOW() - INTERVAL '7 days'
                 ) AS recent_failures
             FROM connector_runs
             GROUP BY company_id, split_part(connector_key, ':', 1)
+            """
+        )
+        connector_aggregate_rows = await conn.fetch(
+            """
+            SELECT
+                split_part(connector_key, ':', 1) AS connector_group,
+                COUNT(*) FILTER (
+                    WHERE started_at >= NOW() - INTERVAL '14 days'
+                ) AS runs_14d,
+                COUNT(*) FILTER (
+                    WHERE run_status = 'succeeded'
+                      AND started_at >= NOW() - INTERVAL '14 days'
+                ) AS succeeded_runs_14d,
+                COUNT(*) FILTER (
+                    WHERE run_status = 'failed'
+                      AND started_at >= NOW() - INTERVAL '14 days'
+                ) AS failed_runs_14d,
+                COUNT(*) FILTER (
+                    WHERE run_status = 'failed'
+                      AND started_at >= date_trunc('day', NOW())
+                ) AS failed_runs_today,
+                COALESCE(SUM(companies_scanned) FILTER (WHERE started_at >= date_trunc('day', NOW())), 0) AS companies_scanned_today,
+                COALESCE(SUM(jobs_fetched) FILTER (WHERE started_at >= date_trunc('day', NOW())), 0) AS jobs_fetched_today,
+                COALESCE(SUM(jobs_inserted) FILTER (WHERE started_at >= date_trunc('day', NOW())), 0) AS jobs_inserted_today,
+                COALESCE(SUM(jobs_updated) FILTER (WHERE started_at >= date_trunc('day', NOW())), 0) AS jobs_updated_today,
+                COALESCE(SUM(jobs_closed) FILTER (WHERE started_at >= date_trunc('day', NOW())), 0) AS jobs_closed_today,
+                COALESCE(SUM(jobs_archived) FILTER (WHERE started_at >= date_trunc('day', NOW())), 0) AS jobs_archived_today,
+                COALESCE(SUM(jobs_ignored) FILTER (WHERE started_at >= date_trunc('day', NOW())), 0) AS jobs_ignored_today,
+                COALESCE(SUM(alerts_sent) FILTER (WHERE started_at >= date_trunc('day', NOW())), 0) AS alerts_sent_today,
+                COALESCE(SUM(retries) FILTER (WHERE started_at >= date_trunc('day', NOW())), 0) AS retries_today,
+                AVG(EXTRACT(EPOCH FROM (finished_at - started_at))) FILTER (
+                    WHERE run_status = 'succeeded'
+                      AND finished_at IS NOT NULL
+                      AND started_at >= NOW() - INTERVAL '14 days'
+                ) AS average_runtime_seconds_14d
+            FROM connector_runs
+            GROUP BY split_part(connector_key, ':', 1)
+            """
+        )
+        trend_rows = await conn.fetch(
+            """
+            SELECT
+                date_trunc('day', started_at)::date AS day,
+                COALESCE(SUM(jobs_fetched), 0) AS jobs_fetched,
+                COALESCE(SUM(jobs_inserted), 0) AS jobs_inserted,
+                COALESCE(SUM(jobs_closed), 0) AS jobs_closed,
+                COALESCE(SUM(jobs_archived), 0) AS jobs_archived,
+                COALESCE(SUM(jobs_ignored), 0) AS jobs_ignored,
+                COALESCE(SUM(alerts_sent), 0) AS alerts_sent,
+                COALESCE(SUM(retries), 0) AS retries,
+                COUNT(*) FILTER (WHERE run_status = 'failed') AS failures,
+                AVG(EXTRACT(EPOCH FROM (finished_at - started_at))) FILTER (
+                    WHERE run_status = 'succeeded'
+                      AND finished_at IS NOT NULL
+                ) AS average_runtime_seconds
+            FROM connector_runs
+            WHERE started_at >= date_trunc('day', NOW()) - INTERVAL '13 days'
+            GROUP BY date_trunc('day', started_at)::date
+            ORDER BY day ASC
             """
         )
         run_history_rows = await conn.fetch(
@@ -142,9 +369,14 @@ async def build_admin_connectors_workspace(settings: AppSettings | None = None) 
                 cr.jobs_fetched,
                 cr.jobs_inserted,
                 cr.jobs_updated,
+                cr.jobs_closed,
+                cr.jobs_archived,
+                cr.jobs_ignored,
                 cr.jobs_matched,
                 cr.alerts_sent,
                 cr.alerts_failed,
+                cr.companies_scanned,
+                cr.retries,
                 cr.trigger,
                 cr.error_message
             FROM connector_runs cr
@@ -181,6 +413,17 @@ async def build_admin_connectors_workspace(settings: AppSettings | None = None) 
             FROM companies
             """
         )
+        alerts_sent_today = int(
+            await conn.fetchval(
+                """
+                SELECT COALESCE(COUNT(*), 0)
+                FROM user_alerts
+                WHERE alert_status = 'sent'
+                  AND COALESCE(sent_at, created_at) >= date_trunc('day', NOW())
+                """
+            )
+            or 0
+        )
 
     company_job_stats: dict[str, dict[str, int]] = {}
     connector_job_stats: dict[str, dict[str, int]] = {}
@@ -212,7 +455,33 @@ async def build_admin_connectors_workspace(settings: AppSettings | None = None) 
             "last_successful_sync": row["last_successful_sync"].isoformat() if row["last_successful_sync"] is not None else None,
             "last_failed_sync": row["last_failed_sync"].isoformat() if row["last_failed_sync"] is not None else None,
             "recent_failures": int(row["recent_failures"] or 0),
+            "recent_runs": int(row["recent_runs"] or 0),
+            "recent_successes": int(row["recent_successes"] or 0),
         }
+
+    connector_aggregate_stats = {
+        str(row["connector_group"] or ""): {
+            "runs_14d": int(row["runs_14d"] or 0),
+            "succeeded_runs_14d": int(row["succeeded_runs_14d"] or 0),
+            "failed_runs_14d": int(row["failed_runs_14d"] or 0),
+            "failed_runs_today": int(row["failed_runs_today"] or 0),
+            "companies_scanned_today": int(row["companies_scanned_today"] or 0),
+            "jobs_fetched_today": int(row["jobs_fetched_today"] or 0),
+            "jobs_inserted_today": int(row["jobs_inserted_today"] or 0),
+            "jobs_updated_today": int(row["jobs_updated_today"] or 0),
+            "jobs_closed_today": int(row["jobs_closed_today"] or 0),
+            "jobs_archived_today": int(row["jobs_archived_today"] or 0),
+            "jobs_ignored_today": int(row["jobs_ignored_today"] or 0),
+            "alerts_sent_today": int(row["alerts_sent_today"] or 0),
+            "retries_today": int(row["retries_today"] or 0),
+            "average_runtime_seconds_14d": (
+                round(float(row["average_runtime_seconds_14d"]), 1)
+                if row["average_runtime_seconds_14d"] is not None
+                else None
+            ),
+        }
+        for row in connector_aggregate_rows
+    }
 
     company_metadata = {
         str(row["company_id"]): _json_object(row["metadata"])
@@ -256,6 +525,7 @@ async def build_admin_connectors_workspace(settings: AppSettings | None = None) 
             "external_identifier": company.external_identifier,
             "career_url": company.career_url,
             "role_families": company.role_families,
+            "ai_collections": ai_company_collections_for_company(company.company),
             "monitoring_state": monitoring_state,
             "monitoring_reason": reason,
             "monitoring_detail": reason_detail,
@@ -290,18 +560,44 @@ async def build_admin_connectors_workspace(settings: AppSettings | None = None) 
 
     connector_workspace_rows: list[dict[str, object]] = []
     for source in sources:
+        aggregate = connector_aggregate_stats.get(source.connector_key, {})
         connector_stats = connector_job_stats.get(
             source.connector_key,
             {"active_jobs": 0, "stale_jobs": 0, "closed_jobs": 0, "expired_jobs": 0, "archived_jobs": 0},
         )
+        coverage_percent = _percent(source.companies_enabled, source.catalog_company_count)
+        reliability_percent = _percent(
+            int(aggregate.get("succeeded_runs_14d", 0) or 0),
+            int(aggregate.get("runs_14d", 0) or 0),
+        )
+        uptime_percent = _uptime_percent(
+            state=source.state,
+            enabled=source.enabled,
+            last_run_minutes_ago=source.last_run_minutes_ago,
+            cadence_minutes=source.cadence_minutes,
+        )
+        quality_score = round((coverage_percent * 0.35) + (reliability_percent * 0.45) + (uptime_percent * 0.20), 1)
         connector_workspace_rows.append(
             {
                 **source.to_dict(),
-                "coverage_percent": round(
-                    (source.companies_enabled / source.catalog_company_count) * 100, 1
-                )
-                if source.catalog_company_count > 0
-                else 0.0,
+                "coverage_percent": coverage_percent,
+                "reliability_percent": reliability_percent,
+                "uptime_percent": uptime_percent,
+                "quality_score": quality_score,
+                "quality_grade": _quality_grade(quality_score, source.admin_status),
+                "runs_14d": int(aggregate.get("runs_14d", 0) or 0),
+                "failed_runs_14d": int(aggregate.get("failed_runs_14d", 0) or 0),
+                "failed_runs_today": int(aggregate.get("failed_runs_today", 0) or 0),
+                "companies_scanned_today": int(aggregate.get("companies_scanned_today", 0) or 0),
+                "jobs_fetched_today": int(aggregate.get("jobs_fetched_today", 0) or 0),
+                "jobs_inserted_today": int(aggregate.get("jobs_inserted_today", 0) or 0),
+                "jobs_updated_today": int(aggregate.get("jobs_updated_today", 0) or 0),
+                "jobs_closed_today": int(aggregate.get("jobs_closed_today", 0) or 0),
+                "jobs_archived_today": int(aggregate.get("jobs_archived_today", 0) or 0),
+                "jobs_ignored_today": int(aggregate.get("jobs_ignored_today", 0) or 0),
+                "alerts_sent_today": int(aggregate.get("alerts_sent_today", 0) or 0),
+                "retries_today": int(aggregate.get("retries_today", 0) or 0),
+                "average_runtime_seconds_14d": aggregate.get("average_runtime_seconds_14d"),
                 **connector_stats,
             }
         )
@@ -319,19 +615,29 @@ async def build_admin_connectors_workspace(settings: AppSettings | None = None) 
         "total_rows": int(inventory_row["total_rows"] or 0),
     }
 
+    trends = _dense_trends(trend_rows)
+    latest_trend = trends[-1] if trends else None
+    ai_coverage = _build_ai_coverage(company_workspace_rows)
+    average_quality_score = round(
+        sum(float(row["quality_score"]) for row in connector_workspace_rows if str(row["roadmap_status"]) != "planned")
+        / max(1, sum(1 for row in connector_workspace_rows if str(row["roadmap_status"]) != "planned")),
+        1,
+    )
+
     roadmap = [
         {
-            "connector_key": source.connector_key,
-            "source": source.source,
-            "layer": source.layer,
-            "roadmap_status": source.admin_status,
-            "companies_enabled": source.companies_enabled,
-            "catalog_company_count": source.catalog_company_count,
-            "coverage_percent": round((source.companies_enabled / source.catalog_company_count) * 100, 1)
-            if source.catalog_company_count > 0
-            else 0.0,
+            "connector_key": str(row["connector_key"]),
+            "source": str(row["source"]),
+            "layer": row["layer"],
+            "roadmap_status": row["roadmap_status"],
+            "companies_enabled": int(row["companies_enabled"]),
+            "catalog_company_count": int(row["catalog_company_count"]),
+            "coverage_percent": float(row["coverage_percent"]),
+            "reliability_percent": float(row["reliability_percent"]),
+            "quality_score": float(row["quality_score"]),
+            "quality_grade": str(row["quality_grade"]),
         }
-        for source in sources
+        for row in connector_workspace_rows
     ]
 
     run_history = [
@@ -344,12 +650,17 @@ async def build_admin_connectors_workspace(settings: AppSettings | None = None) 
             "started_at": row["started_at"].isoformat() if row["started_at"] is not None else None,
             "finished_at": row["finished_at"].isoformat() if row["finished_at"] is not None else None,
             "run_status": str(row["run_status"]),
+            "companies_scanned": int(row["companies_scanned"] or 0),
             "jobs_fetched": int(row["jobs_fetched"] or 0),
             "jobs_inserted": int(row["jobs_inserted"] or 0),
             "jobs_updated": int(row["jobs_updated"] or 0),
+            "jobs_closed": int(row["jobs_closed"] or 0),
+            "jobs_archived": int(row["jobs_archived"] or 0),
+            "jobs_ignored": int(row["jobs_ignored"] or 0),
             "jobs_matched": int(row["jobs_matched"] or 0),
             "alerts_sent": int(row["alerts_sent"] or 0),
             "alerts_failed": int(row["alerts_failed"] or 0),
+            "retries": int(row["retries"] or 0),
             "trigger": str(row["trigger"] or "scheduled"),
             "error_message": str(row["error_message"]) if row["error_message"] is not None else None,
             "duration_seconds": (
@@ -373,6 +684,18 @@ async def build_admin_connectors_workspace(settings: AppSettings | None = None) 
             "monitored_companies": monitored_company_count,
             "coverage_gaps": len(coverage_gaps),
             "enabled_connectors": len(enabled_connector_keys),
+            "kpis": {
+                "jobs_active": inventory["active"],
+                "companies_monitored": monitored_company_count,
+                "connectors_live": sum(1 for source in sources if source.admin_status == "live"),
+                "coverage_percent": _percent(monitored_company_count, len(companies)),
+                "jobs_added_today": inventory["new_today"],
+                "alerts_sent_today": alerts_sent_today,
+                "connector_failures_today": int(latest_trend["failures"]) if latest_trend is not None else 0,
+                "average_quality_score": average_quality_score,
+            },
+            "trends": trends,
+            "ai_coverage": ai_coverage,
         },
         "connectors": connector_workspace_rows,
         "companies": company_workspace_rows,
@@ -398,6 +721,9 @@ async def build_admin_connectors_workspace(settings: AppSettings | None = None) 
             "job_matches_rows": int(table_counts["job_matches"] or 0),
             "saved_jobs_rows": int(table_counts["saved_jobs"] or 0),
             "active_inventory": inventory["active"],
+            "stale_inventory": inventory["stale"],
+            "closed_inventory": inventory["closed"],
+            "expired_inventory": inventory["expired"],
             "archived_inventory": inventory["archived"],
             "collected_lifetime": collected_lifetime,
         },

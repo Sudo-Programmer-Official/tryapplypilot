@@ -150,6 +150,7 @@ const roadmapColumns: TableColumn[] = [
   { key: "connector", label: "Connector" },
   { key: "layer", label: "Layer" },
   { key: "status", label: "Roadmap" },
+  { key: "quality", label: "Quality" },
   { key: "coverage", label: "Coverage" },
 ];
 
@@ -231,6 +232,22 @@ function connectorTone(connector: AdminConnectorWorkspaceConnector): "success" |
   return "neutral";
 }
 
+function qualityTone(grade: string): "success" | "warning" | "danger" | "info" | "neutral" {
+  if (grade.startsWith("A") || grade.startsWith("B")) {
+    return "success";
+  }
+  if (grade.startsWith("C")) {
+    return "warning";
+  }
+  if (grade === "Planned") {
+    return "info";
+  }
+  if (grade === "Disabled") {
+    return "neutral";
+  }
+  return "danger";
+}
+
 function layerLabel(layer: string): string {
   if (layer === "official_ats") {
     return "Official ATS";
@@ -250,6 +267,13 @@ function connectorLabel(value: string): string {
 
 function monitoringLabel(value: string): string {
   return value.replace(/_/g, " ");
+}
+
+function trendWidth(value: number, maxValue: number): string {
+  if (value <= 0 || maxValue <= 0) {
+    return "0%";
+  }
+  return `${Math.max(10, Math.round((value / maxValue) * 100))}%`;
 }
 
 async function load(): Promise<void> {
@@ -383,6 +407,20 @@ const companies = computed(() => workspace.value?.companies ?? []);
 const coverageGaps = computed(() => workspace.value?.coverage_gaps ?? []);
 const runHistory = computed(() => workspace.value?.run_history ?? []);
 const roadmap = computed(() => workspace.value?.roadmap ?? []);
+const trendPoints = computed(() => workspace.value?.overview.trends ?? []);
+const aiCoverage = computed(() => workspace.value?.overview.ai_coverage ?? null);
+const qualityLeaders = computed(() =>
+  [...connectors.value]
+    .filter((connector) => connector.admin_status !== "planned")
+    .sort((left, right) => right.quality_score - left.quality_score)
+    .slice(0, 6),
+);
+const trendMaxima = computed(() => ({
+  jobsInserted: Math.max(...trendPoints.value.map((point) => point.jobs_inserted), 1),
+  alertsSent: Math.max(...trendPoints.value.map((point) => point.alerts_sent), 1),
+  failures: Math.max(...trendPoints.value.map((point) => point.failures), 1),
+  runtime: Math.max(...trendPoints.value.map((point) => point.average_runtime_seconds ?? 0), 1),
+}));
 const connectorSelectOptions = computed(() => [
   ...connectorFilterOptions,
   ...connectors.value.map((connector) => ({
@@ -523,6 +561,18 @@ onMounted(load);
               <p>{{ workspace.overview.monitored_companies }}/{{ workspace.overview.catalog_companies }} companies actively monitorable.</p>
             </div>
           </AppCard>
+          <AppCard title="Alerts Today" subtitle="Successful user-facing notifications delivered today.">
+            <div class="metric-card">
+              <strong>{{ formatCompactNumber(workspace.overview.kpis.alerts_sent_today) }}</strong>
+              <p>{{ formatCompactNumber(workspace.overview.kpis.connector_failures_today) }} connector failures today.</p>
+            </div>
+          </AppCard>
+          <AppCard title="Average Quality" subtitle="Coverage, reliability, and freshness blended into one connector grade.">
+            <div class="metric-card">
+              <strong>{{ workspace.overview.kpis.average_quality_score }}</strong>
+              <p>{{ formatPercent(workspace.overview.kpis.coverage_percent) }} catalog coverage · {{ workspace.overview.kpis.connectors_live }} live connectors.</p>
+            </div>
+          </AppCard>
         </AppGrid>
       </PageSection>
 
@@ -536,9 +586,9 @@ onMounted(load);
                 <p>{{ workspace.overview.connectors_live }} live · {{ workspace.overview.connectors_beta }} beta · {{ workspace.overview.connectors_planned }} planned</p>
               </div>
               <div>
-                <span class="eyebrow">Storage Estimate</span>
-                <strong>{{ formatFileSize(workspace.overview.inventory.estimated_storage_bytes ?? 0) }}</strong>
-                <p>Approximate PostgreSQL footprint for current operational tables.</p>
+                <span class="eyebrow">Quality</span>
+                <strong>{{ workspace.overview.kpis.average_quality_score }}</strong>
+                <p>{{ formatPercent(workspace.overview.kpis.coverage_percent) }} coverage · {{ workspace.overview.kpis.jobs_added_today }} new jobs today.</p>
               </div>
             </div>
           </AppCard>
@@ -554,6 +604,69 @@ onMounted(load);
                 <strong>{{ formatDateTime(workspace.lifecycle.maintenance?.last_run) }}</strong>
                 <p>{{ workspace.lifecycle.maintenance?.archived_jobs ?? 0 }} archived · {{ workspace.lifecycle.maintenance?.deleted_jobs ?? 0 }} deleted in the latest cycle.</p>
               </div>
+            </div>
+          </AppCard>
+          <AppCard title="Connector Quality" subtitle="The highest-confidence connectors to scale next.">
+            <div class="drawer-list compact-list">
+              <article v-for="connector in qualityLeaders" :key="connector.id" class="drawer-list__item">
+                <div class="list-heading">
+                  <strong>{{ connector.source }}</strong>
+                  <AppBadge :tone="qualityTone(connector.quality_grade)">{{ connector.quality_grade }}</AppBadge>
+                </div>
+                <p>{{ formatPercent(connector.coverage_percent) }} coverage · {{ formatPercent(connector.reliability_percent) }} reliability · {{ formatPercent(connector.uptime_percent) }} uptime</p>
+                <p>{{ connector.jobs_inserted_today }} new today · {{ connector.alerts_sent_today }} alerts · {{ connector.retries_today }} retries</p>
+              </article>
+            </div>
+          </AppCard>
+          <AppCard title="AI Coverage" subtitle="Curated AI company collections tracked by the connector platform.">
+            <div v-if="aiCoverage" class="drawer-list compact-list">
+              <article class="drawer-list__item">
+                <strong>{{ aiCoverage.covered }}/{{ aiCoverage.total }} covered</strong>
+                <p>{{ aiCoverage.planned }} planned · {{ aiCoverage.missing }} missing or operator-blocked.</p>
+              </article>
+              <article v-for="collection in aiCoverage.collections" :key="collection.name" class="drawer-list__item">
+                <div class="list-heading">
+                  <strong>{{ collection.name }}</strong>
+                  <AppBadge :tone="collection.covered === collection.total ? 'success' : collection.covered > 0 ? 'warning' : 'info'">
+                    {{ collection.covered }}/{{ collection.total }}
+                  </AppBadge>
+                </div>
+                <p>{{ collection.covered }} covered · {{ collection.planned }} planned · {{ collection.missing }} missing</p>
+              </article>
+            </div>
+          </AppCard>
+        </AppGrid>
+      </PageSection>
+
+      <PageSection v-if="activeTab === 'overview'">
+        <AppGrid columns="1">
+          <AppCard title="Daily Trends" subtitle="Jobs/day, alerts/day, failures/day, and runtime trends for the last 14 days.">
+            <div class="trend-grid">
+              <article v-for="point in trendPoints" :key="point.date" class="trend-card">
+                <div class="list-heading">
+                  <strong>{{ point.label }}</strong>
+                  <span class="eyebrow">{{ point.jobs_inserted }} new</span>
+                </div>
+                <div class="trend-row">
+                  <span>Jobs</span>
+                  <div class="trend-bar">
+                    <span class="trend-bar__fill trend-bar__fill--jobs" :style="{ width: trendWidth(point.jobs_inserted, trendMaxima.jobsInserted) }" />
+                  </div>
+                </div>
+                <div class="trend-row">
+                  <span>Alerts</span>
+                  <div class="trend-bar">
+                    <span class="trend-bar__fill trend-bar__fill--alerts" :style="{ width: trendWidth(point.alerts_sent, trendMaxima.alertsSent) }" />
+                  </div>
+                </div>
+                <div class="trend-row">
+                  <span>Failures</span>
+                  <div class="trend-bar">
+                    <span class="trend-bar__fill trend-bar__fill--failures" :style="{ width: trendWidth(point.failures, trendMaxima.failures) }" />
+                  </div>
+                </div>
+                <p>{{ point.jobs_fetched }} fetched · {{ point.jobs_ignored }} ignored · {{ point.retries }} retries · {{ formatDurationSeconds(point.average_runtime_seconds) }} avg runtime</p>
+              </article>
             </div>
           </AppCard>
         </AppGrid>
@@ -582,11 +695,12 @@ onMounted(load);
                 </td>
                 <td>
                   <AppBadge :tone="connectorTone(connector)">{{ connector.state }}</AppBadge>
-                  <p>{{ connector.lag_reason || "Healthy cadence." }}</p>
+                  <AppBadge :tone="qualityTone(connector.quality_grade)">{{ connector.quality_grade }}</AppBadge>
+                  <p>{{ formatPercent(connector.reliability_percent) }} reliability · {{ formatPercent(connector.uptime_percent) }} uptime</p>
                 </td>
                 <td>
                   <strong>{{ connector.companies_enabled }}/{{ connector.catalog_company_count }} · {{ formatPercent(connector.coverage_percent) }}</strong>
-                  <p>{{ connector.new_jobs_today }} new today · {{ connector.jobs_collected }} fetched today</p>
+                  <p>{{ connector.companies_scanned_today }} scanned · {{ connector.jobs_fetched_today }} fetched · {{ connector.jobs_inserted_today }} inserted</p>
                 </td>
                 <td>
                   <strong>{{ connector.active_jobs }} active</strong>
@@ -594,7 +708,8 @@ onMounted(load);
                 </td>
                 <td>
                   <strong>{{ formatDateTime(connector.last_successful_sync) }}</strong>
-                  <p>{{ formatDurationSeconds(connector.average_runtime_seconds) }} avg runtime</p>
+                  <p>{{ connector.jobs_updated_today }} updated · {{ connector.jobs_ignored_today }} ignored · {{ connector.alerts_sent_today }} alerts · {{ connector.failed_runs_today }} failures today</p>
+                  <p>{{ formatDurationSeconds(connector.average_runtime_seconds_14d ?? connector.average_runtime_seconds) }} avg runtime · {{ connector.retries_today }} retries</p>
                 </td>
                 <td>
                   <div class="inline-actions">
@@ -615,6 +730,7 @@ onMounted(load);
                 <td>
                   <strong>{{ company.company }}</strong>
                   <p>{{ connectorLabel(company.connector) }} · {{ company.external_identifier || "no board id" }}</p>
+                  <p v-if="company.ai_collections.length > 0">{{ company.ai_collections.join(" · ") }}</p>
                 </td>
                 <td>
                   <AppBadge :tone="monitoringTone(company.monitoring_reason)">{{ monitoringLabel(company.monitoring_reason) }}</AppBadge>
@@ -739,6 +855,10 @@ onMounted(load);
                 <td>{{ item.source }}</td>
                 <td>{{ layerLabel(item.layer) }}</td>
                 <td><AppBadge :tone="roadmapTone(item.roadmap_status)">{{ item.roadmap_status }}</AppBadge></td>
+                <td>
+                  <AppBadge :tone="qualityTone(item.quality_grade)">{{ item.quality_grade }}</AppBadge>
+                  <p>{{ formatPercent(item.reliability_percent) }} reliability · score {{ item.quality_score }}</p>
+                </td>
                 <td>{{ item.companies_enabled }}/{{ item.catalog_company_count }} · {{ formatPercent(item.coverage_percent) }}</td>
               </tr>
             </AppTable>
@@ -754,6 +874,7 @@ onMounted(load);
                 <td>
                   <strong>{{ connectorLabel(item.connector_group) }}</strong>
                   <p>{{ item.trigger }} · {{ formatDateTime(item.started_at) }}</p>
+                  <p>{{ item.companies_scanned }} company scanned</p>
                 </td>
                 <td>
                   <strong>{{ item.company_name || "Connector-wide" }}</strong>
@@ -767,11 +888,12 @@ onMounted(load);
                 </td>
                 <td>
                   <strong>{{ item.jobs_fetched }} fetched</strong>
-                  <p>{{ item.jobs_inserted }} inserted · {{ item.jobs_updated }} updated · {{ item.jobs_matched }} matched</p>
+                  <p>{{ item.jobs_inserted }} inserted · {{ item.jobs_updated }} updated · {{ item.jobs_ignored }} ignored</p>
+                  <p>{{ item.jobs_closed }} closed · {{ item.jobs_archived }} archived · {{ item.jobs_matched }} matched</p>
                 </td>
                 <td>
                   <strong>{{ item.alerts_sent }} sent</strong>
-                  <p>{{ item.alerts_failed }} failed</p>
+                  <p>{{ item.alerts_failed }} failed · {{ item.retries }} retries</p>
                 </td>
                 <td>
                   <strong>{{ formatDurationSeconds(item.duration_seconds) }}</strong>
@@ -884,6 +1006,67 @@ td p {
 
 .overview-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.compact-list {
+  padding: 0;
+}
+
+.trend-grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.trend-card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-muted);
+}
+
+.trend-row {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.trend-row span:first-child {
+  font-size: var(--type-small);
+  color: var(--color-text-muted);
+}
+
+.trend-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-text-muted) 15%, transparent);
+  overflow: hidden;
+}
+
+.trend-bar__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.trend-bar__fill--jobs {
+  background: linear-gradient(90deg, #1d4ed8, #60a5fa);
+}
+
+.trend-bar__fill--alerts {
+  background: linear-gradient(90deg, #047857, #34d399);
+}
+
+.trend-bar__fill--failures {
+  background: linear-gradient(90deg, #b91c1c, #fb7185);
 }
 
 .drawer-stack {

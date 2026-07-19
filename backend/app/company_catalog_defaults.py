@@ -59,18 +59,18 @@ RECOMMENDED_COMPANY_DEFAULTS: tuple[CompanyCatalogDefault, ...] = (
     _company("OpenAI", "company-api", "openai", "https://openai.com/careers/search/", 1, 1),
     _company("Anthropic", "greenhouse", "anthropic", "https://job-boards.greenhouse.io/anthropic", 1, 2),
     _company("Databricks", "greenhouse", "databricks", "https://job-boards.greenhouse.io/databricks", 1, 3),
-    _company("Microsoft", "microsoft-careers", "microsoft", "https://jobs.careers.microsoft.com/", 1, 4),
+    _company("Microsoft", "microsoft-careers", "microsoft.com", "https://jobs.careers.microsoft.com/", 1, 4),
     _company("Stripe", "greenhouse", "stripe", "https://job-boards.greenhouse.io/stripe", 1, 5),
     _company("Cloudflare", "greenhouse", "cloudflare", "https://job-boards.greenhouse.io/cloudflare", 1, 6),
     _company("Snowflake", "company-api", "snowflake", "https://careers.snowflake.com/", 1, 7),
     _company("Confluent", "company-api", "confluent", "https://careers.confluent.io/", 1, 8),
     _company("MongoDB", "greenhouse", "mongodb", "https://job-boards.greenhouse.io/mongodb", 1, 9),
     _company("GitHub", "company-api", "github", "https://www.github.careers/careers-home", 1, 10),
-    _company("Ramp", "company-api", "ramp", "https://ramp.com/careers", 1, 11),
+    _company("Ramp", "ashby", "ramp", "https://jobs.ashbyhq.com/ramp", 1, 11),
     _company("Perplexity", "company-api", "perplexity", "https://www.perplexity.ai/careers", 1, 12),
     _company("Scale AI", "greenhouse", "scaleai", "https://job-boards.greenhouse.io/scaleai", 1, 13),
     _company("Cursor", "company-api", "cursor", "https://www.cursor.com/careers", 1, 14),
-    _company("Linear", "company-api", "linear", "https://linear.app/careers", 1, 15),
+    _company("Linear", "ashby", "linear", "https://jobs.ashbyhq.com/linear", 1, 15),
     _company(
         "Google",
         "google-careers",
@@ -103,7 +103,7 @@ RECOMMENDED_COMPANY_DEFAULTS: tuple[CompanyCatalogDefault, ...] = (
     _company("Plaid", "company-api", "plaid", "https://plaid.com/careers", 3, 38),
     _company("Robinhood", "greenhouse", "robinhood", "https://job-boards.greenhouse.io/robinhood", 3, 39),
     _company("Figma", "greenhouse", "figma", "https://job-boards.greenhouse.io/figma", 3, 40),
-    _company("Notion", "company-api", "notion", "https://www.notion.so/careers", 3, 41),
+    _company("Notion", "ashby", "notion", "https://jobs.ashbyhq.com/notion", 3, 41),
     _company("Airtable", "greenhouse", "airtable", "https://job-boards.greenhouse.io/airtable", 3, 42),
     _company("Canva", "company-api", "canva", "https://www.canva.com/careers/", 3, 43),
     _company("Discord", "greenhouse", "discord", "https://job-boards.greenhouse.io/discord", 3, 44),
@@ -156,7 +156,7 @@ RECOMMENDED_COMPANY_DEFAULTS: tuple[CompanyCatalogDefault, ...] = (
 ENABLED_COMPANY_NAMES = {
     spec.name
     for spec in RECOMMENDED_COMPANY_DEFAULTS
-    if spec.connector in {"greenhouse", "lever"}
+    if spec.connector in {"greenhouse", "lever", "ashby", "microsoft-careers"}
 }
 
 AI_PLATFORM_COMPANIES = {
@@ -355,6 +355,79 @@ FORWARD_DEPLOYED_COMPANIES = {
     "harvey",
 }
 
+AI_COMPANY_COLLECTIONS: dict[str, frozenset[str]] = {
+    "Foundation Models": frozenset(
+        {
+            "openai",
+            "anthropic",
+            "cohere",
+            "mistral ai",
+            "together ai",
+            "hugging face",
+        }
+    ),
+    "AI Infrastructure": frozenset(
+        {
+            "databricks",
+            "scale ai",
+            "snowflake",
+            "confluent",
+            "mongodb",
+            "weights and biases",
+        }
+    ),
+    "AI Agents": frozenset(
+        {
+            "openai",
+            "anthropic",
+            "perplexity",
+            "cursor",
+            "glean",
+            "harvey",
+            "sierra",
+            "windsurf",
+            "runway",
+        }
+    ),
+    "Developer Tools": frozenset(
+        {
+            "cursor",
+            "linear",
+            "github",
+            "gitlab",
+            "sourcegraph",
+            "vercel",
+            "netlify",
+            "render",
+            "replit",
+        }
+    ),
+    "Robotics": frozenset(
+        {
+            "anduril",
+            "nvidia",
+        }
+    ),
+    "FinTech AI": frozenset(
+        {
+            "stripe",
+            "ramp",
+            "mercury",
+            "brex",
+            "plaid",
+            "robinhood",
+            "coinbase",
+        }
+    ),
+    "Security AI": frozenset(
+        {
+            "cloudflare",
+            "snyk",
+            "palantir",
+        }
+    ),
+}
+
 
 def default_role_families_for_company(company_name: str) -> list[str]:
     normalized = company_name.casefold()
@@ -388,6 +461,15 @@ def default_role_families_for_company(company_name: str) -> list[str]:
     if normalized in FORWARD_DEPLOYED_COMPANIES:
         role_families.add("Forward Deployed Engineering")
     return sorted(role_families)
+
+
+def ai_company_collections_for_company(company_name: str) -> list[str]:
+    normalized = company_name.casefold()
+    return sorted(
+        collection_name
+        for collection_name, company_names in AI_COMPANY_COLLECTIONS.items()
+        if normalized in company_names
+    )
 
 
 def build_recommended_company_preferences(

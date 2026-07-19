@@ -51,7 +51,8 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
             get_settings.cache_clear()
             effective = await build_effective_app_settings()
         self.assertIn("greenhouse", effective.radar.enabled_connectors)
-        self.assertNotIn("microsoft-careers", effective.radar.enabled_connectors)
+        self.assertIn("ashby", effective.radar.enabled_connectors)
+        self.assertIn("microsoft-careers", effective.radar.enabled_connectors)
         self.assertNotIn("company-api", effective.radar.enabled_connectors)
         self.assertNotIn("google-careers", effective.radar.enabled_connectors)
         self.assertNotIn("workday", effective.radar.enabled_connectors)
@@ -62,7 +63,10 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first, second)
         enabled_companies = [company for company in build_recommended_company_preferences() if company.enabled]
         self.assertGreater(len(enabled_companies), 0)
-        self.assertEqual({company.connector for company in enabled_companies}, {"greenhouse", "lever"})
+        self.assertEqual(
+            {company.connector for company in enabled_companies},
+            {"greenhouse", "lever", "ashby", "microsoft-careers"},
+        )
 
     async def test_persist_company_preserves_existing_company_id_for_same_name(self) -> None:
         class FakeConn:

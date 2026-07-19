@@ -38,6 +38,7 @@ PREFERENCE_DEFAULTS = (
     "minimum_match_score",
     "selected_country",
     "alert_freshness_hours",
+    "recovery_alert_freshness_hours",
     "dashboard_freshness_hours",
     "roles",
     "role_families",
@@ -659,6 +660,9 @@ async def build_scout_settings(settings: AppSettings | None = None) -> ScoutSett
         minimum_match_score=int(values.get("minimum_match_score", resolved_settings.radar.minimum_match_score)),
         selected_country=normalize_supported_country(str(values.get("selected_country", resolved_settings.radar.selected_country))),
         alert_freshness_hours=int(values.get("alert_freshness_hours", resolved_settings.radar.alert_freshness_hours)),
+        recovery_alert_freshness_hours=int(
+            values.get("recovery_alert_freshness_hours", resolved_settings.radar.recovery_alert_freshness_hours)
+        ),
         dashboard_freshness_hours=int(values.get("dashboard_freshness_hours", resolved_settings.radar.dashboard_freshness_hours)),
         resume_variants=_read_list(values.get("resume_variants"), resolved_settings.radar.resume_variants),
         initial_alert_window_hours=int(values.get("initial_alert_window_hours", resolved_settings.radar.initial_alert_window_hours)),
@@ -686,6 +690,9 @@ async def update_preference_settings(
         "minimum_match_score": int(payload.get("minimum_match_score", resolved_settings.radar.minimum_match_score)),
         "selected_country": normalize_supported_country(str(payload.get("selected_country", resolved_settings.radar.selected_country))),
         "alert_freshness_hours": int(payload.get("alert_freshness_hours", resolved_settings.radar.alert_freshness_hours)),
+        "recovery_alert_freshness_hours": int(
+            payload.get("recovery_alert_freshness_hours", resolved_settings.radar.recovery_alert_freshness_hours)
+        ),
         "dashboard_freshness_hours": int(payload.get("dashboard_freshness_hours", resolved_settings.radar.dashboard_freshness_hours)),
         "roles": [str(value).strip() for value in payload.get("roles", []) if str(value).strip()],
         "role_families": [str(value).strip() for value in payload.get("role_families", []) if str(value).strip()],
@@ -740,6 +747,7 @@ async def build_effective_app_settings(settings: AppSettings | None = None) -> A
             review_threshold_score=scout_settings.review_threshold_score,
             selected_country=scout_settings.selected_country,
             alert_freshness_hours=scout_settings.alert_freshness_hours,
+            recovery_alert_freshness_hours=scout_settings.recovery_alert_freshness_hours,
             dashboard_freshness_hours=scout_settings.dashboard_freshness_hours,
             companies=tuple(scout_settings.companies),
             target_roles=tuple(role.label for role in scout_settings.roles if role.enabled),

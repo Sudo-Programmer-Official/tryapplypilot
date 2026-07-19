@@ -66,6 +66,7 @@ def build_scout_settings(settings: AppSettings) -> ScoutSettings:
         minimum_match_score=settings.radar.minimum_match_score,
         selected_country=settings.radar.selected_country,
         alert_freshness_hours=settings.radar.alert_freshness_hours,
+        recovery_alert_freshness_hours=settings.radar.recovery_alert_freshness_hours,
         dashboard_freshness_hours=settings.radar.dashboard_freshness_hours,
         resume_variants=list(settings.radar.resume_variants),
         initial_alert_window_hours=settings.radar.initial_alert_window_hours,

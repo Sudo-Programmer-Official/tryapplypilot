@@ -47,6 +47,8 @@ class RuntimeInfrastructureTests(unittest.TestCase):
         self.assertIn("CREATE TABLE IF NOT EXISTS saved_jobs", schema_sql)
         self.assertIn("CREATE TABLE IF NOT EXISTS user_watchlists", schema_sql)
         self.assertIn("CREATE TABLE IF NOT EXISTS audit_logs", schema_sql)
+        self.assertIn("inventory_complete BOOLEAN NOT NULL DEFAULT TRUE", schema_sql)
+        self.assertIn("pages_scanned INTEGER NOT NULL DEFAULT 1", schema_sql)
 
     def test_schema_applies_column_backfills_before_dependent_indexes(self) -> None:
         schema_sql = load_schema_sql()

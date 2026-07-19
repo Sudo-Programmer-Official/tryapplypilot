@@ -203,6 +203,7 @@ class RadarSettings:
     review_threshold_score: int
     selected_country: str
     alert_freshness_hours: int
+    recovery_alert_freshness_hours: int
     dashboard_freshness_hours: int
     alert_decisions: tuple[str, ...]
     companies: tuple[CompanyPreference, ...]
@@ -420,6 +421,7 @@ def get_settings() -> AppSettings:
             review_threshold_score=_read_int("JOB_RADAR_REVIEW_THRESHOLD", 75),
             selected_country=normalize_supported_country(os.getenv("JOB_RADAR_COUNTRY")),
             alert_freshness_hours=_read_int("JOB_RADAR_ALERT_FRESHNESS_HOURS", 6),
+            recovery_alert_freshness_hours=_read_int("JOB_RADAR_RECOVERY_ALERT_FRESHNESS_HOURS", 24 * 7),
             dashboard_freshness_hours=_read_int("JOB_RADAR_DASHBOARD_FRESHNESS_HOURS", 24),
             alert_decisions=_read_csv("JOB_RADAR_ALERT_DECISIONS", ("APPLY_NOW",)),
             companies=default_companies if runtime_mode == "seed" else (),

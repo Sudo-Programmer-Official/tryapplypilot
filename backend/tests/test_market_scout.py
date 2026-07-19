@@ -66,6 +66,24 @@ class _PendingAlertConnection:
         self.executed.append((query, args))
 
 
+class _PersistConnectionContext:
+    def __init__(self) -> None:
+        self.executed: list[tuple[str, tuple[object, ...]]] = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> bool:
+        return False
+
+    async def fetch(self, query: str, *args: object):
+        del query, args
+        return []
+
+    async def execute(self, query: str, *args: object):
+        self.executed.append((query, args))
+
+
 class MarketScoutTests(unittest.IsolatedAsyncioTestCase):
     def tearDown(self) -> None:
         get_settings.cache_clear()
@@ -175,12 +193,17 @@ class MarketScoutTests(unittest.IsolatedAsyncioTestCase):
                     "companies_enabled": 3,
                     "companies_polled": 2,
                     "companies_skipped_interval": 1,
+                    "companies_scanned": 2,
                     "jobs_fetched": 210,
                     "jobs_new": 7,
                     "jobs_updated": 15,
+                    "jobs_closed": 0,
+                    "jobs_archived": 0,
+                    "jobs_ignored": 0,
                     "jobs_matched": 14,
                     "alerts_sent": 3,
                     "alerts_failed": 1,
+                    "retries": 0,
                     "failures": 1,
                 },
                 {
@@ -188,12 +211,17 @@ class MarketScoutTests(unittest.IsolatedAsyncioTestCase):
                     "companies_enabled": 1,
                     "companies_polled": 1,
                     "companies_skipped_interval": 0,
+                    "companies_scanned": 1,
                     "jobs_fetched": 11,
                     "jobs_new": 2,
                     "jobs_updated": 1,
+                    "jobs_closed": 0,
+                    "jobs_archived": 0,
+                    "jobs_ignored": 0,
                     "jobs_matched": 3,
                     "alerts_sent": 1,
                     "alerts_failed": 0,
+                    "retries": 0,
                     "failures": 0,
                 },
             ],
@@ -268,6 +296,56 @@ class MarketScoutTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((alerts_sent, alerts_failed), (1, 0))
         self.assertEqual(len(conn.inserted_alerts), 1)
         send_alert.assert_awaited_once()
+
+    async def test_partial_connector_result_skips_lifecycle_reconciliation(self) -> None:
+        with patch.dict(os.environ, {"JOB_RADAR_RUNTIME_MODE": "seed"}, clear=True):
+            get_settings.cache_clear()
+            settings = get_settings()
+
+        agent = MarketScoutAgent(settings=settings)
+        company = CompanyPreference(
+            id="microsoft",
+            company="Microsoft",
+            enabled=True,
+            tier=1,
+            priority=1,
+            connector="microsoft-careers",
+            poll_interval_minutes=5,
+            country="US",
+            career_url="https://jobs.careers.microsoft.com/",
+            external_identifier="microsoft.com",
+            role_families=["Platform Engineering"],
+        )
+        conn = _PersistConnectionContext()
+
+        with (
+            patch("app.market_scout.connection", return_value=conn),
+            patch.object(agent, "_active_user_contexts", AsyncMock(return_value=[])),
+            patch.object(agent, "_reconcile_connector_inventory", AsyncMock()) as reconcile_inventory,
+        ):
+            summary = await agent._persist_connector_result(
+                company=company,
+                connector_key="microsoft-careers:microsoft.com",
+                run_id="run-1",
+                last_successful_sync=None,
+                jobs=[],
+                next_cursor=None,
+                next_published_at=None,
+                retry_count=0,
+                inventory_complete=False,
+                pages_scanned=4,
+                expected_pages=12,
+                partial_reason="page_limit_reached",
+            )
+
+        reconcile_inventory.assert_not_awaited()
+        self.assertFalse(summary.inventory_complete)
+        self.assertEqual(summary.pages_scanned, 4)
+        self.assertEqual(summary.expected_pages, 12)
+        self.assertEqual(summary.partial_reason, "page_limit_reached")
+        self.assertTrue(
+            any("inventory_complete" in query and "partial_reason" in query for query, _args in conn.executed)
+        )
 
 
 if __name__ == "__main__":

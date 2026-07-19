@@ -33,7 +33,7 @@ def build_ssl_context(tls: HttpTlsSettings) -> ssl.SSLContext:
     return ssl.create_default_context()
 
 
-def request_json(
+def _request_text(
     method: str,
     url: str,
     *,
@@ -41,7 +41,7 @@ def request_json(
     tls: HttpTlsSettings,
     headers: dict[str, str] | None = None,
     body: dict[str, object] | list[object] | None = None,
-) -> dict[str, object]:
+) -> str:
     payload_bytes = None
     request_headers = dict(headers or {})
     if body is not None:
@@ -55,13 +55,50 @@ def request_json(
             timeout=timeout_seconds,
             context=build_ssl_context(tls),
         ) as response:
-            response_body = response.read().decode("utf-8")
+            return response.read().decode("utf-8")
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         raise HttpClientError(f"{method.upper()} {url} failed with HTTP {exc.code}: {detail}") from exc
     except URLError as exc:
         raise HttpClientError(f"{method.upper()} {url} failed: {exc.reason}") from exc
 
+
+def request_text(
+    method: str,
+    url: str,
+    *,
+    timeout_seconds: int,
+    tls: HttpTlsSettings,
+    headers: dict[str, str] | None = None,
+    body: dict[str, object] | list[object] | None = None,
+) -> str:
+    return _request_text(
+        method,
+        url,
+        timeout_seconds=timeout_seconds,
+        tls=tls,
+        headers=headers,
+        body=body,
+    )
+
+
+def request_json(
+    method: str,
+    url: str,
+    *,
+    timeout_seconds: int,
+    tls: HttpTlsSettings,
+    headers: dict[str, str] | None = None,
+    body: dict[str, object] | list[object] | None = None,
+) -> object:
+    response_body = _request_text(
+        method,
+        url,
+        timeout_seconds=timeout_seconds,
+        tls=tls,
+        headers=headers,
+        body=body,
+    )
     try:
         return json.loads(response_body)
     except json.JSONDecodeError as exc:

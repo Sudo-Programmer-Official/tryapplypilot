@@ -255,6 +255,22 @@ export interface ConnectorInventorySnapshot {
 
 export interface AdminConnectorWorkspaceConnector extends SourceStatus {
   coverage_percent: number;
+  reliability_percent: number;
+  uptime_percent: number;
+  quality_score: number;
+  quality_grade: string;
+  runs_14d: number;
+  failed_runs_14d: number;
+  failed_runs_today: number;
+  companies_scanned_today: number;
+  jobs_fetched_today: number;
+  jobs_inserted_today: number;
+  jobs_updated_today: number;
+  jobs_closed_today: number;
+  jobs_archived_today: number;
+  jobs_ignored_today: number;
+  alerts_sent_today: number;
+  average_runtime_seconds_14d: number | null;
   active_jobs: number;
   stale_jobs: number;
   closed_jobs: number;
@@ -277,6 +293,7 @@ export interface AdminConnectorWorkspaceCompany {
   external_identifier: string;
   career_url: string;
   role_families: string[];
+  ai_collections: string[];
   monitoring_state: string;
   monitoring_reason: string;
   monitoring_detail: string;
@@ -315,15 +332,50 @@ export interface RunHistoryItem {
   started_at: string | null;
   finished_at: string | null;
   run_status: string;
+  companies_scanned: number;
   jobs_fetched: number;
   jobs_inserted: number;
   jobs_updated: number;
+  jobs_closed: number;
+  jobs_archived: number;
+  jobs_ignored: number;
   jobs_matched: number;
   alerts_sent: number;
   alerts_failed: number;
+  retries: number;
   trigger: string;
   error_message: string | null;
   duration_seconds: number | null;
+}
+
+export interface ConnectorTrendPoint {
+  date: string;
+  label: string;
+  jobs_fetched: number;
+  jobs_inserted: number;
+  jobs_closed: number;
+  jobs_archived: number;
+  jobs_ignored: number;
+  alerts_sent: number;
+  failures: number;
+  retries: number;
+  average_runtime_seconds: number | null;
+}
+
+export interface AICollectionCoverage {
+  name: string;
+  total: number;
+  covered: number;
+  planned: number;
+  missing: number;
+}
+
+export interface AICompanyCoverageSummary {
+  total: number;
+  covered: number;
+  planned: number;
+  missing: number;
+  collections: AICollectionCoverage[];
 }
 
 export interface ConnectorCompanyJobRecord {
@@ -376,6 +428,18 @@ export interface AdminConnectorsWorkspace {
     monitored_companies: number;
     coverage_gaps: number;
     enabled_connectors: number;
+    kpis: {
+      jobs_active: number;
+      companies_monitored: number;
+      connectors_live: number;
+      coverage_percent: number;
+      jobs_added_today: number;
+      alerts_sent_today: number;
+      connector_failures_today: number;
+      average_quality_score: number;
+    };
+    trends: ConnectorTrendPoint[];
+    ai_coverage: AICompanyCoverageSummary;
   };
   connectors: AdminConnectorWorkspaceConnector[];
   companies: AdminConnectorWorkspaceCompany[];
@@ -401,6 +465,9 @@ export interface AdminConnectorsWorkspace {
     job_matches_rows: number;
     saved_jobs_rows: number;
     active_inventory: number;
+    stale_inventory: number;
+    closed_inventory: number;
+    expired_inventory: number;
     archived_inventory: number;
     collected_lifetime: number;
   };
@@ -412,6 +479,9 @@ export interface AdminConnectorsWorkspace {
     companies_enabled: number;
     catalog_company_count: number;
     coverage_percent: number;
+    reliability_percent: number;
+    quality_score: number;
+    quality_grade: string;
   }>;
   run_history: RunHistoryItem[];
 }

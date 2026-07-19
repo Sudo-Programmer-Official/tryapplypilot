@@ -296,6 +296,7 @@ CREATE TABLE IF NOT EXISTS connector_runs (
     run_id TEXT PRIMARY KEY,
     connector_key TEXT NOT NULL,
     company_id TEXT,
+    companies_scanned INTEGER NOT NULL DEFAULT 1,
     trigger TEXT NOT NULL DEFAULT 'scheduled',
     started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     finished_at TIMESTAMPTZ,
@@ -303,10 +304,17 @@ CREATE TABLE IF NOT EXISTS connector_runs (
     jobs_fetched INTEGER NOT NULL DEFAULT 0,
     jobs_inserted INTEGER NOT NULL DEFAULT 0,
     jobs_updated INTEGER NOT NULL DEFAULT 0,
+    jobs_closed INTEGER NOT NULL DEFAULT 0,
+    jobs_archived INTEGER NOT NULL DEFAULT 0,
+    jobs_ignored INTEGER NOT NULL DEFAULT 0,
     jobs_matched INTEGER NOT NULL DEFAULT 0,
     alerts_sent INTEGER NOT NULL DEFAULT 0,
     alerts_failed INTEGER NOT NULL DEFAULT 0,
     retries INTEGER NOT NULL DEFAULT 0,
+    inventory_complete BOOLEAN NOT NULL DEFAULT TRUE,
+    pages_scanned INTEGER NOT NULL DEFAULT 1,
+    expected_pages INTEGER,
+    partial_reason TEXT,
     cursor_before TEXT,
     cursor_after TEXT,
     error_message TEXT
@@ -314,11 +322,19 @@ CREATE TABLE IF NOT EXISTS connector_runs (
 
 ALTER TABLE connector_runs
     ADD COLUMN IF NOT EXISTS company_id TEXT,
+    ADD COLUMN IF NOT EXISTS companies_scanned INTEGER NOT NULL DEFAULT 1,
     ADD COLUMN IF NOT EXISTS trigger TEXT NOT NULL DEFAULT 'scheduled',
     ADD COLUMN IF NOT EXISTS jobs_updated INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS jobs_closed INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS jobs_archived INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS jobs_ignored INTEGER NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS jobs_matched INTEGER NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS alerts_sent INTEGER NOT NULL DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS alerts_failed INTEGER NOT NULL DEFAULT 0;
+    ADD COLUMN IF NOT EXISTS alerts_failed INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS inventory_complete BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN IF NOT EXISTS pages_scanned INTEGER NOT NULL DEFAULT 1,
+    ADD COLUMN IF NOT EXISTS expected_pages INTEGER,
+    ADD COLUMN IF NOT EXISTS partial_reason TEXT;
 
 CREATE INDEX IF NOT EXISTS connector_runs_connector_started_idx ON connector_runs (connector_key, started_at DESC);
 CREATE INDEX IF NOT EXISTS connector_runs_company_started_idx ON connector_runs (company_id, started_at DESC);

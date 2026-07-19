@@ -135,6 +135,128 @@ class NotificationDeliveryTests(unittest.TestCase):
         self.assertEqual(decision.reason_code, "daily_digest_scheduled")
         self.assertEqual(decision.notification_type, "daily_digest")
 
+    def test_recovery_alert_uses_longer_recovery_freshness_window(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "JOB_RADAR_RUNTIME_MODE": "seed",
+                "JOB_RADAR_RECOVERY_ALERT_FRESHNESS_HOURS": "168",
+            },
+            clear=True,
+        ):
+            get_settings.cache_clear()
+            settings = get_settings()
+
+        user = UserAccount(
+            id="user-3",
+            email="recovery@example.com",
+            role="user",
+            telegram_chat_id="12345",
+            preferences={"minimum_match_score": 90, "freshness_hours": 24, "notification_frequency": "instant"},
+        )
+        now = datetime.now(timezone.utc)
+        job = NormalizedJobRecord(
+            connector_key="greenhouse",
+            external_job_id="job-3",
+            company="Anthropic",
+            title="Staff+ Software Engineer, Backend",
+            location="San Francisco",
+            remote_policy="Remote",
+            published_at=now - timedelta(days=4),
+            apply_url="https://example.com/jobs/3",
+            description_text="Backend platform role",
+            job_fingerprint="fingerprint-3",
+            raw_payload={},
+        )
+        match = MatchResult(
+            score=93,
+            decision="APPLY_NOW",
+            top_strengths=["Python"],
+            gaps=["Kubernetes"],
+            recommended_resume="Backend_AI_v5.pdf",
+            provider="heuristic",
+        )
+
+        decision = evaluate_notification_decision(
+            job=job,
+            match=match,
+            user=user,
+            settings=settings,
+            published_at=job.published_at or now,
+            now=now,
+            initial_sync=False,
+            remaining_initial_alert_budget=0,
+            delivery_phase="recovery",
+            minimum_match_score_override=90,
+            freshness_hours_override=24,
+        )
+
+        self.assertTrue(decision.should_send)
+        self.assertEqual(decision.notification_status, "pending")
+        self.assertEqual(decision.reason_code, "connector_retry")
+        self.assertEqual(decision.notification_type, "recovery_alert")
+
+    def test_recovery_alerts_still_expire_after_recovery_window(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "JOB_RADAR_RUNTIME_MODE": "seed",
+                "JOB_RADAR_RECOVERY_ALERT_FRESHNESS_HOURS": "168",
+            },
+            clear=True,
+        ):
+            get_settings.cache_clear()
+            settings = get_settings()
+
+        user = UserAccount(
+            id="user-4",
+            email="stale-recovery@example.com",
+            role="user",
+            telegram_chat_id="12345",
+            preferences={"minimum_match_score": 90, "freshness_hours": 24, "notification_frequency": "instant"},
+        )
+        now = datetime.now(timezone.utc)
+        job = NormalizedJobRecord(
+            connector_key="greenhouse",
+            external_job_id="job-4",
+            company="Anthropic",
+            title="Staff+ Software Engineer, Platform",
+            location="San Francisco",
+            remote_policy="Remote",
+            published_at=now - timedelta(days=8),
+            apply_url="https://example.com/jobs/4",
+            description_text="Platform role",
+            job_fingerprint="fingerprint-4",
+            raw_payload={},
+        )
+        match = MatchResult(
+            score=93,
+            decision="APPLY_NOW",
+            top_strengths=["Python"],
+            gaps=["Kubernetes"],
+            recommended_resume="Backend_AI_v5.pdf",
+            provider="heuristic",
+        )
+
+        decision = evaluate_notification_decision(
+            job=job,
+            match=match,
+            user=user,
+            settings=settings,
+            published_at=job.published_at or now,
+            now=now,
+            initial_sync=False,
+            remaining_initial_alert_budget=0,
+            delivery_phase="recovery",
+            minimum_match_score_override=90,
+            freshness_hours_override=24,
+        )
+
+        self.assertFalse(decision.should_send)
+        self.assertEqual(decision.notification_status, "suppressed")
+        self.assertEqual(decision.reason_code, "freshness_expired")
+        self.assertEqual(decision.notification_type, "recovery_alert")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -15,9 +15,10 @@ if "asyncpg" not in sys.modules:
     sys.modules["asyncpg"] = asyncpg_stub
 
 from app.config import get_settings
+from app.company_catalog_defaults import ai_company_collections_for_company
 from app.domain import CompanyPreference
 from app.job_lifecycle import lifecycle_for_missed_syncs
-from app.services.admin_connectors import _monitoring_reason
+from app.services.admin_connectors import _monitoring_reason, _quality_grade
 
 
 class JobLifecycleTests(unittest.TestCase):
@@ -90,6 +91,15 @@ class JobLifecycleTests(unittest.TestCase):
             validation_payload=None,
         )
         self.assertEqual(disabled, "disabled")
+
+    def test_quality_grade_and_ai_collections_helpers(self) -> None:
+        self.assertEqual(_quality_grade(96.0, "live"), "A")
+        self.assertEqual(_quality_grade(88.0, "beta"), "B+")
+        self.assertEqual(_quality_grade(0.0, "planned"), "Planned")
+        self.assertEqual(
+            ai_company_collections_for_company("OpenAI"),
+            ["AI Agents", "Foundation Models"],
+        )
 
 
 if __name__ == "__main__":

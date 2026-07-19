@@ -50,6 +50,9 @@ def evaluate_notification_decision(
     notification_type = "recovery_alert" if delivery_phase == "recovery" else "fresh_alert"
     minimum_score = minimum_match_score_override if minimum_match_score_override is not None else minimum_match_score(user, settings)
     freshness_hours = freshness_hours_override if freshness_hours_override is not None else alert_freshness_hours(user, settings)
+    effective_freshness_hours = freshness_hours
+    if delivery_phase == "recovery":
+        effective_freshness_hours = max(freshness_hours, settings.radar.recovery_alert_freshness_hours)
 
     if not telegram_connected(user):
         return NotificationDecisionSnapshot(
@@ -65,7 +68,7 @@ def evaluate_notification_decision(
             reason_code="below_match_threshold",
             notification_type=notification_type,
         )
-    if published_at < now - timedelta(hours=freshness_hours):
+    if published_at < now - timedelta(hours=effective_freshness_hours):
         return NotificationDecisionSnapshot(
             should_send=False,
             notification_status="suppressed",

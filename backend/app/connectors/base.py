@@ -64,6 +64,9 @@ class ConnectorRunResult:
     next_cursor: ConnectorCursor
     exhausted: bool
     requests_made: int
+    pages_scanned: int = 1
+    expected_pages: int | None = None
+    partial_reason: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -71,6 +74,9 @@ class ConnectorRunResult:
             "next_cursor": self.next_cursor.to_dict(),
             "exhausted": self.exhausted,
             "requests_made": self.requests_made,
+            "pages_scanned": self.pages_scanned,
+            "expected_pages": self.expected_pages,
+            "partial_reason": self.partial_reason,
         }
 
 

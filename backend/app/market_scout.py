@@ -12,9 +12,11 @@ from uuid import uuid4, uuid5, NAMESPACE_URL
 from app.audit_logs import record_audit_event
 from app.catalog import build_effective_app_settings
 from app.config import AppSettings, GreenhouseBoard, get_settings
+from app.connectors.ashby import AshbyBoard, AshbyJobConnector
 from app.connectors.base import ConnectorCursor, NormalizedJobRecord
 from app.connectors.greenhouse import GreenhouseJobConnector
 from app.connectors.lever import LeverBoard, LeverJobConnector
+from app.connectors.microsoft_careers import MicrosoftCareerSite, MicrosoftCareersJobConnector
 from app.db.client import connection
 from app.domain import CompanyPreference, UserAccount
 from app.job_lifecycle import content_hash_for_job, lifecycle_for_missed_syncs
@@ -49,6 +51,15 @@ class ConnectorRunSummary:
     jobs_matched: int
     alerts_sent: int
     alerts_failed: int
+    jobs_closed: int = 0
+    jobs_archived: int = 0
+    jobs_ignored: int = 0
+    companies_scanned: int = 1
+    retries: int = 0
+    inventory_complete: bool = True
+    pages_scanned: int = 1
+    expected_pages: int | None = None
+    partial_reason: str | None = None
     failed: bool = False
     error_message: str | None = None
 
@@ -59,9 +70,18 @@ class ConnectorRunSummary:
             "jobs_fetched": self.jobs_fetched,
             "jobs_inserted": self.jobs_inserted,
             "jobs_updated": self.jobs_updated,
+            "jobs_closed": self.jobs_closed,
+            "jobs_archived": self.jobs_archived,
+            "jobs_ignored": self.jobs_ignored,
             "jobs_matched": self.jobs_matched,
             "alerts_sent": self.alerts_sent,
             "alerts_failed": self.alerts_failed,
+            "companies_scanned": self.companies_scanned,
+            "retries": self.retries,
+            "inventory_complete": self.inventory_complete,
+            "pages_scanned": self.pages_scanned,
+            "expected_pages": self.expected_pages,
+            "partial_reason": self.partial_reason,
             "failed": self.failed,
             "error_message": self.error_message,
         }
@@ -86,6 +106,18 @@ class MarketScoutRunSummary:
         return sum(run.jobs_updated for run in self.runs)
 
     @property
+    def jobs_closed(self) -> int:
+        return sum(run.jobs_closed for run in self.runs)
+
+    @property
+    def jobs_archived(self) -> int:
+        return sum(run.jobs_archived for run in self.runs)
+
+    @property
+    def jobs_ignored(self) -> int:
+        return sum(run.jobs_ignored for run in self.runs)
+
+    @property
     def jobs_matched(self) -> int:
         return sum(run.jobs_matched for run in self.runs)
 
@@ -96,6 +128,14 @@ class MarketScoutRunSummary:
     @property
     def alerts_failed(self) -> int:
         return sum(run.alerts_failed for run in self.runs)
+
+    @property
+    def companies_scanned(self) -> int:
+        return sum(run.companies_scanned for run in self.runs)
+
+    @property
+    def retries(self) -> int:
+        return sum(run.retries for run in self.runs)
 
     @property
     def connector_failures(self) -> int:
@@ -109,11 +149,22 @@ class MarketScoutRunSummary:
             "jobs_collected": self.jobs_collected,
             "jobs_inserted": self.jobs_inserted,
             "jobs_updated": self.jobs_updated,
+            "jobs_closed": self.jobs_closed,
+            "jobs_archived": self.jobs_archived,
+            "jobs_ignored": self.jobs_ignored,
             "jobs_matched": self.jobs_matched,
             "alerts_sent": self.alerts_sent,
             "alerts_failed": self.alerts_failed,
+            "companies_scanned": self.companies_scanned,
+            "retries": self.retries,
             "connector_failures": self.connector_failures,
         }
+
+
+@dataclass(frozen=True)
+class ConnectorLifecycleDelta:
+    jobs_closed: int = 0
+    jobs_archived: int = 0
 
 
 @dataclass(frozen=True)
@@ -252,6 +303,7 @@ class MarketScoutAgent:
                             ConnectorRunSummary(
                                 connector_key=f"{connector_key}:{company.external_identifier or company.company.casefold().replace(' ', '-')}",
                                 company=company.company,
+                                companies_scanned=0,
                                 jobs_fetched=0,
                                 jobs_inserted=0,
                                 jobs_updated=0,
@@ -287,6 +339,7 @@ class MarketScoutAgent:
                                 jobs_matched=0,
                                 alerts_sent=0,
                                 alerts_failed=0,
+                                retries=0,
                                 failed=True,
                                 error_message=str(exc)[:1000],
                             )
@@ -364,6 +417,7 @@ class MarketScoutAgent:
                 ConnectorRunSummary(
                     connector_key=_company_connector_run_key(company),
                     company=company.company,
+                    companies_scanned=0,
                     jobs_fetched=0,
                     jobs_inserted=0,
                     jobs_updated=0,
@@ -390,6 +444,7 @@ class MarketScoutAgent:
                             jobs_matched=0,
                             alerts_sent=0,
                             alerts_failed=0,
+                            retries=0,
                             failed=True,
                             error_message=str(exc)[:1000],
                         )
@@ -415,19 +470,9 @@ class MarketScoutAgent:
             connector_key = company.connector.strip().casefold()
             if not company.enabled or not connector_key:
                 continue
-            if connector_key == "greenhouse" and not company.external_identifier.strip():
+            if connector_key in {"greenhouse", "lever", "ashby", "microsoft-careers", "google-careers"} and not company.external_identifier.strip():
                 self.logger.warning(
-                    "Skipping enabled greenhouse company without external identifier",
-                    extra={
-                        "operation_name": "market_scout.company.invalid",
-                        "connector_key": connector_key,
-                        "company": company.company,
-                    },
-                )
-                continue
-            if connector_key == "lever" and not company.external_identifier.strip():
-                self.logger.warning(
-                    "Skipping enabled lever company without external identifier",
+                    "Skipping enabled company without external identifier",
                     extra={
                         "operation_name": "market_scout.company.invalid",
                         "connector_key": connector_key,
@@ -487,12 +532,17 @@ class MarketScoutAgent:
                     "companies_enabled": enabled_company_counts.get(connector_key, 0),
                     "companies_polled": 0,
                     "companies_skipped_interval": skipped_company_counts.get(connector_key, 0),
+                    "companies_scanned": 0,
                     "jobs_fetched": 0,
                     "jobs_new": 0,
                     "jobs_updated": 0,
+                    "jobs_closed": 0,
+                    "jobs_archived": 0,
+                    "jobs_ignored": 0,
                     "jobs_matched": 0,
                     "alerts_sent": 0,
                     "alerts_failed": 0,
+                    "retries": 0,
                     "failures": 0,
                 }
                 connector_order.append(connector_key)
@@ -505,12 +555,17 @@ class MarketScoutAgent:
             connector_key = run.connector_key.split(":", 1)[0]
             summary = ensure_summary(connector_key)
             summary["companies_polled"] = int(summary["companies_polled"]) + 1
+            summary["companies_scanned"] = int(summary["companies_scanned"]) + run.companies_scanned
             summary["jobs_fetched"] = int(summary["jobs_fetched"]) + run.jobs_fetched
             summary["jobs_new"] = int(summary["jobs_new"]) + run.jobs_inserted
             summary["jobs_updated"] = int(summary["jobs_updated"]) + run.jobs_updated
+            summary["jobs_closed"] = int(summary["jobs_closed"]) + run.jobs_closed
+            summary["jobs_archived"] = int(summary["jobs_archived"]) + run.jobs_archived
+            summary["jobs_ignored"] = int(summary["jobs_ignored"]) + run.jobs_ignored
             summary["jobs_matched"] = int(summary["jobs_matched"]) + run.jobs_matched
             summary["alerts_sent"] = int(summary["alerts_sent"]) + run.alerts_sent
             summary["alerts_failed"] = int(summary["alerts_failed"]) + run.alerts_failed
+            summary["retries"] = int(summary["retries"]) + run.retries
             summary["failures"] = int(summary["failures"]) + (1 if run.failed else 0)
 
         return [summary_by_connector[connector_key] for connector_key in connector_order]
@@ -521,8 +576,12 @@ class MarketScoutAgent:
     ) -> Callable[[CompanyPreference], Awaitable[ConnectorRunSummary]] | None:
         if connector_key == "greenhouse":
             return self._run_greenhouse_company
+        if connector_key == "ashby":
+            return self._run_ashby_company
         if connector_key == "lever":
             return self._run_lever_company
+        if connector_key == "microsoft-careers":
+            return self._run_microsoft_company
         return None
 
     async def _reconcile_connector_inventory(
@@ -533,7 +592,9 @@ class MarketScoutAgent:
         connector_key: str,
         observed_external_job_ids: set[str],
         now: datetime,
-    ) -> None:
+    ) -> ConnectorLifecycleDelta:
+        jobs_closed = 0
+        jobs_archived = 0
         rows = await conn.fetch(
             """
             SELECT job_id, lifecycle_status, closed_at, archived_at, consecutive_missed_syncs
@@ -548,15 +609,20 @@ class MarketScoutAgent:
             list(observed_external_job_ids),
         )
         for row in rows:
+            current_status = str(row["lifecycle_status"] or "active")
             next_missed_syncs = int(row["consecutive_missed_syncs"] or 0) + 1
             transition = lifecycle_for_missed_syncs(
-                current_status=str(row["lifecycle_status"] or "active"),
+                current_status=current_status,
                 consecutive_missed_syncs=next_missed_syncs,
                 current_closed_at=row["closed_at"],
                 current_archived_at=row["archived_at"],
                 settings=self.settings,
                 now=now,
             )
+            if transition.lifecycle_status == "closed" and current_status != "closed":
+                jobs_closed += 1
+            if transition.lifecycle_status == "archived" and current_status != "archived":
+                jobs_archived += 1
             await conn.execute(
                 """
                 UPDATE jobs
@@ -580,6 +646,10 @@ class MarketScoutAgent:
                 transition.closed_at,
                 transition.archived_at,
             )
+        return ConnectorLifecycleDelta(
+            jobs_closed=jobs_closed,
+            jobs_archived=jobs_archived,
+        )
 
     async def _active_user_contexts(self) -> list[UserMatchContext]:
         return [
@@ -593,9 +663,14 @@ class MarketScoutAgent:
             for user in await list_users(self.settings)
         ]
 
-    async def _run_greenhouse_company(self, company: CompanyPreference) -> ConnectorRunSummary:
-        board = GreenhouseBoard(company=company.company, token=company.external_identifier.strip())
-        connector_key = f"greenhouse:{board.token}"
+    async def _run_company_connector(
+        self,
+        *,
+        company: CompanyPreference,
+        connector_key: str,
+        collect_operation_name: str,
+        collect_fn: Callable[[ConnectorCursor], object],
+    ) -> ConnectorRunSummary:
         run_id = str(uuid4())
         cursor_before: str | None = None
         last_successful_sync: datetime | None = None
@@ -637,23 +712,33 @@ class MarketScoutAgent:
                 cursor_before,
             )
 
-        connector = GreenhouseJobConnector(board=board, connector_settings=self.settings.connectors)
         connector_cursor = ConnectorCursor(cursor=cursor_before, last_published_at=last_successful_sync)
+        attempts = {"count": 0}
+
+        def _collect() -> object:
+            attempts["count"] += 1
+            return collect_fn(connector_cursor)
+
         try:
             result = await asyncio.to_thread(
                 retry_sync,
-                connector.collect,
-                connector_cursor,
+                _collect,
                 policy=self.retry_policy,
                 logger=self.logger,
-                operation_name=f"greenhouse.collect.{board.token}",
+                operation_name=collect_operation_name,
             )
+            retry_count = max(0, attempts["count"] - 1)
             self.logger.info(
                 "Collected jobs from connector",
                 extra={
                     "operation_name": "market_scout.connector.collect",
                     "connector_key": connector_key,
                     "jobs_fetched": len(result.jobs),
+                    "retries": retry_count,
+                    "inventory_complete": result.exhausted,
+                    "pages_scanned": result.pages_scanned,
+                    "expected_pages": result.expected_pages,
+                    "partial_reason": result.partial_reason,
                 },
             )
             summary = await self._persist_connector_result(
@@ -664,6 +749,11 @@ class MarketScoutAgent:
                 jobs=result.jobs,
                 next_cursor=result.next_cursor.cursor,
                 next_published_at=result.next_cursor.last_published_at,
+                retry_count=retry_count,
+                inventory_complete=result.exhausted,
+                pages_scanned=result.pages_scanned,
+                expected_pages=result.expected_pages,
+                partial_reason=result.partial_reason,
             )
             self.logger.info(
                 "Finished connector sync",
@@ -674,23 +764,36 @@ class MarketScoutAgent:
                     "jobs_fetched": summary.jobs_fetched,
                     "jobs_new": summary.jobs_inserted,
                     "jobs_updated": summary.jobs_updated,
+                    "jobs_closed": summary.jobs_closed,
+                    "jobs_archived": summary.jobs_archived,
+                    "jobs_ignored": summary.jobs_ignored,
                     "alerts_sent": summary.alerts_sent,
                     "alerts_failed": summary.alerts_failed,
+                    "retries": summary.retries,
+                    "inventory_complete": summary.inventory_complete,
+                    "pages_scanned": summary.pages_scanned,
+                    "expected_pages": summary.expected_pages,
+                    "partial_reason": summary.partial_reason,
                 },
             )
             return summary
         except BaseException as exc:  # noqa: BLE001
+            retry_count = max(0, attempts["count"] - 1)
             async with connection() as conn:
                 await conn.execute(
                     """
                     UPDATE connector_runs
                     SET finished_at = NOW(),
                         run_status = 'failed',
-                        error_message = $2
+                        error_message = $2,
+                        retries = $3,
+                        inventory_complete = FALSE,
+                        partial_reason = 'run_failed'
                     WHERE run_id = $1
                     """,
                     run_id,
                     str(exc)[:1000],
+                    retry_count,
                 )
             await record_audit_event(
                 event_type="connector.failed",
@@ -701,115 +804,55 @@ class MarketScoutAgent:
                 settings=self.settings,
             )
             raise
+
+    async def _run_greenhouse_company(self, company: CompanyPreference) -> ConnectorRunSummary:
+        board = GreenhouseBoard(company=company.company, token=company.external_identifier.strip())
+        connector = GreenhouseJobConnector(board=board, connector_settings=self.settings.connectors)
+        return await self._run_company_connector(
+            company=company,
+            connector_key=f"greenhouse:{board.token}",
+            collect_operation_name=f"greenhouse.collect.{board.token}",
+            collect_fn=connector.collect,
+        )
+
+    async def _run_ashby_company(self, company: CompanyPreference) -> ConnectorRunSummary:
+        board = AshbyBoard(
+            company=company.company,
+            token=company.external_identifier.strip(),
+            country=company.country,
+        )
+        connector = AshbyJobConnector(board=board, connector_settings=self.settings.connectors)
+        return await self._run_company_connector(
+            company=company,
+            connector_key=f"ashby:{board.token}",
+            collect_operation_name=f"ashby.collect.{board.token}",
+            collect_fn=connector.collect,
+        )
 
     async def _run_lever_company(self, company: CompanyPreference) -> ConnectorRunSummary:
         board = LeverBoard(company=company.company, token=company.external_identifier.strip())
-        connector_key = f"lever:{board.token}"
-        run_id = str(uuid4())
-        cursor_before: str | None = None
-        last_successful_sync: datetime | None = None
-        self.logger.info(
-            "Starting connector sync",
-            extra={
-                "operation_name": "market_scout.connector.start",
-                "connector_key": connector_key,
-            },
+        connector = LeverJobConnector(board=board, connector_settings=self.settings.connectors)
+        return await self._run_company_connector(
+            company=company,
+            connector_key=f"lever:{board.token}",
+            collect_operation_name=f"lever.collect.{board.token}",
+            collect_fn=connector.collect,
         )
 
-        async with connection() as conn:
-            cursor_row = await conn.fetchrow(
-                """
-                SELECT cursor_value, last_successful_sync, last_published_at
-                FROM connector_cursors
-                WHERE connector_key = $1
-                """,
-                connector_key,
-            )
-            if cursor_row is not None:
-                cursor_before = cursor_row["cursor_value"]
-                last_successful_sync = cursor_row["last_successful_sync"]
-
-            await conn.execute(
-                """
-                INSERT INTO connector_runs (
-                    run_id,
-                    connector_key,
-                    company_id,
-                    run_status,
-                    cursor_before
-                )
-                VALUES ($1, $2, $3, 'running', $4)
-                """,
-                run_id,
-                connector_key,
-                company.id or None,
-                cursor_before,
-            )
-
-        connector = LeverJobConnector(board=board, connector_settings=self.settings.connectors)
-        connector_cursor = ConnectorCursor(cursor=cursor_before, last_published_at=last_successful_sync)
-        try:
-            result = await asyncio.to_thread(
-                retry_sync,
-                connector.collect,
-                connector_cursor,
-                policy=self.retry_policy,
-                logger=self.logger,
-                operation_name=f"lever.collect.{board.token}",
-            )
-            self.logger.info(
-                "Collected jobs from connector",
-                extra={
-                    "operation_name": "market_scout.connector.collect",
-                    "connector_key": connector_key,
-                    "jobs_fetched": len(result.jobs),
-                },
-            )
-            summary = await self._persist_connector_result(
-                company=company,
-                connector_key=connector_key,
-                run_id=run_id,
-                last_successful_sync=last_successful_sync,
-                jobs=result.jobs,
-                next_cursor=result.next_cursor.cursor,
-                next_published_at=result.next_cursor.last_published_at,
-            )
-            self.logger.info(
-                "Finished connector sync",
-                extra={
-                    "operation_name": "market_scout.connector.finish",
-                    "connector_key": connector_key,
-                    "summary": summary.to_dict(),
-                    "jobs_fetched": summary.jobs_fetched,
-                    "jobs_new": summary.jobs_inserted,
-                    "jobs_updated": summary.jobs_updated,
-                    "alerts_sent": summary.alerts_sent,
-                    "alerts_failed": summary.alerts_failed,
-                },
-            )
-            return summary
-        except BaseException as exc:  # noqa: BLE001
-            async with connection() as conn:
-                await conn.execute(
-                    """
-                    UPDATE connector_runs
-                    SET finished_at = NOW(),
-                        run_status = 'failed',
-                        error_message = $2
-                    WHERE run_id = $1
-                    """,
-                    run_id,
-                    str(exc)[:1000],
-                )
-            await record_audit_event(
-                event_type="connector.failed",
-                subject_type="connector",
-                subject_id=connector_key,
-                message=f"{connector_key} failed during sync.",
-                metadata={"run_id": run_id, "error": str(exc)[:1000]},
-                settings=self.settings,
-            )
-            raise
+    async def _run_microsoft_company(self, company: CompanyPreference) -> ConnectorRunSummary:
+        site = MicrosoftCareerSite(
+            company=company.company,
+            domain=company.external_identifier.strip(),
+            country=company.country,
+            role_families=tuple(company.role_families),
+        )
+        connector = MicrosoftCareersJobConnector(site=site, connector_settings=self.settings.connectors)
+        return await self._run_company_connector(
+            company=company,
+            connector_key=f"microsoft-careers:{site.domain}",
+            collect_operation_name=f"microsoft-careers.collect.{site.domain}",
+            collect_fn=connector.collect,
+        )
 
     async def _persist_connector_result(
         self,
@@ -821,9 +864,17 @@ class MarketScoutAgent:
         jobs: list[NormalizedJobRecord],
         next_cursor: str | None,
         next_published_at: datetime | None,
+        retry_count: int,
+        inventory_complete: bool,
+        pages_scanned: int,
+        expected_pages: int | None,
+        partial_reason: str | None,
     ) -> ConnectorRunSummary:
         jobs_inserted = 0
         jobs_updated = 0
+        jobs_closed = 0
+        jobs_archived = 0
+        jobs_ignored = 0
         jobs_matched = 0
         alerts_sent = 0
         alerts_failed = 0
@@ -866,7 +917,15 @@ class MarketScoutAgent:
                 existing_job = existing_jobs_by_external_id.get(job.external_job_id)
                 if existing_job is not None:
                     job_id = str(existing_job["job_id"])
-                    jobs_updated += 1
+                    job_changed = (
+                        str(existing_job["content_hash"] or "") != job_content_hash
+                        or str(existing_job["lifecycle_status"] or "active") != "active"
+                        or str(existing_job["source_status"] or "observed") != "observed"
+                    )
+                    if job_changed:
+                        jobs_updated += 1
+                    else:
+                        jobs_ignored += 1
                     await conn.execute(
                         """
                         UPDATE jobs
@@ -1172,13 +1231,16 @@ class MarketScoutAgent:
                     alerts_sent += sent
                     alerts_failed += failed
 
-            await self._reconcile_connector_inventory(
-                conn=conn,
-                company=company,
-                connector_key=connector_key,
-                observed_external_job_ids=observed_external_job_ids,
-                now=now,
-            )
+            if inventory_complete:
+                lifecycle_delta = await self._reconcile_connector_inventory(
+                    conn=conn,
+                    company=company,
+                    connector_key=connector_key,
+                    observed_external_job_ids=observed_external_job_ids,
+                    now=now,
+                )
+                jobs_closed += lifecycle_delta.jobs_closed
+                jobs_archived += lifecycle_delta.jobs_archived
             await conn.execute(
                 """
                 INSERT INTO connector_cursors (
@@ -1208,21 +1270,36 @@ class MarketScoutAgent:
                     jobs_fetched = $2,
                     jobs_inserted = $3,
                     jobs_updated = $4,
-                    jobs_matched = $5,
-                    alerts_sent = $6,
-                    alerts_failed = $7,
-                    retries = 0,
-                    cursor_after = $8
+                    jobs_closed = $5,
+                    jobs_archived = $6,
+                    jobs_ignored = $7,
+                    jobs_matched = $8,
+                    alerts_sent = $9,
+                    alerts_failed = $10,
+                    retries = $11,
+                    cursor_after = $12,
+                    inventory_complete = $13,
+                    pages_scanned = $14,
+                    expected_pages = $15,
+                    partial_reason = $16
                 WHERE run_id = $1
                 """,
                 run_id,
                 len(jobs),
                 jobs_inserted,
                 jobs_updated,
+                jobs_closed,
+                jobs_archived,
+                jobs_ignored,
                 jobs_matched,
                 alerts_sent,
                 alerts_failed,
+                retry_count,
                 next_cursor,
+                inventory_complete,
+                pages_scanned,
+                expected_pages,
+                partial_reason,
             )
 
             return ConnectorRunSummary(
@@ -1231,10 +1308,18 @@ class MarketScoutAgent:
                 jobs_fetched=len(jobs),
                 jobs_inserted=jobs_inserted,
                 jobs_updated=jobs_updated,
+                jobs_closed=jobs_closed,
+                jobs_archived=jobs_archived,
+                jobs_ignored=jobs_ignored,
                 jobs_matched=jobs_matched,
                 alerts_sent=alerts_sent,
                 alerts_failed=alerts_failed,
-        )
+                retries=retry_count,
+                inventory_complete=inventory_complete,
+                pages_scanned=pages_scanned,
+                expected_pages=expected_pages,
+                partial_reason=partial_reason,
+            )
 
     async def _deliver_pending_alerts_for_existing_job(
         self,

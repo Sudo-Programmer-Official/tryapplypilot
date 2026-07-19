@@ -112,6 +112,7 @@ class PreferencesPayload(BaseModel):
     polling_interval_minutes: int = Field(ge=1, le=1440)
     selected_country: str = "US"
     alert_freshness_hours: int = Field(ge=1, le=24 * 7)
+    recovery_alert_freshness_hours: int = Field(default=24 * 7, ge=1, le=24 * 30)
     dashboard_freshness_hours: int = Field(ge=1, le=24 * 30)
     roles: list[str] = Field(default_factory=list)
     role_families: list[str] = Field(default_factory=list)
