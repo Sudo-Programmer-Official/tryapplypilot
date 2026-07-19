@@ -4,7 +4,13 @@ import os
 import unittest
 from unittest.mock import patch
 
-from app.catalog import _persist_company, build_effective_app_settings, build_scout_settings
+from app.catalog import (
+    PREFERENCE_DEFAULTS,
+    _persist_company,
+    _preference_defaults_payload,
+    build_effective_app_settings,
+    build_scout_settings,
+)
 from app.company_catalog_defaults import (
     ENABLED_COMPANY_NAMES,
     RECOMMENDED_COMPANY_DEFAULTS,
@@ -66,6 +72,17 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             {company.connector for company in enabled_companies},
             {"greenhouse", "lever", "ashby", "microsoft-careers"},
+        )
+
+    def test_preference_defaults_payload_covers_all_seed_keys(self) -> None:
+        with patch.dict(os.environ, {"JOB_RADAR_RUNTIME_MODE": "seed"}, clear=True):
+            get_settings.cache_clear()
+            settings = get_settings()
+        defaults = _preference_defaults_payload(settings)
+        self.assertEqual(set(defaults), set(PREFERENCE_DEFAULTS))
+        self.assertEqual(
+            defaults["recovery_alert_freshness_hours"],
+            settings.radar.recovery_alert_freshness_hours,
         )
 
     async def test_persist_company_preserves_existing_company_id_for_same_name(self) -> None:

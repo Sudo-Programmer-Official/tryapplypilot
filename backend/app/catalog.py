@@ -52,7 +52,7 @@ PREFERENCE_DEFAULTS = (
 )
 
 RECOMMENDED_COMPANY_CATALOG_FINGERPRINT_KEY = "recommended_company_catalog_fingerprint"
-IMPLEMENTED_CONNECTOR_KEYS = frozenset({"greenhouse", "lever"})
+IMPLEMENTED_CONNECTOR_KEYS = frozenset({"greenhouse", "lever", "ashby", "microsoft-careers"})
 logger = get_logger("app.catalog")
 
 
@@ -60,6 +60,29 @@ def _connection():
     from app.db.client import connection
 
     return connection
+
+
+def _preference_defaults_payload(settings: AppSettings) -> dict[str, object]:
+    return {
+        "primary_connector": settings.radar.primary_connector,
+        "apply_now_threshold_score": settings.radar.apply_now_threshold_score,
+        "review_threshold_score": settings.radar.review_threshold_score,
+        "polling_interval_minutes": settings.radar.polling_interval_minutes,
+        "minimum_match_score": settings.radar.minimum_match_score,
+        "selected_country": settings.radar.selected_country,
+        "alert_freshness_hours": settings.radar.alert_freshness_hours,
+        "recovery_alert_freshness_hours": settings.radar.recovery_alert_freshness_hours,
+        "dashboard_freshness_hours": settings.radar.dashboard_freshness_hours,
+        "roles": list(settings.radar.target_roles),
+        "role_families": list(settings.radar.role_families),
+        "work_arrangements": list(settings.radar.preferred_work_arrangements),
+        "experience_levels": list(settings.radar.preferred_experience_levels),
+        "excluded_keywords": list(settings.radar.excluded_keywords),
+        "resume_variants": list(settings.radar.resume_variants),
+        "initial_alert_window_hours": settings.radar.initial_alert_window_hours,
+        "initial_sync_openai_job_limit": settings.radar.initial_sync_openai_job_limit,
+        "initial_sync_max_alerts": settings.radar.initial_sync_max_alerts,
+    }
 
 
 @dataclass(frozen=True)
@@ -311,25 +334,7 @@ async def ensure_catalog_seeded(settings: AppSettings | None = None) -> None:
                 },
             )
 
-            defaults: dict[str, object] = {
-                "primary_connector": resolved_settings.radar.primary_connector,
-                "apply_now_threshold_score": resolved_settings.radar.apply_now_threshold_score,
-                "review_threshold_score": resolved_settings.radar.review_threshold_score,
-                "polling_interval_minutes": resolved_settings.radar.polling_interval_minutes,
-                "minimum_match_score": resolved_settings.radar.minimum_match_score,
-                "selected_country": resolved_settings.radar.selected_country,
-                "alert_freshness_hours": resolved_settings.radar.alert_freshness_hours,
-                "dashboard_freshness_hours": resolved_settings.radar.dashboard_freshness_hours,
-                "roles": list(resolved_settings.radar.target_roles),
-                "role_families": list(resolved_settings.radar.role_families),
-                "work_arrangements": list(resolved_settings.radar.preferred_work_arrangements),
-                "experience_levels": list(resolved_settings.radar.preferred_experience_levels),
-                "excluded_keywords": list(resolved_settings.radar.excluded_keywords),
-                "resume_variants": list(resolved_settings.radar.resume_variants),
-                "initial_alert_window_hours": resolved_settings.radar.initial_alert_window_hours,
-                "initial_sync_openai_job_limit": resolved_settings.radar.initial_sync_openai_job_limit,
-                "initial_sync_max_alerts": resolved_settings.radar.initial_sync_max_alerts,
-            }
+            defaults = _preference_defaults_payload(resolved_settings)
             for key in PREFERENCE_DEFAULTS:
                 await conn.execute(
                     """
