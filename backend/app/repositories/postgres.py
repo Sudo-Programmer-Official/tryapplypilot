@@ -120,6 +120,9 @@ def _job_from_row(row: Record, *, now: datetime, settings: AppSettings) -> JobOp
         ),
         recommendation=recommendation_label(decision),
         recommendation_tone=recommendation_tone(decision),
+        notification_status=str(_row_value(row, "effective_notification_status", "")) or None,
+        notification_reason=str(_row_value(row, "effective_notification_reason", "")) or None,
+        notification_type=str(_row_value(row, "effective_notification_type", "")) or None,
     )
 
 
@@ -165,6 +168,10 @@ def _alert_from_row(row: Record, *, now: datetime, settings: AppSettings) -> Ale
         ),
         recommendation=recommendation_label(decision),
         recommendation_tone=recommendation_tone(decision),
+        alert_status=str(_row_value(row, "alert_status", "sent")),
+        notification_type=str(_row_value(row, "notification_type", "fresh_alert")),
+        reason_code=str(_row_value(row, "reason_code", "sent")),
+        failure_reason=str(_row_value(row, "failure_reason", "")) or None,
     )
 
 
@@ -298,6 +305,10 @@ class PostgresAlertsRepository:
                     SELECT
                         ua.user_alert_id AS alert_id,
                         ua.channel,
+                        ua.alert_status,
+                        ua.notification_type,
+                        ua.reason_code,
+                        ua.failure_reason,
                         COALESCE(jm.decision, ua.decision) AS effective_decision,
                         COALESCE(jm.match_score, j.match_score) AS effective_match_score,
                         COALESCE(jm.why, ua.payload->'why', '[]'::jsonb) AS effective_why,
@@ -326,6 +337,10 @@ class PostgresAlertsRepository:
                     SELECT
                         a.alert_id,
                         a.channel,
+                        a.alert_status,
+                        'fresh_alert' AS notification_type,
+                        'sent' AS reason_code,
+                        NULL::text AS failure_reason,
                         a.decision AS effective_decision,
                         j.match_score AS effective_match_score,
                         COALESCE(a.payload->'why', j.metadata->'why', '[]'::jsonb) AS effective_why,
@@ -493,6 +508,9 @@ async def list_user_jobs(user_id: str, settings: AppSettings | None = None) -> l
                 jm.gaps AS effective_gaps,
                 jm.country_code AS effective_country_code,
                 jm.match_status AS effective_status,
+                jm.notification_status AS effective_notification_status,
+                jm.notification_reason AS effective_notification_reason,
+                jm.notification_type AS effective_notification_type,
                 EXISTS (
                     SELECT 1
                     FROM user_alerts ua
@@ -527,6 +545,10 @@ async def list_user_alerts(user_id: str, settings: AppSettings | None = None) ->
                 COALESCE(jm.gaps, ua.payload->'gaps', '[]'::jsonb) AS effective_gaps,
                 COALESCE(jm.recommended_resume, ua.payload->>'recommended_resume', j.recommended_resume) AS effective_recommended_resume,
                 COALESCE(jm.country_code, ua.payload->>'country_code', j.metadata->>'country_code') AS effective_country_code,
+                ua.alert_status,
+                ua.notification_type,
+                ua.reason_code,
+                ua.failure_reason,
                 ua.decision,
                 ua.payload,
                 ua.created_at,
@@ -550,6 +572,207 @@ async def list_user_alerts(user_id: str, settings: AppSettings | None = None) ->
             user_id,
         )
     return [_alert_from_row(row, now=now, settings=resolved_settings) for row in rows]
+
+
+async def list_user_missed_jobs(user_id: str, settings: AppSettings | None = None) -> list[JobOpportunity]:
+    resolved_settings = settings or get_settings()
+    now = datetime.now(timezone.utc)
+    async with connection() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT
+                j.*,
+                jm.match_score AS effective_match_score,
+                jm.decision AS effective_decision,
+                jm.recommended_resume AS effective_recommended_resume,
+                jm.why AS effective_why,
+                jm.gaps AS effective_gaps,
+                jm.country_code AS effective_country_code,
+                jm.match_status AS effective_status,
+                jm.notification_status AS effective_notification_status,
+                jm.notification_reason AS effective_notification_reason,
+                jm.notification_type AS effective_notification_type,
+                FALSE AS alert_sent
+            FROM job_matches jm
+            INNER JOIN jobs j ON j.job_id = jm.job_id
+            WHERE jm.user_id = $1
+              AND jm.alerted_at IS NULL
+              AND COALESCE(j.published_at, j.first_seen_at) >= NOW() - INTERVAL '14 days'
+              AND COALESCE(jm.notification_status, '') <> 'sent'
+              AND COALESCE(jm.notification_reason, '') <> ''
+            ORDER BY COALESCE(j.published_at, j.first_seen_at) DESC, jm.match_score DESC
+            LIMIT 50
+            """,
+            user_id,
+        )
+    return [_job_from_row(row, now=now, settings=resolved_settings) for row in rows]
+
+
+def _notification_analytics_payload(
+    *,
+    total_evaluated: int,
+    status_rows: list[Record],
+    reason_rows: list[Record],
+    type_rows: list[Record],
+    missed_jobs: list[JobOpportunity],
+    failed_alerts: list[AlertEvent],
+) -> dict[str, object]:
+    status_counts = {str(row["key"]): int(row["count"]) for row in status_rows}
+    return {
+        "totals": {
+            "evaluated": total_evaluated,
+            "sent": status_counts.get("sent", 0),
+            "failed": status_counts.get("failed", 0),
+            "suppressed": status_counts.get("suppressed", 0),
+            "digest_pending": status_counts.get("digest_pending", 0),
+            "pending": status_counts.get("pending", 0),
+            "missed_opportunities": len(missed_jobs),
+        },
+        "reasons": [
+            {"key": str(row["key"]), "count": int(row["count"])}
+            for row in reason_rows
+            if str(row["key"]).strip()
+        ],
+        "types": [
+            {"key": str(row["key"]), "count": int(row["count"])}
+            for row in type_rows
+            if str(row["key"]).strip()
+        ],
+        "missed_jobs": [job.to_dict() for job in missed_jobs],
+        "failed_alerts": [alert.to_dict() for alert in failed_alerts],
+    }
+
+
+async def get_user_notification_insights(user_id: str, settings: AppSettings | None = None) -> dict[str, object]:
+    resolved_settings = settings or get_settings()
+    async with connection() as conn:
+        total_evaluated = int(
+            await conn.fetchval(
+                """
+                SELECT COUNT(*)
+                FROM job_matches
+                WHERE user_id = $1
+                """,
+                user_id,
+            )
+            or 0
+        )
+        status_rows = await conn.fetch(
+            """
+            SELECT COALESCE(notification_status, 'unknown') AS key, COUNT(*) AS count
+            FROM job_matches
+            WHERE user_id = $1
+            GROUP BY COALESCE(notification_status, 'unknown')
+            ORDER BY count DESC, key ASC
+            """,
+            user_id,
+        )
+        reason_rows = await conn.fetch(
+            """
+            SELECT COALESCE(notification_reason, 'unknown') AS key, COUNT(*) AS count
+            FROM job_matches
+            WHERE user_id = $1
+            GROUP BY COALESCE(notification_reason, 'unknown')
+            ORDER BY count DESC, key ASC
+            LIMIT 12
+            """,
+            user_id,
+        )
+        type_rows = await conn.fetch(
+            """
+            SELECT COALESCE(notification_type, 'unknown') AS key, COUNT(*) AS count
+            FROM job_matches
+            WHERE user_id = $1
+            GROUP BY COALESCE(notification_type, 'unknown')
+            ORDER BY count DESC, key ASC
+            """,
+            user_id,
+        )
+    missed_jobs = await list_user_missed_jobs(user_id, resolved_settings)
+    failed_alerts = [
+        alert
+        for alert in await list_user_alerts(user_id, resolved_settings)
+        if alert.alert_status == "failed"
+    ][:10]
+    return _notification_analytics_payload(
+        total_evaluated=total_evaluated,
+        status_rows=status_rows,
+        reason_rows=reason_rows,
+        type_rows=type_rows,
+        missed_jobs=missed_jobs,
+        failed_alerts=failed_alerts,
+    )
+
+
+async def get_admin_notification_insights(settings: AppSettings | None = None) -> dict[str, object]:
+    resolved_settings = settings or get_settings()
+    async with connection() as conn:
+        total_evaluated = int(await conn.fetchval("SELECT COUNT(*) FROM job_matches") or 0)
+        status_rows = await conn.fetch(
+            """
+            SELECT COALESCE(notification_status, 'unknown') AS key, COUNT(*) AS count
+            FROM job_matches
+            GROUP BY COALESCE(notification_status, 'unknown')
+            ORDER BY count DESC, key ASC
+            """
+        )
+        reason_rows = await conn.fetch(
+            """
+            SELECT COALESCE(notification_reason, 'unknown') AS key, COUNT(*) AS count
+            FROM job_matches
+            GROUP BY COALESCE(notification_reason, 'unknown')
+            ORDER BY count DESC, key ASC
+            LIMIT 12
+            """
+        )
+        type_rows = await conn.fetch(
+            """
+            SELECT COALESCE(notification_type, 'unknown') AS key, COUNT(*) AS count
+            FROM job_matches
+            GROUP BY COALESCE(notification_type, 'unknown')
+            ORDER BY count DESC, key ASC
+            """
+        )
+        missed_rows = await conn.fetch(
+            """
+            SELECT
+                j.*,
+                jm.match_score AS effective_match_score,
+                jm.decision AS effective_decision,
+                jm.recommended_resume AS effective_recommended_resume,
+                jm.why AS effective_why,
+                jm.gaps AS effective_gaps,
+                jm.country_code AS effective_country_code,
+                jm.match_status AS effective_status,
+                jm.notification_status AS effective_notification_status,
+                jm.notification_reason AS effective_notification_reason,
+                jm.notification_type AS effective_notification_type,
+                FALSE AS alert_sent
+            FROM job_matches jm
+            INNER JOIN jobs j ON j.job_id = jm.job_id
+            WHERE jm.alerted_at IS NULL
+              AND COALESCE(j.published_at, j.first_seen_at) >= NOW() - INTERVAL '14 days'
+              AND COALESCE(jm.notification_status, '') <> 'sent'
+              AND COALESCE(jm.notification_reason, '') <> ''
+            ORDER BY COALESCE(j.published_at, j.first_seen_at) DESC, jm.match_score DESC
+            LIMIT 20
+            """
+        )
+    now = datetime.now(timezone.utc)
+    missed_jobs = [_job_from_row(row, now=now, settings=resolved_settings) for row in missed_rows]
+    failed_alerts = [
+        alert
+        for alert in await PostgresAlertsRepository(settings=resolved_settings).list()
+        if alert.alert_status == "failed"
+    ][:10]
+    return _notification_analytics_payload(
+        total_evaluated=total_evaluated,
+        status_rows=status_rows,
+        reason_rows=reason_rows,
+        type_rows=type_rows,
+        missed_jobs=missed_jobs,
+        failed_alerts=failed_alerts,
+    )
 
 
 def build_postgres_repositories(registry: ConnectorRegistry | None = None) -> RadarRepositories:

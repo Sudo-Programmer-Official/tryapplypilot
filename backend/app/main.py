@@ -32,10 +32,25 @@ from app.db.bootstrap import bootstrap_database
 from app.domain import CompanyPreference, UserAccount, Watchlist, WatchlistTerm
 from app.logging_utils import configure_logging
 from app.notifications.telegram import TelegramConfigurationError, TelegramDeliveryError, list_updates
-from app.repositories.postgres import list_user_alerts, list_user_jobs
+from app.repositories.postgres import (
+    get_admin_notification_insights,
+    get_user_notification_insights,
+    list_user_alerts,
+    list_user_jobs,
+    list_user_missed_jobs,
+)
 from app.resume_library import ResumeUploadError, list_user_resumes, upload_resume_for_user
+from app.maintenance_service import MaintenanceService, get_maintenance_service, set_maintenance_service
 from app.scheduler_service import SchedulerBusyError, SchedulerService, get_scheduler_service, set_scheduler_service
 from app.saved_jobs import list_saved_jobs, remove_saved_job_for_user, save_job_for_user
+from app.services.admin_connectors import (
+    build_admin_connectors_workspace,
+    list_company_connector_errors,
+    list_company_jobs_for_admin,
+    run_connector_now,
+    set_company_monitoring,
+    validate_company_connector,
+)
 from app.services.dashboard import (
     build_dashboard_snapshot,
     build_health_snapshot,
@@ -225,6 +240,10 @@ class SavedJobPayload(BaseModel):
     job_id: str = Field(min_length=1)
 
 
+class CompanyMonitoringPayload(BaseModel):
+    enabled: bool
+
+
 security = HTTPBearer(auto_error=False)
 
 configure_logging(get_app_settings().log_level)
@@ -234,16 +253,22 @@ configure_logging(get_app_settings().log_level)
 async def lifespan(app: FastAPI):
     settings = get_app_settings()
     scheduler = SchedulerService(settings)
+    maintenance = MaintenanceService(settings)
     set_scheduler_service(scheduler)
+    set_maintenance_service(maintenance)
     app.state.scheduler_service = scheduler
+    app.state.maintenance_service = maintenance
     try:
         if settings.radar.mode != "seed":
             await bootstrap_database()
             await ensure_super_admin(settings)
         await scheduler.start()
+        await maintenance.start()
         yield
     finally:
+        await maintenance.stop()
         await scheduler.stop()
+        set_maintenance_service(None)
         set_scheduler_service(None)
 
 app_settings = get_app_settings()
@@ -310,6 +335,13 @@ def _scheduler_or_503() -> SchedulerService:
     return scheduler
 
 
+def _maintenance_or_503() -> MaintenanceService:
+    maintenance = get_maintenance_service()
+    if maintenance is None:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Maintenance service is not initialized.")
+    return maintenance
+
+
 @app.post("/api/auth/signup")
 async def signup(payload: SignUpPayload, request: Request) -> dict[str, object]:
     try:
@@ -363,6 +395,16 @@ async def current_user_jobs(user: UserAccount = Depends(_current_user)) -> dict[
 @app.get("/api/auth/me/alerts")
 async def current_user_alerts(user: UserAccount = Depends(_current_user)) -> dict[str, object]:
     return {"items": [alert.to_dict() for alert in await list_user_alerts(user.id)]}
+
+
+@app.get("/api/auth/me/missed-opportunities")
+async def current_user_missed_opportunities(user: UserAccount = Depends(_current_user)) -> dict[str, object]:
+    return {"items": [job.to_dict() for job in await list_user_missed_jobs(user.id)]}
+
+
+@app.get("/api/auth/me/notification-insights")
+async def current_user_notification_insights(user: UserAccount = Depends(_current_user)) -> dict[str, object]:
+    return await get_user_notification_insights(user.id)
 
 
 @app.get("/api/auth/me/resumes")
@@ -667,6 +709,59 @@ async def scheduler_run_now(_: UserAccount = Depends(require_admin)) -> dict[str
     return snapshot.to_dict()
 
 
+@app.get("/api/admin/maintenance/status")
+async def maintenance_status(_: UserAccount = Depends(require_admin)) -> dict[str, object]:
+    return _maintenance_or_503().status().to_dict()
+
+
+@app.post("/api/admin/maintenance/run-now")
+async def maintenance_run_now(_: UserAccount = Depends(require_admin)) -> dict[str, object]:
+    snapshot = await _maintenance_or_503().run_cycle(trigger="manual")
+    return snapshot.to_dict()
+
+
+@app.get("/api/admin/connectors/workspace")
+async def admin_connectors_workspace(_: UserAccount = Depends(require_admin)) -> dict[str, object]:
+    return await build_admin_connectors_workspace()
+
+
+@app.post("/api/admin/connectors/{connector_key}/run-now")
+async def admin_connector_run_now(connector_key: str, _: UserAccount = Depends(require_admin)) -> dict[str, object]:
+    return await run_connector_now(connector_key)
+
+
+@app.post("/api/admin/connectors/companies/{company_id}/validate")
+async def admin_validate_company(company_id: str, _: UserAccount = Depends(require_admin)) -> dict[str, object]:
+    try:
+        payload = await validate_company_connector(company_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return {"item": payload}
+
+
+@app.post("/api/admin/connectors/companies/{company_id}/monitoring")
+async def admin_set_company_monitoring(
+    company_id: str,
+    payload: CompanyMonitoringPayload,
+    _: UserAccount = Depends(require_admin),
+) -> dict[str, object]:
+    try:
+        company = await set_company_monitoring(company_id, payload.enabled)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return {"item": company.to_dict()}
+
+
+@app.get("/api/admin/connectors/companies/{company_id}/jobs")
+async def admin_company_jobs(company_id: str, _: UserAccount = Depends(require_admin)) -> dict[str, object]:
+    return {"items": await list_company_jobs_for_admin(company_id)}
+
+
+@app.get("/api/admin/connectors/companies/{company_id}/errors")
+async def admin_company_errors(company_id: str, _: UserAccount = Depends(require_admin)) -> dict[str, object]:
+    return {"items": await list_company_connector_errors(company_id)}
+
+
 @app.get("/api/dashboard")
 async def dashboard(_: UserAccount = Depends(require_admin)) -> dict[str, object]:
     return await build_dashboard_snapshot()
@@ -864,6 +959,11 @@ async def review_catalog_company_request(
 @app.get("/api/alerts")
 async def alerts(_: UserAccount = Depends(require_admin)) -> dict[str, object]:
     return {"items": await list_alerts()}
+
+
+@app.get("/api/admin/notification-insights")
+async def admin_notification_insights(_: UserAccount = Depends(require_admin)) -> dict[str, object]:
+    return await get_admin_notification_insights()
 
 
 @app.get("/api/sources")

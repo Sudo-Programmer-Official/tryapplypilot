@@ -1,4 +1,13 @@
-import type { AlertEvent, AuthUser, CompanyPreference, CompanyRequest, JobOpportunity, SavedJobRecord, Watchlist } from "../types";
+import type {
+  AlertEvent,
+  AuthUser,
+  CompanyPreference,
+  CompanyRequest,
+  JobOpportunity,
+  NotificationInsights,
+  SavedJobRecord,
+  Watchlist,
+} from "../types";
 import { requestJson } from "./client";
 
 export function fetchUserJobs(): Promise<{ items: JobOpportunity[] }> {
@@ -7,6 +16,14 @@ export function fetchUserJobs(): Promise<{ items: JobOpportunity[] }> {
 
 export function fetchUserAlerts(): Promise<{ items: AlertEvent[] }> {
   return requestJson<{ items: AlertEvent[] }>("/api/auth/me/alerts");
+}
+
+export function fetchUserMissedOpportunities(): Promise<{ items: JobOpportunity[] }> {
+  return requestJson<{ items: JobOpportunity[] }>("/api/auth/me/missed-opportunities");
+}
+
+export function fetchUserNotificationInsights(): Promise<NotificationInsights> {
+  return requestJson<NotificationInsights>("/api/auth/me/notification-insights");
 }
 
 export function fetchUserCompanyRequests(): Promise<{ items: CompanyRequest[] }> {

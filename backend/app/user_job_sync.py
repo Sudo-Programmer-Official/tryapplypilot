@@ -12,17 +12,16 @@ from app.db.client import connection
 from app.domain import UserAccount
 from app.job_metadata import country_display, freshness_label, infer_country_code, recommendation_label
 from app.logging_utils import get_logger
+from app.notification_delivery import NotificationDecisionSnapshot, evaluate_notification_decision
 from app.notifications.telegram import send_message
 from app.retry import RetryPolicy, retry_sync
 from app.scoring import score_job
 from app.user_matching import (
     alert_freshness_hours,
-    alert_rule_allows_job,
     build_user_profile_text,
     build_user_matching_settings,
     filter_reason_for_user,
     minimum_match_score,
-    telegram_connected,
 )
 
 BACKFILL_ALERT_BUDGET = 5
@@ -105,6 +104,94 @@ def _job_record_from_row(row) -> NormalizedJobRecord:
     )
 
 
+async def _upsert_user_alert(
+    conn,
+    *,
+    job_id: str,
+    user_id: str,
+    decision: str,
+    notification_type: str,
+    reason_code: str,
+    payload: dict[str, object],
+) -> str | None:
+    alert_id = str(uuid5(NAMESPACE_URL, f"{job_id}:{user_id}:telegram:{decision}"))
+    return await conn.fetchval(
+        """
+        INSERT INTO user_alerts (
+            user_alert_id,
+            job_id,
+            user_id,
+            channel,
+            decision,
+            alert_status,
+            notification_type,
+            reason_code,
+            evaluated_at,
+            payload
+        )
+        VALUES ($1, $2, $3, 'telegram', $4, 'pending', $5, $6, NOW(), $7::jsonb)
+        ON CONFLICT (user_id, job_id, channel, decision)
+        DO UPDATE SET
+            alert_status = 'pending',
+            notification_type = EXCLUDED.notification_type,
+            reason_code = EXCLUDED.reason_code,
+            evaluated_at = NOW(),
+            payload = EXCLUDED.payload,
+            sent_at = CASE WHEN user_alerts.alert_status = 'sent' THEN user_alerts.sent_at ELSE NULL END,
+            failure_reason = CASE WHEN user_alerts.alert_status = 'sent' THEN user_alerts.failure_reason ELSE NULL END
+        WHERE user_alerts.alert_status <> 'sent'
+        RETURNING user_alert_id
+        """,
+        alert_id,
+        job_id,
+        user_id,
+        decision,
+        notification_type,
+        reason_code,
+        json.dumps(payload),
+    )
+
+
+async def _set_job_match_notification_state(
+    conn,
+    *,
+    user_id: str,
+    job_id: str,
+    notification_status: str,
+    notification_reason: str,
+    notification_type: str,
+    mark_alerted: bool = False,
+    increment_attempts: bool = False,
+) -> None:
+    await conn.execute(
+        """
+        UPDATE job_matches
+        SET notification_status = $3,
+            notification_reason = $4,
+            notification_type = $5,
+            notification_evaluated_at = NOW(),
+            notification_attempts = CASE
+                WHEN $6 THEN COALESCE(notification_attempts, 0) + 1
+                ELSE COALESCE(notification_attempts, 0)
+            END,
+            alerted_at = CASE
+                WHEN $7 THEN COALESCE(alerted_at, NOW())
+                ELSE alerted_at
+            END,
+            updated_at = NOW()
+        WHERE user_id = $1
+          AND job_id = $2
+        """,
+        user_id,
+        job_id,
+        notification_status,
+        notification_reason,
+        notification_type,
+        increment_attempts,
+        mark_alerted,
+    )
+
+
 async def sync_recent_jobs_for_user(user: UserAccount, settings: AppSettings | None = None) -> None:
     resolved_settings = settings or get_settings()
     matching_settings = build_user_matching_settings(resolved_settings, user)
@@ -155,10 +242,14 @@ async def sync_recent_jobs_for_user(user: UserAccount, settings: AppSettings | N
                     gaps,
                     provider,
                     country_code,
+                    notification_status,
+                    notification_reason,
+                    notification_type,
+                    notification_evaluated_at,
                     updated_at
                 )
                 VALUES (
-                    $1, $2, $3, $4, $5, $6, 'new', $7::jsonb, $8::jsonb, $9, $10, NOW()
+                    $1, $2, $3, $4, $5, $6, 'new', $7::jsonb, $8::jsonb, $9, $10, 'pending', 'collected', 'recovery_alert', NOW(), NOW()
                 )
                 ON CONFLICT (user_id, job_id) DO UPDATE SET
                     match_score = EXCLUDED.match_score,
@@ -168,6 +259,10 @@ async def sync_recent_jobs_for_user(user: UserAccount, settings: AppSettings | N
                     gaps = EXCLUDED.gaps,
                     provider = EXCLUDED.provider,
                     country_code = EXCLUDED.country_code,
+                    notification_status = EXCLUDED.notification_status,
+                    notification_reason = EXCLUDED.notification_reason,
+                    notification_type = EXCLUDED.notification_type,
+                    notification_evaluated_at = EXCLUDED.notification_evaluated_at,
                     updated_at = NOW()
                 """,
                 match_id,
@@ -183,45 +278,61 @@ async def sync_recent_jobs_for_user(user: UserAccount, settings: AppSettings | N
             )
 
             published_at = row["published_at"] or row["first_seen_at"] or now
-            if (
-                not telegram_connected(user)
-                or match.score < threshold
-                or published_at < now - timedelta(hours=freshness_hours)
-                or not alert_rule_allows_job(job, user)
-                or remaining_alert_budget <= 0
-            ):
+            notification_decision = evaluate_notification_decision(
+                job=job,
+                match=match,
+                user=user,
+                settings=resolved_settings,
+                published_at=published_at,
+                now=now,
+                initial_sync=False,
+                remaining_initial_alert_budget=0,
+                delivery_phase="recovery",
+                minimum_match_score_override=threshold,
+                freshness_hours_override=freshness_hours,
+            )
+            if remaining_alert_budget <= 0 and notification_decision.should_send:
+                notification_decision = NotificationDecisionSnapshot(
+                    should_send=False,
+                    notification_status="suppressed",
+                    reason_code="recovery_backfill_budget_exhausted",
+                    notification_type="recovery_alert",
+                )
+            await _set_job_match_notification_state(
+                conn,
+                user_id=user.id,
+                job_id=str(row["job_id"]),
+                notification_status=notification_decision.notification_status,
+                notification_reason=notification_decision.reason_code,
+                notification_type=notification_decision.notification_type,
+            )
+            if not notification_decision.should_send:
                 continue
 
-            alert_id = str(uuid5(NAMESPACE_URL, f"{row['job_id']}:{user.id}:telegram:{match.decision}"))
-            inserted_alert = await conn.fetchval(
-                """
-                INSERT INTO user_alerts (
-                    user_alert_id,
-                    job_id,
-                    user_id,
-                    channel,
-                    decision,
-                    alert_status,
-                    payload
-                )
-                VALUES ($1, $2, $3, 'telegram', $4, 'pending', $5::jsonb)
-                ON CONFLICT DO NOTHING
-                RETURNING user_alert_id
-                """,
-                alert_id,
-                str(row["job_id"]),
-                user.id,
-                match.decision,
-                json.dumps(
-                    {
-                        "why": match.top_strengths,
-                        "gaps": match.gaps,
-                        "recommended_resume": match.recommended_resume,
-                        "country_code": country_code,
-                    }
-                ),
+            inserted_alert = await _upsert_user_alert(
+                conn,
+                job_id=str(row["job_id"]),
+                user_id=user.id,
+                decision=match.decision,
+                notification_type=notification_decision.notification_type,
+                reason_code=notification_decision.reason_code,
+                payload={
+                    "why": match.top_strengths,
+                    "gaps": match.gaps,
+                    "recommended_resume": match.recommended_resume,
+                    "country_code": country_code,
+                },
             )
             if inserted_alert is None:
+                await _set_job_match_notification_state(
+                    conn,
+                    user_id=user.id,
+                    job_id=str(row["job_id"]),
+                    notification_status="sent",
+                    notification_reason="already_alerted",
+                    notification_type=notification_decision.notification_type,
+                    mark_alerted=True,
+                )
                 continue
 
             posted_minutes_ago = max(0, int((now - published_at).total_seconds() // 60))
@@ -251,21 +362,22 @@ async def sync_recent_jobs_for_user(user: UserAccount, settings: AppSettings | N
                     """
                     UPDATE user_alerts
                     SET alert_status = 'sent',
-                        sent_at = NOW()
+                        sent_at = NOW(),
+                        reason_code = $2
                     WHERE user_alert_id = $1
                     """,
-                    alert_id,
+                    inserted_alert,
+                    notification_decision.reason_code,
                 )
-                await conn.execute(
-                    """
-                    UPDATE job_matches
-                    SET alerted_at = NOW(),
-                        updated_at = NOW()
-                    WHERE user_id = $1
-                      AND job_id = $2
-                    """,
-                    user.id,
-                    str(row["job_id"]),
+                await _set_job_match_notification_state(
+                    conn,
+                    user_id=user.id,
+                    job_id=str(row["job_id"]),
+                    notification_status="sent",
+                    notification_reason=notification_decision.reason_code,
+                    notification_type=notification_decision.notification_type,
+                    mark_alerted=True,
+                    increment_attempts=True,
                 )
                 remaining_alert_budget -= 1
             except Exception as exc:  # noqa: BLE001
@@ -273,9 +385,19 @@ async def sync_recent_jobs_for_user(user: UserAccount, settings: AppSettings | N
                     """
                     UPDATE user_alerts
                     SET alert_status = 'failed',
-                        failure_reason = $2
+                        failure_reason = $2,
+                        reason_code = 'telegram_delivery_failed'
                     WHERE user_alert_id = $1
                     """,
-                    alert_id,
+                    inserted_alert,
                     str(exc)[:1000],
+                )
+                await _set_job_match_notification_state(
+                    conn,
+                    user_id=user.id,
+                    job_id=str(row["job_id"]),
+                    notification_status="failed",
+                    notification_reason="telegram_delivery_failed",
+                    notification_type=notification_decision.notification_type,
+                    increment_attempts=True,
                 )

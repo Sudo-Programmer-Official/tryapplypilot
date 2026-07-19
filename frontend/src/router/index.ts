@@ -19,6 +19,7 @@ import UserCompaniesView from "../views/user/UserCompaniesView.vue";
 import UserDashboardView from "../views/user/UserDashboardView.vue";
 import UserJobsView from "../views/user/UserJobsView.vue";
 import UserLayout from "../views/user/UserLayout.vue";
+import UserNotificationsView from "../views/user/UserNotificationsView.vue";
 import UserPreferencesView from "../views/user/UserPreferencesView.vue";
 import UserProfileView from "../views/user/UserProfileView.vue";
 import UserResumesView from "../views/user/UserResumesView.vue";
@@ -68,6 +69,7 @@ const router = createRouter({
         { path: "", redirect: "/user/dashboard" },
         { path: "dashboard", component: UserDashboardView, meta: { requiresAuth: true, requiresUser: true, title: "Dashboard" } },
         { path: "jobs", component: UserJobsView, meta: { requiresAuth: true, requiresUser: true, title: "Jobs" } },
+        { path: "notifications", component: UserNotificationsView, meta: { requiresAuth: true, requiresUser: true, title: "Notifications" } },
         { path: "resumes", component: UserResumesView, meta: { requiresAuth: true, requiresUser: true, title: "Resumes" } },
         { path: "companies", component: UserCompaniesView, meta: { requiresAuth: true, requiresUser: true, title: "Companies" } },
         { path: "watchlists", component: UserWatchlistsView, meta: { requiresAuth: true, requiresUser: true, title: "Watchlists" } },

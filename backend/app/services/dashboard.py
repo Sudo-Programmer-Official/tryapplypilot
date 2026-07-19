@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from app.job_metadata import matches_country_preference
+from app.db.client import connection
 from app.runtime import get_runtime
 from app.scheduler_service import SchedulerStatusSnapshot, get_scheduler_service
 
@@ -217,6 +218,45 @@ async def build_dashboard_snapshot(now: datetime | None = None) -> dict[str, Any
         if matches_country_preference(alert.country_code, settings.selected_country)
     ]
     sources = await runtime.repositories.sources.list()
+    if runtime.database.connected:
+        async with connection() as conn:
+            inventory_row = await conn.fetchrow(
+                """
+                SELECT
+                    COUNT(*) FILTER (WHERE lifecycle_status = 'active') AS active_inventory,
+                    COUNT(*) FILTER (WHERE lifecycle_status = 'stale') AS stale_inventory,
+                    COUNT(*) FILTER (WHERE lifecycle_status = 'closed') AS closed_inventory,
+                    COUNT(*) FILTER (WHERE lifecycle_status = 'expired') AS expired_inventory,
+                    COUNT(*) FILTER (WHERE lifecycle_status = 'archived') AS archived_inventory,
+                    COUNT(*) FILTER (WHERE first_seen_at >= date_trunc('day', NOW())) AS new_today_inventory,
+                    COUNT(*) AS total_inventory
+                FROM jobs
+                """
+            )
+            collected_lifetime = int(await conn.fetchval("SELECT COALESCE(SUM(jobs_inserted), 0) FROM connector_runs") or 0)
+            try:
+                estimated_storage_bytes = await conn.fetchval(
+                    """
+                    SELECT COALESCE(SUM(pg_total_relation_size(oid)), 0)
+                    FROM pg_class
+                    WHERE relname = ANY($1::text[])
+                    """,
+                    ["jobs", "connector_runs", "alerts", "user_alerts", "job_matches", "saved_jobs"],
+                )
+            except Exception:  # noqa: BLE001
+                estimated_storage_bytes = None
+    else:
+        inventory_row = {
+            "active_inventory": 0,
+            "stale_inventory": 0,
+            "closed_inventory": 0,
+            "expired_inventory": 0,
+            "archived_inventory": 0,
+            "new_today_inventory": 0,
+            "total_inventory": 0,
+        }
+        collected_lifetime = 0
+        estimated_storage_bytes = None
     apply_now_threshold = settings.apply_now_threshold_score
     review_threshold = settings.review_threshold_score
     apply_now_jobs = [job for job in jobs if str(job["decision"]) == "APPLY_NOW"]
@@ -292,6 +332,14 @@ async def build_dashboard_snapshot(now: datetime | None = None) -> dict[str, Any
             "notification_sla_minutes": 5,
             "apply_now_threshold_score": apply_now_threshold,
             "review_threshold_score": review_threshold,
+            "active_inventory": int(inventory_row["active_inventory"] or 0),
+            "stale_inventory": int(inventory_row["stale_inventory"] or 0),
+            "closed_inventory": int(inventory_row["closed_inventory"] or 0),
+            "expired_inventory": int(inventory_row["expired_inventory"] or 0),
+            "archived_inventory": int(inventory_row["archived_inventory"] or 0),
+            "collected_lifetime": collected_lifetime,
+            "new_today_inventory": int(inventory_row["new_today_inventory"] or 0),
+            "estimated_storage_bytes": int(estimated_storage_bytes) if estimated_storage_bytes is not None else None,
         },
         "notification_preview": latest_alert,
         "jobs": jobs,

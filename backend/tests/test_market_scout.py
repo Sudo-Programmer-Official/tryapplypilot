@@ -51,6 +51,7 @@ class _PendingAlertConnection:
     def __init__(self, rows: list[dict[str, object]]) -> None:
         self._rows = rows
         self.inserted_alerts: list[tuple[object, ...]] = []
+        self.executed: list[tuple[str, tuple[object, ...]]] = []
 
     async def fetch(self, query: str, job_id: str):
         del query, job_id
@@ -60,6 +61,9 @@ class _PendingAlertConnection:
         del query
         self.inserted_alerts.append(args)
         return args[0]
+
+    async def execute(self, query: str, *args: object):
+        self.executed.append((query, args))
 
 
 class MarketScoutTests(unittest.IsolatedAsyncioTestCase):

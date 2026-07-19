@@ -292,6 +292,10 @@ def notification_rules(user: UserAccount) -> list[str]:
     return _string_list(_user_preferences(user).get("notification_rules"))
 
 
+def notification_frequency(user: UserAccount) -> str:
+    return str(_user_preferences(user).get("notification_frequency", "instant")).strip() or "instant"
+
+
 def remote_preference(user: UserAccount) -> str:
     return str(_user_preferences(user).get("remote_preference", "")).strip()
 

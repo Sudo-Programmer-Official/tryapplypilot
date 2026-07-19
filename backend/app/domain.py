@@ -38,6 +38,9 @@ class JobOpportunity:
     freshness_tone: str = "fresh"
     recommendation: str = "Review Before Applying"
     recommendation_tone: str = "review"
+    notification_status: str | None = None
+    notification_reason: str | None = None
+    notification_type: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -265,6 +268,10 @@ class AlertEvent:
     freshness_tone: str = "fresh"
     recommendation: str = "Review Before Applying"
     recommendation_tone: str = "review"
+    alert_status: str = "sent"
+    notification_type: str = "fresh_alert"
+    reason_code: str = "sent"
+    failure_reason: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)

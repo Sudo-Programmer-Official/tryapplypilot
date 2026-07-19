@@ -7,26 +7,9 @@ from typing import Callable
 
 from app.domain import CompanyPreference
 
-# V1 keeps default enablement limited to live ATS boards that are verified and
-# narrow enough to be practical for the initial always-on scheduler.
-ENABLED_COMPANY_NAMES = {
-    "Anthropic",
-    "Databricks",
-    "Stripe",
-    "Cloudflare",
-    "MongoDB",
-    "Scale AI",
-    "Vercel",
-    "Figma",
-    "Cockroach Labs",
-    "PlanetScale",
-    "Sourcegraph",
-    "Together AI",
-    "ClickHouse",
-    "AssemblyAI",
-    "Neon",
-    "Flex",
-}
+# Keep defaults aligned with live ATS connectors so database reconciliation can
+# expand coverage without requiring more environment changes.
+ENABLED_COMPANY_NAMES: set[str] = set()
 
 
 @dataclass(frozen=True)
@@ -169,6 +152,12 @@ RECOMMENDED_COMPANY_DEFAULTS: tuple[CompanyCatalogDefault, ...] = (
         81,
     ),
 )
+
+ENABLED_COMPANY_NAMES = {
+    spec.name
+    for spec in RECOMMENDED_COMPANY_DEFAULTS
+    if spec.connector in {"greenhouse", "lever"}
+}
 
 AI_PLATFORM_COMPANIES = {
     "openai",

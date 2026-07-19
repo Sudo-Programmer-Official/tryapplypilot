@@ -1,4 +1,4 @@
-import type { AlertEvent, AuditLogEntry, CompanyRequest, DashboardSnapshot, SchedulerStatusSnapshot } from "../types";
+import type { AlertEvent, AuditLogEntry, CompanyRequest, DashboardSnapshot, NotificationInsights, SchedulerStatusSnapshot } from "../types";
 import { requestJson } from "./client";
 
 export function fetchDashboard(): Promise<DashboardSnapshot> {
@@ -43,6 +43,10 @@ export function reviewCompanyRequest(
 
 export function fetchAdminAlerts(): Promise<{ items: AlertEvent[] }> {
   return requestJson<{ items: AlertEvent[] }>("/api/alerts");
+}
+
+export function fetchAdminNotificationInsights(): Promise<NotificationInsights> {
+  return requestJson<NotificationInsights>("/api/admin/notification-insights");
 }
 
 export function fetchAuditLogs(): Promise<{ items: AuditLogEntry[] }> {

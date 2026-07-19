@@ -43,6 +43,9 @@ export interface JobOpportunity {
   freshness_tone: "fresh" | "aging" | "stale";
   recommendation: string;
   recommendation_tone: "apply" | "review" | "skip";
+  notification_status?: string | null;
+  notification_reason?: string | null;
+  notification_type?: string | null;
 }
 
 export interface CompanyPreference {
@@ -237,6 +240,182 @@ export interface SourceStatus {
   lag_reason: string | null;
 }
 
+export interface ConnectorInventorySnapshot {
+  active: number;
+  stale: number;
+  closed: number;
+  expired: number;
+  archived: number;
+  deleted: number;
+  collected_lifetime: number;
+  new_today: number;
+  estimated_storage_bytes: number | null;
+  total_rows: number;
+}
+
+export interface AdminConnectorWorkspaceConnector extends SourceStatus {
+  coverage_percent: number;
+  active_jobs: number;
+  stale_jobs: number;
+  closed_jobs: number;
+  expired_jobs: number;
+  archived_jobs: number;
+}
+
+export interface AdminConnectorWorkspaceCompany {
+  id: string;
+  company: string;
+  connector: string;
+  connector_label: string;
+  layer: SourceStatus["layer"];
+  roadmap_status: SourceStatus["admin_status"];
+  priority: number;
+  tier: number;
+  enabled: boolean;
+  poll_interval_minutes: number;
+  country: string;
+  external_identifier: string;
+  career_url: string;
+  role_families: string[];
+  monitoring_state: string;
+  monitoring_reason: string;
+  monitoring_detail: string;
+  validation_status: string;
+  validation_reason: string;
+  validation_message: string;
+  validated_at: string | null;
+  active_jobs: number;
+  stale_jobs: number;
+  closed_jobs: number;
+  expired_jobs: number;
+  archived_jobs: number;
+  last_successful_sync: string | null;
+  last_failed_sync: string | null;
+  recent_failures: number;
+}
+
+export interface CoverageGapItem {
+  company_id: string;
+  company: string;
+  connector: string;
+  priority: number;
+  tier: number;
+  roadmap_status: SourceStatus["admin_status"];
+  missing_capability: string;
+  recommended_action: string;
+  detail: string;
+}
+
+export interface RunHistoryItem {
+  run_id: string;
+  connector_key: string;
+  connector_group: string;
+  company_id: string | null;
+  company_name: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  run_status: string;
+  jobs_fetched: number;
+  jobs_inserted: number;
+  jobs_updated: number;
+  jobs_matched: number;
+  alerts_sent: number;
+  alerts_failed: number;
+  trigger: string;
+  error_message: string | null;
+  duration_seconds: number | null;
+}
+
+export interface ConnectorCompanyJobRecord {
+  job_id: string;
+  title: string;
+  location: string;
+  apply_url: string;
+  lifecycle_status: string;
+  source_status: string;
+  published_at: string | null;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
+  closed_at: string | null;
+  archived_at: string | null;
+}
+
+export interface ConnectorCompanyErrorRecord {
+  run_id: string;
+  connector_key: string;
+  started_at: string | null;
+  finished_at: string | null;
+  error_message: string | null;
+}
+
+export interface MaintenanceStatusSnapshot {
+  running: boolean;
+  cycle_state: "running" | "idle" | "stopped";
+  interval_minutes: number;
+  started_at: string | null;
+  last_run_started_at: string | null;
+  last_run: string | null;
+  next_run: string | null;
+  last_duration_seconds: number | null;
+  archived_jobs: number;
+  deleted_jobs: number;
+  company_backfills: number;
+  errors: number;
+  last_error: string | null;
+}
+
+export interface AdminConnectorsWorkspace {
+  generated_at: string;
+  overview: {
+    inventory: ConnectorInventorySnapshot;
+    connectors_total: number;
+    connectors_live: number;
+    connectors_beta: number;
+    connectors_planned: number;
+    catalog_companies: number;
+    monitored_companies: number;
+    coverage_gaps: number;
+    enabled_connectors: number;
+  };
+  connectors: AdminConnectorWorkspaceConnector[];
+  companies: AdminConnectorWorkspaceCompany[];
+  coverage_gaps: CoverageGapItem[];
+  lifecycle: {
+    settings: {
+      stale_after_missed_syncs: number;
+      closed_after_missed_syncs: number;
+      archive_after_days: number;
+      delete_after_days: number;
+      cleanup_batch_size: number;
+      maintenance_interval_minutes: number;
+    };
+    inventory: ConnectorInventorySnapshot;
+    maintenance: MaintenanceStatusSnapshot | null;
+  };
+  database: {
+    estimated_storage_bytes: number | null;
+    jobs_rows: number;
+    connector_runs_rows: number;
+    alerts_rows: number;
+    user_alerts_rows: number;
+    job_matches_rows: number;
+    saved_jobs_rows: number;
+    active_inventory: number;
+    archived_inventory: number;
+    collected_lifetime: number;
+  };
+  roadmap: Array<{
+    connector_key: string;
+    source: string;
+    layer: SourceStatus["layer"];
+    roadmap_status: SourceStatus["admin_status"];
+    companies_enabled: number;
+    catalog_company_count: number;
+    coverage_percent: number;
+  }>;
+  run_history: RunHistoryItem[];
+}
+
 export interface AuditLogEntry {
   id: string;
   event_type: string;
@@ -268,6 +447,33 @@ export interface AlertEvent {
   freshness_tone: "fresh" | "aging" | "stale";
   recommendation: string;
   recommendation_tone: "apply" | "review" | "skip";
+  alert_status: string;
+  notification_type: string;
+  reason_code: string;
+  failure_reason?: string | null;
+}
+
+export interface NotificationInsightBucket {
+  key: string;
+  count: number;
+}
+
+export interface NotificationInsightTotals {
+  evaluated: number;
+  sent: number;
+  failed: number;
+  suppressed: number;
+  digest_pending: number;
+  pending: number;
+  missed_opportunities: number;
+}
+
+export interface NotificationInsights {
+  totals: NotificationInsightTotals;
+  reasons: NotificationInsightBucket[];
+  types: NotificationInsightBucket[];
+  missed_jobs: JobOpportunity[];
+  failed_alerts: AlertEvent[];
 }
 
 export interface DashboardSummary {
@@ -286,6 +492,14 @@ export interface DashboardSummary {
   notification_sla_minutes: number;
   apply_now_threshold_score: number;
   review_threshold_score: number;
+  active_inventory?: number;
+  stale_inventory?: number;
+  closed_inventory?: number;
+  expired_inventory?: number;
+  archived_inventory?: number;
+  collected_lifetime?: number;
+  new_today_inventory?: number;
+  estimated_storage_bytes?: number | null;
 }
 
 export interface ProductInfo {

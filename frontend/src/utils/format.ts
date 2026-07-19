@@ -1,5 +1,29 @@
 import type { AlertEvent, JobOpportunity, SourceStatus, StatusTone } from "../types";
 
+const notificationReasonLabels: Record<string, string> = {
+  already_alerted: "Already alerted",
+  below_match_threshold: "Below match threshold",
+  collected: "Collected",
+  connector_retry: "Recovery retry",
+  daily_digest_scheduled: "Queued for daily digest",
+  fresh_match: "Fresh alert candidate",
+  freshness_expired: "Freshness window expired",
+  initial_sync_stale: "Too old during first sync",
+  initial_sync_suppressed: "Suppressed during first sync",
+  notification_rule_filtered: "Filtered by notification rules",
+  recovery_backfill_budget_exhausted: "Recovery budget exhausted",
+  telegram_delivery_failed: "Telegram delivery failed",
+  telegram_not_connected: "Telegram not connected",
+  unknown: "Unknown reason",
+};
+
+const notificationTypeLabels: Record<string, string> = {
+  fresh_alert: "Fresh Alerts",
+  recovery_alert: "Recovery Alerts",
+  daily_digest: "Daily Digest",
+  unknown: "Unknown",
+};
+
 export function formatCompactNumber(value: number): string {
   return new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(value);
 }
@@ -122,6 +146,36 @@ export function systemStatusTone(status: string): StatusTone {
 
 export function alertAgeLabel(alert: AlertEvent): string {
   return formatRelativeMinutes(alert.sent_minutes_ago);
+}
+
+export function notificationReasonLabel(reason: string | null | undefined): string {
+  if (!reason) {
+    return "Unknown reason";
+  }
+  return notificationReasonLabels[reason] ?? reason.replace(/_/g, " ");
+}
+
+export function notificationTypeLabel(value: string | null | undefined): string {
+  if (!value) {
+    return "Unknown";
+  }
+  return notificationTypeLabels[value] ?? value.replace(/_/g, " ");
+}
+
+export function notificationStatusTone(status: string | null | undefined): "success" | "warning" | "danger" | "info" | "neutral" {
+  if (status === "sent") {
+    return "success";
+  }
+  if (status === "failed") {
+    return "danger";
+  }
+  if (status === "suppressed") {
+    return "warning";
+  }
+  if (status === "digest_pending" || status === "pending") {
+    return "info";
+  }
+  return "neutral";
 }
 
 export function sortJobsByScore(jobs: JobOpportunity[]): JobOpportunity[] {

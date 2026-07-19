@@ -179,6 +179,20 @@ class AuthSettings:
 
 
 @dataclass(frozen=True)
+class JobLifecycleSettings:
+    stale_after_missed_syncs: int
+    closed_after_missed_syncs: int
+    archive_after_days: int
+    delete_after_days: int
+
+
+@dataclass(frozen=True)
+class MaintenanceSettings:
+    interval_minutes: int
+    cleanup_batch_size: int
+
+
+@dataclass(frozen=True)
 class RadarSettings:
     mode: RuntimeMode
     primary_connector: str
@@ -216,6 +230,8 @@ class AppSettings:
     telegram: TelegramSettings
     openai: OpenAISettings
     auth: AuthSettings
+    lifecycle: JobLifecycleSettings
+    maintenance: MaintenanceSettings
     radar: RadarSettings
 
 
@@ -383,6 +399,16 @@ def get_settings() -> AppSettings:
             super_admin_email=os.getenv("JOB_RADAR_SUPER_ADMIN_EMAIL"),
             super_admin_password=os.getenv("JOB_RADAR_SUPER_ADMIN_PASSWORD"),
             super_admin_name=os.getenv("JOB_RADAR_SUPER_ADMIN_NAME", "Super Admin"),
+        ),
+        lifecycle=JobLifecycleSettings(
+            stale_after_missed_syncs=_read_int("JOB_RADAR_JOB_STALE_AFTER_MISSED_SYNCS", 2),
+            closed_after_missed_syncs=_read_int("JOB_RADAR_JOB_CLOSED_AFTER_MISSED_SYNCS", 6),
+            archive_after_days=_read_int("JOB_RADAR_JOB_ARCHIVE_AFTER_DAYS", 30),
+            delete_after_days=_read_int("JOB_RADAR_JOB_DELETE_AFTER_DAYS", 120),
+        ),
+        maintenance=MaintenanceSettings(
+            interval_minutes=_read_int("JOB_RADAR_MAINTENANCE_INTERVAL_MINUTES", 60),
+            cleanup_batch_size=_read_int("JOB_RADAR_MAINTENANCE_BATCH_SIZE", 250),
         ),
         radar=RadarSettings(
             mode=runtime_mode,

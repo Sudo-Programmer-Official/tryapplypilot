@@ -17,6 +17,7 @@ from app.connectors.greenhouse import GreenhouseJobConnector
 from app.connectors.lever import LeverBoard, LeverJobConnector
 from app.db.client import connection
 from app.domain import CompanyPreference, UserAccount
+from app.job_lifecycle import content_hash_for_job, lifecycle_for_missed_syncs
 from app.job_metadata import (
     country_display,
     freshness_label,
@@ -24,18 +25,17 @@ from app.job_metadata import (
     recommendation_label,
 )
 from app.logging_utils import get_logger
+from app.notification_delivery import evaluate_notification_decision
 from app.notifications.telegram import send_message
 from app.retry import RetryPolicy, retry_sync
 from app.scoring import MatchResult, heuristic_score_job, score_job
 from app.user_accounts import list_users
 from app.user_matching import (
     alert_freshness_hours,
-    alert_rule_allows_job,
     build_user_profile_text,
     build_user_matching_settings,
     filter_reason_for_user,
     minimum_match_score,
-    telegram_connected,
 )
 
 
@@ -339,6 +339,68 @@ class MarketScoutAgent:
             await self.run_once()
             await asyncio.sleep(self.settings.radar.polling_interval_minutes * 60)
 
+    async def run_connector_now(self, connector_key: str) -> MarketScoutRunSummary:
+        self.settings = await build_effective_app_settings(self.base_settings)
+        self.retry_policy = replace(
+            self.retry_policy,
+            max_attempts=self.settings.connectors.retry_attempts,
+            base_delay_seconds=self.settings.connectors.base_retry_delay_seconds,
+            max_delay_seconds=self.settings.connectors.max_retry_delay_seconds,
+            backoff_multiplier=self.settings.connectors.backoff_multiplier,
+        )
+        started_at = datetime.now(timezone.utc)
+        runs: list[ConnectorRunSummary] = []
+        runnable_companies = [
+            company
+            for company in sorted(
+                self.settings.radar.companies,
+                key=lambda item: (item.tier, item.priority, item.company.casefold()),
+            )
+            if company.enabled and company.connector.strip().casefold() == connector_key.casefold()
+        ]
+        runner = self._connector_runner(connector_key.casefold())
+        if runner is None:
+            runs = [
+                ConnectorRunSummary(
+                    connector_key=_company_connector_run_key(company),
+                    company=company.company,
+                    jobs_fetched=0,
+                    jobs_inserted=0,
+                    jobs_updated=0,
+                    jobs_matched=0,
+                    alerts_sent=0,
+                    alerts_failed=0,
+                    failed=True,
+                    error_message="Collector not implemented for this connector.",
+                )
+                for company in runnable_companies
+            ]
+        else:
+            for company in runnable_companies:
+                try:
+                    runs.append(await runner(company))
+                except Exception as exc:  # noqa: BLE001
+                    runs.append(
+                        ConnectorRunSummary(
+                            connector_key=_company_connector_run_key(company),
+                            company=company.company,
+                            jobs_fetched=0,
+                            jobs_inserted=0,
+                            jobs_updated=0,
+                            jobs_matched=0,
+                            alerts_sent=0,
+                            alerts_failed=0,
+                            failed=True,
+                            error_message=str(exc)[:1000],
+                        )
+                    )
+        finished_at = datetime.now(timezone.utc)
+        return MarketScoutRunSummary(
+            started_at=started_at.isoformat(),
+            finished_at=finished_at.isoformat(),
+            runs=runs,
+        )
+
     async def _due_companies_by_connector(
         self,
     ) -> tuple[dict[str, list[CompanyPreference]], dict[str, int], dict[str, int]]:
@@ -463,6 +525,62 @@ class MarketScoutAgent:
             return self._run_lever_company
         return None
 
+    async def _reconcile_connector_inventory(
+        self,
+        *,
+        conn,
+        company: CompanyPreference,
+        connector_key: str,
+        observed_external_job_ids: set[str],
+        now: datetime,
+    ) -> None:
+        rows = await conn.fetch(
+            """
+            SELECT job_id, lifecycle_status, closed_at, archived_at, consecutive_missed_syncs
+            FROM jobs
+            WHERE connector_key = $1
+              AND ($2::text IS NULL OR company_id = $2::text)
+              AND lifecycle_status NOT IN ('archived', 'deleted')
+              AND NOT (external_job_id = ANY($3::text[]))
+            """,
+            connector_key,
+            company.id or None,
+            list(observed_external_job_ids),
+        )
+        for row in rows:
+            next_missed_syncs = int(row["consecutive_missed_syncs"] or 0) + 1
+            transition = lifecycle_for_missed_syncs(
+                current_status=str(row["lifecycle_status"] or "active"),
+                consecutive_missed_syncs=next_missed_syncs,
+                current_closed_at=row["closed_at"],
+                current_archived_at=row["archived_at"],
+                settings=self.settings,
+                now=now,
+            )
+            await conn.execute(
+                """
+                UPDATE jobs
+                SET consecutive_missed_syncs = $2,
+                    source_status = $3,
+                    lifecycle_status = $4,
+                    closed_at = $5,
+                    archived_at = $6,
+                    last_changed_at = CASE
+                        WHEN lifecycle_status IS DISTINCT FROM $4
+                          OR source_status IS DISTINCT FROM $3
+                        THEN NOW()
+                        ELSE last_changed_at
+                    END
+                WHERE job_id = $1
+                """,
+                str(row["job_id"]),
+                next_missed_syncs,
+                transition.source_status,
+                transition.lifecycle_status,
+                transition.closed_at,
+                transition.archived_at,
+            )
+
     async def _active_user_contexts(self) -> list[UserMatchContext]:
         return [
             UserMatchContext(
@@ -507,13 +625,15 @@ class MarketScoutAgent:
                 INSERT INTO connector_runs (
                     run_id,
                     connector_key,
+                    company_id,
                     run_status,
                     cursor_before
                 )
-                VALUES ($1, $2, 'running', $3)
+                VALUES ($1, $2, $3, 'running', $4)
                 """,
                 run_id,
                 connector_key,
+                company.id or None,
                 cursor_before,
             )
 
@@ -614,13 +734,15 @@ class MarketScoutAgent:
                 INSERT INTO connector_runs (
                     run_id,
                     connector_key,
+                    company_id,
                     run_status,
                     cursor_before
                 )
-                VALUES ($1, $2, 'running', $3)
+                VALUES ($1, $2, $3, 'running', $4)
                 """,
                 run_id,
                 connector_key,
+                company.id or None,
                 cursor_before,
             )
 
@@ -713,11 +835,11 @@ class MarketScoutAgent:
         user_contexts = await self._active_user_contexts()
 
         async with connection() as conn:
-            existing_jobs_by_external_id: dict[str, str] = {}
+            existing_jobs_by_external_id: dict[str, dict[str, object]] = {}
             if jobs:
                 rows = await conn.fetch(
                     """
-                    SELECT external_job_id, job_id
+                    SELECT external_job_id, job_id, content_hash, lifecycle_status, source_status, closed_at, archived_at
                     FROM jobs
                     WHERE connector_key = $1
                       AND external_job_id = ANY($2::text[])
@@ -726,25 +848,62 @@ class MarketScoutAgent:
                     [job.external_job_id for job in jobs],
                 )
                 existing_jobs_by_external_id = {
-                    str(row["external_job_id"]): str(row["job_id"])
+                    str(row["external_job_id"]): {
+                        "job_id": str(row["job_id"]),
+                        "content_hash": str(row["content_hash"] or ""),
+                        "lifecycle_status": str(row["lifecycle_status"] or "active"),
+                        "source_status": str(row["source_status"] or "observed"),
+                        "closed_at": row["closed_at"],
+                        "archived_at": row["archived_at"],
+                    }
                     for row in rows
                 }
 
+            observed_external_job_ids: set[str] = set()
             for job in jobs:
-                if job.external_job_id in existing_jobs_by_external_id:
-                    job_id = existing_jobs_by_external_id[job.external_job_id]
+                observed_external_job_ids.add(job.external_job_id)
+                job_content_hash = content_hash_for_job(job)
+                existing_job = existing_jobs_by_external_id.get(job.external_job_id)
+                if existing_job is not None:
+                    job_id = str(existing_job["job_id"])
                     jobs_updated += 1
                     await conn.execute(
                         """
                         UPDATE jobs
                         SET last_seen_at = NOW(),
-                            description_text = $3,
-                            metadata = $4::jsonb
+                            last_changed_at = CASE
+                                WHEN content_hash IS DISTINCT FROM $3
+                                  OR lifecycle_status <> 'active'
+                                  OR source_status <> 'observed'
+                                THEN NOW()
+                                ELSE last_changed_at
+                            END,
+                            company_id = $4,
+                            title = $5,
+                            location = $6,
+                            remote_policy = $7,
+                            apply_url = $8,
+                            published_at = $9,
+                            content_hash = $3,
+                            lifecycle_status = 'active',
+                            source_status = 'observed',
+                            consecutive_missed_syncs = 0,
+                            closed_at = NULL,
+                            archived_at = NULL,
+                            description_text = $10,
+                            metadata = $11::jsonb
                         WHERE connector_key = $1
                           AND external_job_id = $2
                         """,
                         connector_key,
                         job.external_job_id,
+                        job_content_hash,
+                        company.id or None,
+                        job.title,
+                        job.location,
+                        job.remote_policy,
+                        job.apply_url,
+                        job.published_at,
                         job.description_text,
                         json.dumps({"raw_payload": job.raw_payload}),
                     )
@@ -825,6 +984,7 @@ class MarketScoutAgent:
                     """
                     INSERT INTO jobs (
                         job_id,
+                        company_id,
                         connector_key,
                         external_job_id,
                         company,
@@ -835,6 +995,11 @@ class MarketScoutAgent:
                         description_text,
                         job_fingerprint,
                         published_at,
+                        last_changed_at,
+                        consecutive_missed_syncs,
+                        lifecycle_status,
+                        source_status,
+                        content_hash,
                         match_score,
                         decision,
                         recommended_resume,
@@ -844,10 +1009,11 @@ class MarketScoutAgent:
                     )
                     VALUES (
                         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-                        $11, $12, $13, $14, 'new', 0, $15::jsonb
+                        $11, $12, NOW(), 0, 'active', 'observed', $13, $14, $15, $16, 'new', 0, $17::jsonb
                     )
                     """,
                     job_id,
+                    company.id or None,
                     connector_key,
                     job.external_job_id,
                     job.company,
@@ -858,6 +1024,7 @@ class MarketScoutAgent:
                     job.description_text,
                     job.job_fingerprint,
                     published_at,
+                    job_content_hash,
                     best_match.score,
                     best_match.decision,
                     best_match.recommended_resume,
@@ -904,10 +1071,14 @@ class MarketScoutAgent:
                             gaps,
                             provider,
                             country_code,
+                            notification_status,
+                            notification_reason,
+                            notification_type,
+                            notification_evaluated_at,
                             updated_at
                         )
                         VALUES (
-                            $1, $2, $3, $4, $5, $6, 'new', $7::jsonb, $8::jsonb, $9, $10, NOW()
+                            $1, $2, $3, $4, $5, $6, 'new', $7::jsonb, $8::jsonb, $9, $10, 'pending', 'collected', 'fresh_alert', NOW(), NOW()
                         )
                         ON CONFLICT (user_id, job_id) DO UPDATE SET
                             match_score = EXCLUDED.match_score,
@@ -917,6 +1088,10 @@ class MarketScoutAgent:
                             gaps = EXCLUDED.gaps,
                             provider = EXCLUDED.provider,
                             country_code = EXCLUDED.country_code,
+                            notification_status = EXCLUDED.notification_status,
+                            notification_reason = EXCLUDED.notification_reason,
+                            notification_type = EXCLUDED.notification_type,
+                            notification_evaluated_at = EXCLUDED.notification_evaluated_at,
                             updated_at = NOW()
                         """,
                         match_id,
@@ -930,54 +1105,60 @@ class MarketScoutAgent:
                         match.provider,
                         country_code,
                     )
-
-                    if not self._should_alert_for_user(
+                    notification_decision = evaluate_notification_decision(
                         job=job,
                         match=match,
-                        user_context=user_context,
+                        user=user_context.user,
+                        settings=self.settings,
                         published_at=published_at,
+                        delivery_phase="fresh",
                         initial_sync=initial_sync,
                         now=now,
                         remaining_initial_alert_budget=remaining_initial_alert_budget,
-                    ):
+                        minimum_match_score_override=user_context.minimum_match_score,
+                        freshness_hours_override=user_context.freshness_hours,
+                    )
+                    await self._set_job_match_notification_state(
+                        conn=conn,
+                        user_id=user_context.user.id,
+                        job_id=job_id,
+                        notification_status=notification_decision.notification_status,
+                        notification_reason=notification_decision.reason_code,
+                        notification_type=notification_decision.notification_type,
+                    )
+                    if not notification_decision.should_send:
                         continue
 
-                    alert_id = str(uuid5(NAMESPACE_URL, f"{job_id}:{user_context.user.id}:telegram:{match.decision}"))
-                    inserted_alert = await conn.fetchval(
-                        """
-                        INSERT INTO user_alerts (
-                            user_alert_id,
-                            job_id,
-                            user_id,
-                            channel,
-                            decision,
-                            alert_status,
-                            payload
-                        )
-                        VALUES ($1, $2, $3, 'telegram', $4, 'pending', $5::jsonb)
-                        ON CONFLICT DO NOTHING
-                        RETURNING user_alert_id
-                        """,
-                        alert_id,
-                        job_id,
-                        user_context.user.id,
-                        match.decision,
-                        json.dumps(
-                            {
-                                "why": match.top_strengths,
-                                "gaps": match.gaps,
-                                "recommended_resume": match.recommended_resume,
-                                "country_code": country_code,
-                            }
-                        ),
+                    inserted_alert = await self._upsert_user_alert(
+                        conn=conn,
+                        job_id=job_id,
+                        user_id=user_context.user.id,
+                        decision=match.decision,
+                        notification_type=notification_decision.notification_type,
+                        reason_code=notification_decision.reason_code,
+                        payload={
+                            "why": match.top_strengths,
+                            "gaps": match.gaps,
+                            "recommended_resume": match.recommended_resume,
+                            "country_code": country_code,
+                        },
                     )
                     if inserted_alert is None:
+                        await self._set_job_match_notification_state(
+                            conn=conn,
+                            user_id=user_context.user.id,
+                            job_id=job_id,
+                            notification_status="sent",
+                            notification_reason="already_alerted",
+                            notification_type=notification_decision.notification_type,
+                            mark_alerted=True,
+                        )
                         continue
                     if initial_sync:
                         remaining_initial_alert_budget = max(0, remaining_initial_alert_budget - 1)
                     sent, failed = await self._send_inserted_alert(
                         conn=conn,
-                        alert_id=alert_id,
+                        alert_id=inserted_alert,
                         job_id=job_id,
                         job=job,
                         match=match,
@@ -985,10 +1166,19 @@ class MarketScoutAgent:
                         published_at=published_at,
                         country_code=country_code,
                         now=now,
+                        notification_type=notification_decision.notification_type,
+                        reason_code=notification_decision.reason_code,
                     )
                     alerts_sent += sent
                     alerts_failed += failed
 
+            await self._reconcile_connector_inventory(
+                conn=conn,
+                company=company,
+                connector_key=connector_key,
+                observed_external_job_ids=observed_external_job_ids,
+                now=now,
+            )
             await conn.execute(
                 """
                 INSERT INTO connector_cursors (
@@ -1017,13 +1207,21 @@ class MarketScoutAgent:
                     run_status = 'succeeded',
                     jobs_fetched = $2,
                     jobs_inserted = $3,
+                    jobs_updated = $4,
+                    jobs_matched = $5,
+                    alerts_sent = $6,
+                    alerts_failed = $7,
                     retries = 0,
-                    cursor_after = $4
+                    cursor_after = $8
                 WHERE run_id = $1
                 """,
                 run_id,
                 len(jobs),
                 jobs_inserted,
+                jobs_updated,
+                jobs_matched,
+                alerts_sent,
+                alerts_failed,
                 next_cursor,
             )
 
@@ -1037,31 +1235,6 @@ class MarketScoutAgent:
                 alerts_sent=alerts_sent,
                 alerts_failed=alerts_failed,
         )
-
-    def _should_alert_for_user(
-        self,
-        *,
-        job: NormalizedJobRecord,
-        match: MatchResult,
-        user_context: UserMatchContext,
-        published_at: datetime,
-        initial_sync: bool,
-        now: datetime,
-        remaining_initial_alert_budget: int,
-    ) -> bool:
-        if not telegram_connected(user_context.user):
-            return False
-        if match.score < user_context.minimum_match_score:
-            return False
-        if published_at < now - timedelta(hours=user_context.freshness_hours):
-            return False
-        if not alert_rule_allows_job(job, user_context.user):
-            return False
-        if not initial_sync:
-            return True
-        if remaining_initial_alert_budget <= 0:
-            return False
-        return published_at >= now - timedelta(hours=self.settings.radar.initial_alert_window_hours)
 
     async def _deliver_pending_alerts_for_existing_job(
         self,
@@ -1103,52 +1276,59 @@ class MarketScoutAgent:
                 recommended_resume=str(row["recommended_resume"]),
                 provider=str(row["provider"]),
             )
-            if not self._should_alert_for_user(
+            notification_decision = evaluate_notification_decision(
                 job=job,
                 match=match,
-                user_context=user_context,
+                user=user_context.user,
+                settings=self.settings,
                 published_at=published_at,
+                delivery_phase="recovery",
                 initial_sync=False,
                 now=now,
                 remaining_initial_alert_budget=0,
-            ):
+                minimum_match_score_override=user_context.minimum_match_score,
+                freshness_hours_override=user_context.freshness_hours,
+            )
+            await self._set_job_match_notification_state(
+                conn=conn,
+                user_id=user_id,
+                job_id=job_id,
+                notification_status=notification_decision.notification_status,
+                notification_reason=notification_decision.reason_code,
+                notification_type=notification_decision.notification_type,
+            )
+            if not notification_decision.should_send:
                 continue
 
-            alert_id = str(uuid5(NAMESPACE_URL, f"{job_id}:{user_id}:telegram:{match.decision}"))
-            inserted_alert = await conn.fetchval(
-                """
-                INSERT INTO user_alerts (
-                    user_alert_id,
-                    job_id,
-                    user_id,
-                    channel,
-                    decision,
-                    alert_status,
-                    payload
-                )
-                VALUES ($1, $2, $3, 'telegram', $4, 'pending', $5::jsonb)
-                ON CONFLICT DO NOTHING
-                RETURNING user_alert_id
-                """,
-                alert_id,
-                job_id,
-                user_id,
-                match.decision,
-                json.dumps(
-                    {
-                        "why": match.top_strengths,
-                        "gaps": match.gaps,
-                        "recommended_resume": match.recommended_resume,
-                        "country_code": country_code,
-                    }
-                ),
+            inserted_alert = await self._upsert_user_alert(
+                conn=conn,
+                job_id=job_id,
+                user_id=user_id,
+                decision=match.decision,
+                notification_type=notification_decision.notification_type,
+                reason_code=notification_decision.reason_code,
+                payload={
+                    "why": match.top_strengths,
+                    "gaps": match.gaps,
+                    "recommended_resume": match.recommended_resume,
+                    "country_code": country_code,
+                },
             )
             if inserted_alert is None:
+                await self._set_job_match_notification_state(
+                    conn=conn,
+                    user_id=user_id,
+                    job_id=job_id,
+                    notification_status="sent",
+                    notification_reason="already_alerted",
+                    notification_type=notification_decision.notification_type,
+                    mark_alerted=True,
+                )
                 continue
 
             sent, failed = await self._send_inserted_alert(
                 conn=conn,
-                alert_id=alert_id,
+                alert_id=inserted_alert,
                 job_id=job_id,
                 job=job,
                 match=match,
@@ -1156,11 +1336,101 @@ class MarketScoutAgent:
                 published_at=published_at,
                 country_code=country_code,
                 now=now,
+                notification_type=notification_decision.notification_type,
+                reason_code=notification_decision.reason_code,
             )
             alerts_sent += sent
             alerts_failed += failed
 
         return alerts_sent, alerts_failed
+
+    async def _upsert_user_alert(
+        self,
+        *,
+        conn,
+        job_id: str,
+        user_id: str,
+        decision: str,
+        notification_type: str,
+        reason_code: str,
+        payload: dict[str, object],
+    ) -> str | None:
+        alert_id = str(uuid5(NAMESPACE_URL, f"{job_id}:{user_id}:telegram:{decision}"))
+        return await conn.fetchval(
+            """
+            INSERT INTO user_alerts (
+                user_alert_id,
+                job_id,
+                user_id,
+                channel,
+                decision,
+                alert_status,
+                notification_type,
+                reason_code,
+                evaluated_at,
+                payload
+            )
+            VALUES ($1, $2, $3, 'telegram', $4, 'pending', $5, $6, NOW(), $7::jsonb)
+            ON CONFLICT (user_id, job_id, channel, decision)
+            DO UPDATE SET
+                alert_status = 'pending',
+                notification_type = EXCLUDED.notification_type,
+                reason_code = EXCLUDED.reason_code,
+                evaluated_at = NOW(),
+                payload = EXCLUDED.payload,
+                sent_at = CASE WHEN user_alerts.alert_status = 'sent' THEN user_alerts.sent_at ELSE NULL END,
+                failure_reason = CASE WHEN user_alerts.alert_status = 'sent' THEN user_alerts.failure_reason ELSE NULL END
+            WHERE user_alerts.alert_status <> 'sent'
+            RETURNING user_alert_id
+            """,
+            alert_id,
+            job_id,
+            user_id,
+            decision,
+            notification_type,
+            reason_code,
+            json.dumps(payload),
+        )
+
+    async def _set_job_match_notification_state(
+        self,
+        *,
+        conn,
+        user_id: str,
+        job_id: str,
+        notification_status: str,
+        notification_reason: str,
+        notification_type: str,
+        mark_alerted: bool = False,
+        increment_attempts: bool = False,
+    ) -> None:
+        await conn.execute(
+            """
+            UPDATE job_matches
+            SET notification_status = $3,
+                notification_reason = $4,
+                notification_type = $5,
+                notification_evaluated_at = NOW(),
+                notification_attempts = CASE
+                    WHEN $6 THEN COALESCE(notification_attempts, 0) + 1
+                    ELSE COALESCE(notification_attempts, 0)
+                END,
+                alerted_at = CASE
+                    WHEN $7 THEN COALESCE(alerted_at, NOW())
+                    ELSE alerted_at
+                END,
+                updated_at = NOW()
+            WHERE user_id = $1
+              AND job_id = $2
+            """,
+            user_id,
+            job_id,
+            notification_status,
+            notification_reason,
+            notification_type,
+            increment_attempts,
+            mark_alerted,
+        )
 
     async def _send_inserted_alert(
         self,
@@ -1174,6 +1444,8 @@ class MarketScoutAgent:
         published_at: datetime,
         country_code: str | None,
         now: datetime,
+        notification_type: str,
+        reason_code: str,
     ) -> tuple[int, int]:
         posted_minutes_ago = max(0, int((now - published_at).total_seconds() // 60))
         try:
@@ -1198,21 +1470,22 @@ class MarketScoutAgent:
                 """
                 UPDATE user_alerts
                 SET alert_status = 'sent',
-                    sent_at = NOW()
+                    sent_at = NOW(),
+                    reason_code = $2
                 WHERE user_alert_id = $1
                 """,
                 alert_id,
+                reason_code,
             )
-            await conn.execute(
-                """
-                UPDATE job_matches
-                SET alerted_at = NOW(),
-                    updated_at = NOW()
-                WHERE user_id = $1
-                  AND job_id = $2
-                """,
-                user_context.user.id,
-                job_id,
+            await self._set_job_match_notification_state(
+                conn=conn,
+                user_id=user_context.user.id,
+                job_id=job_id,
+                notification_status="sent",
+                notification_reason=reason_code,
+                notification_type=notification_type,
+                mark_alerted=True,
+                increment_attempts=True,
             )
             return 1, 0
         except Exception as exc:  # noqa: BLE001
@@ -1220,10 +1493,20 @@ class MarketScoutAgent:
                 """
                 UPDATE user_alerts
                 SET alert_status = 'failed',
-                    failure_reason = $2
+                    failure_reason = $2,
+                    reason_code = 'telegram_delivery_failed'
                 WHERE user_alert_id = $1
                 """,
                 alert_id,
                 str(exc)[:1000],
+            )
+            await self._set_job_match_notification_state(
+                conn=conn,
+                user_id=user_context.user.id,
+                job_id=job_id,
+                notification_status="failed",
+                notification_reason="telegram_delivery_failed",
+                notification_type=notification_type,
+                increment_attempts=True,
             )
             return 0, 1
