@@ -5,6 +5,7 @@ defineProps<{
   placeholder?: string;
   disabled?: boolean;
   hint?: string;
+  readonly?: boolean;
   rows?: number;
 }>();
 
@@ -22,6 +23,7 @@ defineEmits<{
       :rows="rows ?? 4"
       :placeholder="placeholder"
       :disabled="disabled"
+      :readonly="readonly"
       @input="$emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)"
     />
     <span v-if="hint" class="app-field__hint">{{ hint }}</span>

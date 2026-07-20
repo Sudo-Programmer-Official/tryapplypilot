@@ -28,6 +28,7 @@ sidebar.init();
 
 const searchValue = computed(() => String(route.query.q ?? ""));
 const title = computed(() => String(route.meta.title ?? "Workspace"));
+const showHeaderSearch = computed(() => route.meta.headerSearch !== false);
 
 function updateSearch(value: string): void {
   router.replace({
@@ -81,6 +82,7 @@ function updateTheme(value: ThemeMode): void {
         :user="auth.user.value"
         :theme-mode="theme.mode.value"
         :search-value="searchValue"
+        :show-search="showHeaderSearch"
         @toggle-sidebar="sidebar.toggleDesktop"
         @update:search="updateSearch"
         @update:theme="updateTheme"

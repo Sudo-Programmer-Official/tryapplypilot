@@ -195,280 +195,384 @@ onMounted(loadCompanies);
     </PageHeader>
 
     <PageSection>
-      <AppGrid columns="2">
-      <AppCard title="Search territory" subtitle="These filters define where and how you want to work before deeper scoring begins.">
-        <div class="app-form-grid">
-          <AppSelect
-            :model-value="draft.country"
-            label="Country"
-            :options="countryOptions"
-            @update:model-value="draft.country = String($event || 'US')"
-          />
-          <AppTextArea
-            v-model="locationsText"
-            label="Locations"
-            placeholder="Seattle, Redmond, Bellevue, Remote (US), New York"
-            hint="Comma-separated values. Matching uses OR logic across locations."
-            :rows="4"
-          />
-          <AppSelect
-            :model-value="draft.remote_preference"
-            label="Remote preference"
-            :options="remotePreferenceOptions"
-            @update:model-value="draft.remote_preference = String($event || 'mostly_remote')"
-          />
-          <AppSelect
-            :model-value="draft.travel_preference"
-            label="Travel preference"
-            :options="travelPreferenceOptions"
-            @update:model-value="draft.travel_preference = String($event || 'up_to_10')"
-          />
-          <AppSelect
-            :model-value="draft.freshness_hours"
-            label="Only notify me about jobs posted within"
-            :options="freshnessOptions"
-            hint="Push alerts respect this window. Older opportunities can still appear in your dashboard based on the separate search window."
-            @update:model-value="draft.freshness_hours = Number($event) || 24"
-          />
-          <AppSelect
-            :model-value="draft.search_window_hours"
-            label="Dashboard search window"
-            :options="searchWindowOptions"
-            @update:model-value="draft.search_window_hours = Number($event) || 24 * 7"
-          />
-          <AppInput
-            :model-value="draft.minimum_match_score"
-            label="Minimum match score"
-            type="number"
-            :min="0"
-            :max="100"
-            @update:model-value="draft.minimum_match_score = Number($event) || 0"
-          />
-          <AppInput
-            :model-value="draft.minimum_salary ?? ''"
-            label="Minimum salary"
-            type="number"
-            :min="0"
-            @update:model-value="draft.minimum_salary = Number.isFinite(Number($event)) && Number($event) > 0 ? Number($event) : null"
-          />
-          <AppInput
-            :model-value="draft.desired_salary ?? ''"
-            label="Desired salary"
-            type="number"
-            :min="0"
-            @update:model-value="draft.desired_salary = Number.isFinite(Number($event)) && Number($event) > 0 ? Number($event) : null"
-          />
-          <AppInput
-            :model-value="draft.years_of_experience ?? ''"
-            label="Years of experience"
-            type="number"
-            :min="0"
-            :max="60"
-            @update:model-value="draft.years_of_experience = Number.isFinite(Number($event)) && Number($event) >= 0 ? Number($event) : null"
-          />
-          <AppSelect
-            :model-value="draft.visa_status"
-            label="Visa status"
-            :options="visaStatusOptions"
-            @update:model-value="draft.visa_status = String($event || '')"
-          />
-        </div>
-      </AppCard>
-
-      <AppCard title="Role and level" subtitle="Give the matcher clear intent about titles, seniority, and employment types.">
-        <div class="app-form-grid">
-          <AppTextArea
-            v-model="rolesText"
-            label="Preferred roles"
-            placeholder="Senior Software Engineer, Backend Engineer, AI Engineer"
-            hint="Comma-separated titles or role families."
-            :rows="4"
-          />
-          <div class="preference-cluster">
-            <h4>Job types</h4>
-            <div class="preference-option-grid">
-              <AppCheckbox
-                v-for="option in jobTypeOptions"
-                :key="option.value"
-                :model-value="draft.job_types.includes(String(option.value))"
-                :label="option.label"
-                @update:model-value="toggleListValue('job_types', String(option.value))"
-              />
-            </div>
-          </div>
-          <div class="preference-cluster">
-            <h4>Work arrangement</h4>
-            <div class="preference-option-grid">
-              <AppCheckbox
-                v-for="option in workArrangementOptions"
-                :key="option"
-                :model-value="draft.work_arrangements.includes(option)"
-                :label="option"
-                @update:model-value="toggleListValue('work_arrangements', option)"
-              />
-            </div>
-          </div>
-          <div class="preference-cluster">
-            <h4>Seniority</h4>
-            <div class="preference-option-grid">
-              <AppCheckbox
-                v-for="option in experienceLevelOptions"
-                :key="option"
-                :model-value="draft.experience_levels.includes(option)"
-                :label="option"
-                @update:model-value="toggleListValue('experience_levels', option)"
-              />
-            </div>
-          </div>
-        </div>
-      </AppCard>
-      </AppGrid>
-    </PageSection>
-
-    <PageSection>
-      <AppGrid columns="2">
-      <AppCard title="Industry fit" subtitle="Use these to express the kind of companies and sectors you want ranked higher.">
-        <div class="app-form-grid">
-          <div class="preference-cluster">
-            <h4>Company size</h4>
-            <div class="preference-option-grid">
-              <AppCheckbox
-                v-for="option in companySizeOptions"
-                :key="option.value"
-                :model-value="draft.company_sizes.includes(String(option.value))"
-                :label="option.label"
-                @update:model-value="toggleListValue('company_sizes', String(option.value))"
-              />
-            </div>
-          </div>
-          <div class="preference-cluster">
-            <h4>Industries</h4>
-            <div class="preference-option-grid">
-              <AppCheckbox
-                v-for="option in industryOptions"
-                :key="option.value"
-                :model-value="draft.industries.includes(String(option.value))"
-                :label="option.label"
-                @update:model-value="toggleListValue('industries', String(option.value))"
-              />
-            </div>
-          </div>
-        </div>
-      </AppCard>
-
-      <AppCard title="Skill importance" subtitle="Weighted skills make your matcher profile more precise than a plain keyword list.">
-        <div class="skill-priority-list">
-          <div v-for="(entry, index) in draft.skill_priorities" :key="`${entry.skill}-${index}`" class="skill-priority-row">
+      <AppGrid columns="2" class="preferences-grid">
+        <AppCard class="preferences-panel" title="Search territory" subtitle="These filters define where and how you want to work before deeper scoring begins.">
+          <div class="app-form-grid">
+            <AppSelect
+              :model-value="draft.country"
+              label="Country"
+              :options="countryOptions"
+              @update:model-value="draft.country = String($event || 'US')"
+            />
+            <AppTextArea
+              v-model="locationsText"
+              label="Locations"
+              placeholder="Seattle, Redmond, Bellevue, Remote (US), New York"
+              hint="Comma-separated values. Matching uses OR logic across locations."
+              :rows="4"
+            />
+            <AppSelect
+              :model-value="draft.remote_preference"
+              label="Remote preference"
+              :options="remotePreferenceOptions"
+              @update:model-value="draft.remote_preference = String($event || 'mostly_remote')"
+            />
+            <AppSelect
+              :model-value="draft.travel_preference"
+              label="Travel preference"
+              :options="travelPreferenceOptions"
+              @update:model-value="draft.travel_preference = String($event || 'up_to_10')"
+            />
+            <AppSelect
+              :model-value="draft.freshness_hours"
+              label="Only notify me about jobs posted within"
+              :options="freshnessOptions"
+              hint="Push alerts respect this window. Older opportunities can still appear in your dashboard based on the separate search window."
+              @update:model-value="draft.freshness_hours = Number($event) || 24"
+            />
+            <AppSelect
+              :model-value="draft.search_window_hours"
+              label="Dashboard search window"
+              :options="searchWindowOptions"
+              @update:model-value="draft.search_window_hours = Number($event) || 24 * 7"
+            />
             <AppInput
-              :model-value="entry.skill"
-              label="Skill"
-              placeholder="Python"
-              @update:model-value="updateSkillName(index, $event)"
+              :model-value="draft.minimum_match_score"
+              label="Minimum match score"
+              type="number"
+              :min="0"
+              :max="100"
+              @update:model-value="draft.minimum_match_score = Number($event) || 0"
+            />
+            <AppInput
+              :model-value="draft.minimum_salary ?? ''"
+              label="Minimum salary"
+              type="number"
+              :min="0"
+              @update:model-value="draft.minimum_salary = Number.isFinite(Number($event)) && Number($event) > 0 ? Number($event) : null"
+            />
+            <AppInput
+              :model-value="draft.desired_salary ?? ''"
+              label="Desired salary"
+              type="number"
+              :min="0"
+              @update:model-value="draft.desired_salary = Number.isFinite(Number($event)) && Number($event) > 0 ? Number($event) : null"
+            />
+            <AppInput
+              :model-value="draft.years_of_experience ?? ''"
+              label="Years of experience"
+              type="number"
+              :min="0"
+              :max="60"
+              @update:model-value="draft.years_of_experience = Number.isFinite(Number($event)) && Number($event) >= 0 ? Number($event) : null"
             />
             <AppSelect
-              :model-value="entry.weight"
-              label="Weight"
-              :options="skillImportanceOptions"
-              @update:model-value="updateSkillWeight(index, $event)"
+              :model-value="draft.visa_status"
+              label="Visa status"
+              :options="visaStatusOptions"
+              @update:model-value="draft.visa_status = String($event || '')"
             />
-            <AppButton variant="ghost" size="sm" class="skill-priority-remove" @click="removeSkillPriority(index)">Remove</AppButton>
           </div>
-          <AppButton variant="secondary" size="sm" @click="addSkillPriority">Add priority skill</AppButton>
-        </div>
-      </AppCard>
+        </AppCard>
+
+        <AppCard class="preferences-panel" title="Role and level" subtitle="Give the matcher clear intent about titles, seniority, and employment types.">
+          <div class="app-form-grid">
+            <AppTextArea
+              v-model="rolesText"
+              label="Preferred roles"
+              placeholder="Senior Software Engineer, Backend Engineer, AI Engineer"
+              hint="Comma-separated titles or role families."
+              :rows="4"
+            />
+            <div class="preference-cluster">
+              <h4>Job types</h4>
+              <div class="preference-option-grid">
+                <AppCheckbox
+                  v-for="option in jobTypeOptions"
+                  :key="option.value"
+                  :model-value="draft.job_types.includes(String(option.value))"
+                  :label="option.label"
+                  @update:model-value="toggleListValue('job_types', String(option.value))"
+                />
+              </div>
+            </div>
+            <div class="preference-cluster">
+              <h4>Work arrangement</h4>
+              <div class="preference-option-grid">
+                <AppCheckbox
+                  v-for="option in workArrangementOptions"
+                  :key="option"
+                  :model-value="draft.work_arrangements.includes(option)"
+                  :label="option"
+                  @update:model-value="toggleListValue('work_arrangements', option)"
+                />
+              </div>
+            </div>
+            <div class="preference-cluster">
+              <h4>Seniority</h4>
+              <div class="preference-option-grid">
+                <AppCheckbox
+                  v-for="option in experienceLevelOptions"
+                  :key="option"
+                  :model-value="draft.experience_levels.includes(option)"
+                  :label="option"
+                  @update:model-value="toggleListValue('experience_levels', option)"
+                />
+              </div>
+            </div>
+          </div>
+        </AppCard>
       </AppGrid>
     </PageSection>
 
     <PageSection>
-      <AppGrid columns="2">
-      <AppCard title="Company priorities" subtitle="Rank companies explicitly instead of treating every selection the same. Hidden companies stay out of your personalized queue.">
-        <div v-if="companiesLoading" class="company-priority-empty">Loading companies…</div>
-        <div v-else class="company-priority-list">
-          <div v-for="company in prioritizedCompanies" :key="company.id" class="company-priority-row">
-            <div>
-              <strong>{{ company.company }}</strong>
-              <p>{{ company.connector }} · tier {{ company.tier }} · {{ company.country }}</p>
+      <AppGrid columns="2" class="preferences-grid">
+        <AppCard class="preferences-panel" title="Industry fit" subtitle="Use these to express the kind of companies and sectors you want ranked higher.">
+          <div class="app-form-grid">
+            <div class="preference-cluster">
+              <h4>Company size</h4>
+              <div class="preference-option-grid">
+                <AppCheckbox
+                  v-for="option in companySizeOptions"
+                  :key="option.value"
+                  :model-value="draft.company_sizes.includes(String(option.value))"
+                  :label="option.label"
+                  @update:model-value="toggleListValue('company_sizes', String(option.value))"
+                />
+              </div>
             </div>
+            <div class="preference-cluster">
+              <h4>Industries</h4>
+              <div class="preference-option-grid">
+                <AppCheckbox
+                  v-for="option in industryOptions"
+                  :key="option.value"
+                  :model-value="draft.industries.includes(String(option.value))"
+                  :label="option.label"
+                  @update:model-value="toggleListValue('industries', String(option.value))"
+                />
+              </div>
+            </div>
+          </div>
+        </AppCard>
+
+        <AppCard class="preferences-panel" title="Skill importance" subtitle="Weighted skills make your matcher profile more precise than a plain keyword list.">
+          <div class="skill-priority-list">
+            <div v-for="(entry, index) in draft.skill_priorities" :key="`${entry.skill}-${index}`" class="skill-priority-row">
+              <AppInput
+                :model-value="entry.skill"
+                label="Skill"
+                placeholder="Python"
+                @update:model-value="updateSkillName(index, $event)"
+              />
+              <AppSelect
+                :model-value="entry.weight"
+                label="Weight"
+                :options="skillImportanceOptions"
+                @update:model-value="updateSkillWeight(index, $event)"
+              />
+              <AppButton variant="ghost" size="sm" class="skill-priority-remove" @click="removeSkillPriority(index)">Remove</AppButton>
+            </div>
+            <AppButton variant="secondary" size="sm" @click="addSkillPriority">Add priority skill</AppButton>
+          </div>
+        </AppCard>
+      </AppGrid>
+    </PageSection>
+
+    <PageSection>
+      <AppGrid columns="2" class="preferences-grid">
+        <AppCard class="preferences-panel" title="Company priorities" subtitle="Rank companies explicitly instead of treating every selection the same. Hidden companies stay out of your personalized queue.">
+          <div v-if="companiesLoading" class="company-priority-empty">Loading companies…</div>
+          <div v-else class="company-priority-list">
+            <div v-for="company in prioritizedCompanies" :key="company.id" class="company-priority-row">
+              <div>
+                <strong>{{ company.company }}</strong>
+                <p>{{ company.connector }} · tier {{ company.tier }} · {{ company.country }}</p>
+              </div>
+              <AppSelect
+                :model-value="companyPriority(company.company)"
+                :options="companyPriorityOptions"
+                @update:model-value="setCompanyPriority(company.company, String($event || 'hidden'))"
+              />
+            </div>
+          </div>
+        </AppCard>
+
+        <AppCard class="preferences-panel" title="Notifications and resumes" subtitle="Control how aggressively you want alerts delivered and how resume selection should behave.">
+          <div class="app-form-grid">
             <AppSelect
-              :model-value="companyPriority(company.company)"
-              :options="companyPriorityOptions"
-              @update:model-value="setCompanyPriority(company.company, String($event || 'hidden'))"
+              :model-value="draft.notification_frequency"
+              label="Notification frequency"
+              :options="notificationFrequencyOptions"
+              @update:model-value="draft.notification_frequency = String($event || 'instant')"
+            />
+            <AppSelect
+              :model-value="draft.resume_strategy"
+              label="Resume strategy"
+              :options="resumeStrategyOptions"
+              @update:model-value="draft.resume_strategy = String($event || 'auto')"
+            />
+            <div class="preference-cluster">
+              <h4>Notification rules</h4>
+              <div class="preference-option-grid">
+                <AppCheckbox
+                  v-for="option in notificationRuleOptions"
+                  :key="option.value"
+                  :model-value="draft.notification_rules.includes(String(option.value))"
+                  :label="option.label"
+                  @update:model-value="toggleListValue('notification_rules', String(option.value))"
+                />
+              </div>
+            </div>
+            <div v-if="draft.resume_strategy === 'selected_only'" class="preference-cluster">
+              <h4>Preferred resumes</h4>
+              <div class="preference-option-grid">
+                <AppCheckbox
+                  v-for="resumeName in manualResumeOptions"
+                  :key="resumeName"
+                  :model-value="draft.preferred_resume_variants.includes(resumeName)"
+                  :label="resumeName"
+                  @update:model-value="toggleListValue('preferred_resume_variants', resumeName)"
+                />
+              </div>
+            </div>
+            <AppTextArea
+              v-model="excludedKeywordsText"
+              label="Excluded keywords"
+              placeholder="Sales, Support, Security Clearance, Marketing"
+              hint="Comma-separated role or domain terms that should be filtered out early."
+              :rows="4"
             />
           </div>
-        </div>
-      </AppCard>
-
-      <AppCard title="Notifications and resumes" subtitle="Control how aggressively you want alerts delivered and how resume selection should behave.">
-        <div class="app-form-grid">
-          <AppSelect
-            :model-value="draft.notification_frequency"
-            label="Notification frequency"
-            :options="notificationFrequencyOptions"
-            @update:model-value="draft.notification_frequency = String($event || 'instant')"
-          />
-          <AppSelect
-            :model-value="draft.resume_strategy"
-            label="Resume strategy"
-            :options="resumeStrategyOptions"
-            @update:model-value="draft.resume_strategy = String($event || 'auto')"
-          />
-          <div class="preference-cluster">
-            <h4>Notification rules</h4>
-            <div class="preference-option-grid">
-              <AppCheckbox
-                v-for="option in notificationRuleOptions"
-                :key="option.value"
-                :model-value="draft.notification_rules.includes(String(option.value))"
-                :label="option.label"
-                @update:model-value="toggleListValue('notification_rules', String(option.value))"
-              />
-            </div>
-          </div>
-          <div v-if="draft.resume_strategy === 'selected_only'" class="preference-cluster">
-            <h4>Preferred resumes</h4>
-            <div class="preference-option-grid">
-              <AppCheckbox
-                v-for="resumeName in manualResumeOptions"
-                :key="resumeName"
-                :model-value="draft.preferred_resume_variants.includes(resumeName)"
-                :label="resumeName"
-                @update:model-value="toggleListValue('preferred_resume_variants', resumeName)"
-              />
-            </div>
-          </div>
-          <AppTextArea
-            v-model="excludedKeywordsText"
-            label="Excluded keywords"
-            placeholder="Sales, Support, Security Clearance, Marketing"
-            hint="Comma-separated role or domain terms that should be filtered out early."
-            :rows="4"
-          />
-        </div>
-      </AppCard>
+        </AppCard>
       </AppGrid>
     </PageSection>
   </AppPage>
 </template>
 
 <style scoped>
+.preferences-grid {
+  align-items: stretch;
+}
+
+.preferences-panel {
+  min-height: 100%;
+}
+
+.preferences-panel :deep(.app-card__header) {
+  padding: clamp(var(--space-6), 3vw, 2.25rem) clamp(var(--space-6), 4vw, 2.5rem) 0;
+}
+
+.preferences-panel :deep(.app-card__header-copy) {
+  gap: var(--space-3);
+}
+
+.preferences-panel :deep(.app-card__title) {
+  font-size: clamp(1.625rem, 2.3vw, 2rem);
+  letter-spacing: -0.03em;
+}
+
+.preferences-panel :deep(.app-card__subtitle) {
+  max-width: 42ch;
+  font-size: 0.98rem;
+}
+
+.preferences-panel :deep(.app-card__body) {
+  align-content: start;
+  gap: var(--space-6);
+  padding: var(--space-6) clamp(var(--space-6), 4vw, 2.5rem) clamp(var(--space-6), 4vw, 2.25rem);
+}
+
+.preferences-panel :deep(.app-form-grid) {
+  gap: var(--space-5);
+}
+
+.preferences-panel :deep(.app-field__label) {
+  font-size: 0.95rem;
+}
+
+.preferences-panel :deep(.app-input),
+.preferences-panel :deep(.app-select),
+.preferences-panel :deep(.app-textarea) {
+  min-height: 3.5rem;
+  border-radius: 1.125rem;
+  padding-inline: 1.125rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.preferences-panel :deep(.app-textarea) {
+  min-height: 7.5rem;
+  padding-block: 1rem;
+}
+
+.preferences-panel :deep(.app-input:hover),
+.preferences-panel :deep(.app-select:hover),
+.preferences-panel :deep(.app-textarea:hover) {
+  border-color: var(--color-border-strong);
+}
+
+.preferences-panel :deep(.app-input:focus),
+.preferences-panel :deep(.app-select:focus),
+.preferences-panel :deep(.app-textarea:focus) {
+  background: rgba(255, 255, 255, 0.98);
+}
+
 .preference-cluster {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid rgba(15, 29, 58, 0.08);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(246, 249, 253, 0.96));
+  box-shadow: 0 12px 26px rgba(15, 29, 58, 0.04);
 }
 
 .preference-cluster h4 {
   margin: 0;
-  font-size: var(--type-small);
+  font-size: 0.82rem;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-text-muted);
 }
 
 .preference-option-grid {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--checkbox-group-gap);
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.preference-option-grid :deep(.app-checkbox) {
+  min-height: 100%;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid rgba(15, 29, 58, 0.08);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.78);
+  transition:
+    border-color var(--transition-fast),
+    background var(--transition-fast),
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.preference-option-grid :deep(.app-checkbox:hover) {
+  transform: translateY(-1px);
+  border-color: rgba(37, 99, 255, 0.16);
+  box-shadow: 0 12px 24px rgba(15, 29, 58, 0.05);
+}
+
+.preference-option-grid :deep(.app-checkbox__input:checked + .app-checkbox__box) {
+  box-shadow: inset 0 0 0 3px white, 0 0 0 4px rgba(37, 99, 255, 0.1);
+}
+
+.preference-option-grid :deep(.app-checkbox__box) {
+  margin-top: 0.15rem;
+}
+
+.skill-priority-list > .app-button {
+  width: fit-content;
 }
 
 .skill-priority-list {
@@ -478,9 +582,14 @@ onMounted(loadCompanies);
 
 .skill-priority-row {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-4);
   grid-template-columns: minmax(0, 1fr) 140px auto;
   align-items: end;
+  padding: var(--space-5);
+  border: 1px solid rgba(15, 29, 58, 0.08);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(246, 249, 253, 0.96));
+  box-shadow: 0 12px 26px rgba(15, 29, 58, 0.04);
 }
 
 .skill-priority-remove {
@@ -500,20 +609,57 @@ onMounted(loadCompanies);
   grid-template-columns: minmax(0, 1fr) 220px;
   gap: var(--space-4);
   align-items: center;
-  padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-5);
+  border: 1px solid rgba(15, 29, 58, 0.08);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(246, 249, 253, 0.96));
+  box-shadow: 0 12px 26px rgba(15, 29, 58, 0.04);
 }
 
 .company-priority-row p,
 .company-priority-empty {
-  margin: var(--space-1) 0 0;
+  margin: var(--space-2) 0 0;
   color: var(--color-text-muted);
-  font-size: var(--type-small);
+  font-size: 0.95rem;
+}
+
+.company-priority-row strong {
+  display: block;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.company-priority-empty {
+  padding: var(--space-5);
+  border: 1px dashed rgba(15, 29, 58, 0.12);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.7);
 }
 
 @media (max-width: 1023px) {
   .skill-priority-row,
   .company-priority-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767px) {
+  .preferences-panel :deep(.app-card__header) {
+    padding: var(--space-5) var(--space-5) 0;
+  }
+
+  .preferences-panel :deep(.app-card__body) {
+    padding: var(--space-5);
+  }
+
+  .preference-cluster,
+  .skill-priority-row,
+  .company-priority-row,
+  .company-priority-empty {
+    padding: var(--space-4);
+  }
+
+  .preference-option-grid {
     grid-template-columns: 1fr;
   }
 }

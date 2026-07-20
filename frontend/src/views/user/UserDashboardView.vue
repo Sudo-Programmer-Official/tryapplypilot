@@ -200,14 +200,34 @@ onMounted(load);
   min-height: 100%;
 }
 
+.dashboard-panel :deep(.app-card__header) {
+  padding: clamp(var(--space-6), 3vw, 2.25rem) clamp(var(--space-6), 4vw, 2.5rem) 0;
+}
+
+.dashboard-panel :deep(.app-card__header-copy) {
+  gap: var(--space-3);
+}
+
+.dashboard-panel :deep(.app-card__title) {
+  font-size: clamp(1.625rem, 2.3vw, 2rem);
+  letter-spacing: -0.03em;
+}
+
+.dashboard-panel :deep(.app-card__subtitle) {
+  max-width: 42ch;
+  font-size: 0.98rem;
+}
+
 .dashboard-panel :deep(.app-card__body) {
   align-content: start;
+  padding: var(--space-6) clamp(var(--space-6), 4vw, 2.5rem) clamp(var(--space-6), 4vw, 2.25rem);
+  gap: var(--space-6);
 }
 
 .job-card-grid {
   display: grid;
-  gap: var(--card-gap);
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-5);
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
 .dashboard-empty {
@@ -219,6 +239,20 @@ onMounted(load);
 
 @media (max-width: 1023px) {
   .dashboard-status-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767px) {
+  .dashboard-panel :deep(.app-card__header) {
+    padding: var(--space-5) var(--space-5) 0;
+  }
+
+  .dashboard-panel :deep(.app-card__body) {
+    padding: var(--space-5);
+  }
+
+  .job-card-grid {
     grid-template-columns: 1fr;
   }
 }

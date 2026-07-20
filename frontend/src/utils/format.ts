@@ -24,6 +24,12 @@ const notificationTypeLabels: Record<string, string> = {
   unknown: "Unknown",
 };
 
+function humanizeLabel(value: string): string {
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
 export function formatCompactNumber(value: number): string {
   return new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(value);
 }
@@ -152,14 +158,14 @@ export function notificationReasonLabel(reason: string | null | undefined): stri
   if (!reason) {
     return "Unknown reason";
   }
-  return notificationReasonLabels[reason] ?? reason.replace(/_/g, " ");
+  return notificationReasonLabels[reason] ?? humanizeLabel(reason);
 }
 
 export function notificationTypeLabel(value: string | null | undefined): string {
   if (!value) {
     return "Unknown";
   }
-  return notificationTypeLabels[value] ?? value.replace(/_/g, " ");
+  return notificationTypeLabels[value] ?? humanizeLabel(value);
 }
 
 export function notificationStatusTone(status: string | null | undefined): "success" | "warning" | "danger" | "info" | "neutral" {

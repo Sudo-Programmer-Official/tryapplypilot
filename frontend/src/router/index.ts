@@ -68,7 +68,7 @@ const router = createRouter({
       children: [
         { path: "", redirect: "/user/dashboard" },
         { path: "dashboard", component: UserDashboardView, meta: { requiresAuth: true, requiresUser: true, title: "Dashboard" } },
-        { path: "jobs", component: UserJobsView, meta: { requiresAuth: true, requiresUser: true, title: "Jobs" } },
+        { path: "jobs", component: UserJobsView, meta: { requiresAuth: true, requiresUser: true, title: "Jobs", headerSearch: false } },
         { path: "notifications", component: UserNotificationsView, meta: { requiresAuth: true, requiresUser: true, title: "Notifications" } },
         { path: "resumes", component: UserResumesView, meta: { requiresAuth: true, requiresUser: true, title: "Resumes" } },
         { path: "companies", component: UserCompaniesView, meta: { requiresAuth: true, requiresUser: true, title: "Companies" } },

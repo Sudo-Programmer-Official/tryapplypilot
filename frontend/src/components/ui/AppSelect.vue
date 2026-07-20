@@ -4,6 +4,7 @@ defineProps<{
   label?: string;
   options: Array<{ label: string; value: string | number }>;
   disabled?: boolean;
+  hint?: string;
 }>();
 
 defineEmits<{
@@ -17,6 +18,7 @@ defineEmits<{
     <select class="app-select" :value="modelValue" :disabled="disabled" @change="$emit('update:modelValue', ($event.target as HTMLSelectElement).value)">
       <option v-for="option in options" :key="option.value" :value="option.value">{{ option.label }}</option>
     </select>
+    <span v-if="hint" class="app-field__hint">{{ hint }}</span>
   </label>
 </template>
 
@@ -29,6 +31,12 @@ defineEmits<{
 .app-field__label {
   font-size: var(--type-small);
   font-weight: 600;
+  color: var(--color-text);
+}
+
+.app-field__hint {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
 }
 
 .app-select {

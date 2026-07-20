@@ -8,13 +8,20 @@ import AppSelect from "../ui/AppSelect.vue";
 import type { AuthUser, ThemeMode } from "../../types";
 import { getInitials } from "../../utils/format";
 
-const props = defineProps<{
-  title: string;
-  user: AuthUser | null;
-  themeMode: ThemeMode;
-  searchValue: string;
-  notificationsCount?: number;
-}>();
+const props = withDefaults(
+  defineProps<{
+    title: string;
+    user: AuthUser | null;
+    themeMode: ThemeMode;
+    searchValue: string;
+    notificationsCount?: number;
+    showSearch?: boolean;
+  }>(),
+  {
+    notificationsCount: undefined,
+    showSearch: true,
+  },
+);
 
 const emit = defineEmits<{
   (event: "toggle-sidebar"): void;
@@ -28,7 +35,7 @@ const initials = computed(() => getInitials(props.user?.full_name || props.user?
 </script>
 
 <template>
-  <header class="app-header surface-card">
+  <header class="app-header surface-card" :class="{ 'app-header--no-search': !props.showSearch }">
     <div class="app-header__leading">
       <AppIconButton label="Toggle sidebar" @click="$emit('toggle-sidebar')">
         <Menu />
@@ -39,7 +46,7 @@ const initials = computed(() => getInitials(props.user?.full_name || props.user?
       </div>
     </div>
 
-    <div class="app-header__search hide-mobile">
+    <div v-if="props.showSearch" class="app-header__search hide-mobile">
       <AppInput
         :model-value="searchValue"
         placeholder="Search jobs, companies, roles..."
@@ -58,7 +65,7 @@ const initials = computed(() => getInitials(props.user?.full_name || props.user?
         ]"
         @update:model-value="$emit('update:theme', $event as ThemeMode)"
       />
-      <AppIconButton class="hide-tablet" label="Search">
+      <AppIconButton v-if="props.showSearch" class="hide-tablet" label="Search">
         <Search />
       </AppIconButton>
       <AppIconButton label="Notifications">
@@ -94,6 +101,10 @@ const initials = computed(() => getInitials(props.user?.full_name || props.user?
   margin: var(--page-padding-y) var(--page-padding-x) 0;
   padding: var(--content-gap) var(--card-padding);
   backdrop-filter: blur(18px);
+}
+
+.app-header--no-search {
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .app-header__leading {

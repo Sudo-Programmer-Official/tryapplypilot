@@ -114,8 +114,12 @@ onMounted(load);
     </PageSection>
 
     <PageSection v-else>
-      <AppGrid columns="2">
-        <AppCard title="Recent delivery activity" subtitle="Fresh alerts, recovery alerts, and failures from your recent notification history.">
+      <AppGrid columns="2" class="notifications-overview">
+        <AppCard
+          class="notifications-panel"
+          title="Recent delivery activity"
+          subtitle="Fresh alerts, recovery alerts, and failures from your recent notification history."
+        >
           <AppEmptyState
             v-if="!loading && activityItems.length === 0"
             title="No delivery history yet"
@@ -124,7 +128,11 @@ onMounted(load);
           <ActivityList v-else :items="activityItems" />
         </AppCard>
 
-        <AppCard title="Reason distribution" :subtitle="loading ? 'Loading reasons...' : 'Why delivery was sent, suppressed, or retried.'">
+        <AppCard
+          class="notifications-panel"
+          title="Reason distribution"
+          :subtitle="loading ? 'Loading reasons...' : 'Why delivery was sent, suppressed, or retried.'"
+        >
           <AppEmptyState
             v-if="!loading && !(insights?.reasons.length)"
             title="No decision reasons yet"
@@ -141,9 +149,14 @@ onMounted(load);
     </PageSection>
 
     <PageSection v-if="!error">
-      <AppGrid columns="2">
-        <AppCard title="Missed opportunities" subtitle="Jobs that matched you but did not generate a delivery event.">
-          <AppTable :columns="missedColumns" :has-rows="(insights?.missed_jobs.length ?? 0) > 0" empty-message="No missed opportunities currently tracked.">
+      <AppGrid columns="2" class="notifications-history">
+        <AppCard class="notifications-panel" title="Missed opportunities" subtitle="Jobs that matched you but did not generate a delivery event.">
+          <AppTable
+            class="notifications-table"
+            :columns="missedColumns"
+            :has-rows="(insights?.missed_jobs.length ?? 0) > 0"
+            empty-message="No missed opportunities currently tracked."
+          >
             <tr v-for="job in insights?.missed_jobs ?? []" :key="job.id">
               <td class="app-table__copy">
                 <strong>{{ job.company }}</strong>
@@ -157,14 +170,14 @@ onMounted(load);
               </td>
               <td>{{ notificationTypeLabel(job.notification_type) }}</td>
               <td>
-                <AppButton :href="job.apply_url" target="_blank" rel="noreferrer">Open job</AppButton>
+                <AppButton size="sm" :href="job.apply_url" target="_blank" rel="noreferrer">Open job</AppButton>
               </td>
             </tr>
           </AppTable>
         </AppCard>
 
-        <AppCard title="Alert history" :subtitle="loading ? 'Loading alerts...' : `${alerts.length} notification events loaded.`">
-          <AppTable :columns="alertColumns" :has-rows="alerts.length > 0" empty-message="No alert history yet.">
+        <AppCard class="notifications-panel" title="Alert history" :subtitle="loading ? 'Loading alerts...' : `${alerts.length} notification events loaded.`">
+          <AppTable class="notifications-table" :columns="alertColumns" :has-rows="alerts.length > 0" empty-message="No alert history yet.">
             <tr v-for="alert in alerts" :key="alert.id">
               <td class="app-table__copy">
                 <strong>{{ alert.company }}</strong>
@@ -186,28 +199,150 @@ onMounted(load);
 </template>
 
 <style scoped>
-.reason-list {
-  display: grid;
+.notifications-overview,
+.notifications-history {
+  align-items: stretch;
+}
+
+.notifications-panel {
+  min-height: 100%;
+}
+
+.notifications-panel :deep(.app-card__header) {
+  padding: clamp(var(--space-6), 3vw, 2.25rem) clamp(var(--space-6), 4vw, 2.5rem) 0;
+}
+
+.notifications-panel :deep(.app-card__header-copy) {
   gap: var(--space-3);
 }
 
+.notifications-panel :deep(.app-card__title) {
+  font-size: clamp(1.625rem, 2.3vw, 2rem);
+  letter-spacing: -0.03em;
+}
+
+.notifications-panel :deep(.app-card__subtitle) {
+  max-width: 42ch;
+  font-size: 0.98rem;
+}
+
+.notifications-panel :deep(.app-card__body) {
+  align-content: start;
+  gap: var(--space-6);
+  padding: var(--space-6) clamp(var(--space-6), 4vw, 2.5rem) clamp(var(--space-6), 4vw, 2.25rem);
+}
+
+.reason-list {
+  display: grid;
+  gap: var(--space-4);
+}
+
 .reason-row {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  padding: var(--space-3) 0;
-  border-bottom: 1px solid rgba(15, 29, 58, 0.08);
+  padding: var(--space-5) var(--space-5) var(--space-5) var(--space-6);
+  border: 1px solid rgba(15, 29, 58, 0.08);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(246, 249, 253, 0.98));
+  box-shadow: 0 14px 28px rgba(15, 29, 58, 0.05);
+  transition:
+    transform var(--transition-base),
+    box-shadow var(--transition-base),
+    border-color var(--transition-base);
 }
 
-.reason-row:last-child {
-  border-bottom: 0;
-  padding-bottom: 0;
+.reason-row:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 38px rgba(15, 29, 58, 0.08);
+  border-color: rgba(37, 99, 255, 0.12);
+}
+
+.reason-row span:first-child {
+  font-size: clamp(1rem, 1.4vw, 1.1rem);
+  line-height: 1.4;
+}
+
+.reason-row :deep(.app-badge) {
+  min-width: 2.5rem;
+  justify-content: center;
+  padding-inline: 0.9rem;
+  background: rgba(37, 99, 255, 0.08);
+  color: var(--color-text);
+}
+
+.notifications-table {
+  overflow: hidden;
+}
+
+.notifications-table :deep(table) {
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 var(--space-3);
+}
+
+.notifications-table :deep(th) {
+  padding: 0 var(--space-4) var(--space-2);
+}
+
+.notifications-table :deep(tbody td) {
+  padding: var(--space-5) var(--space-4);
+  border-top: 1px solid rgba(15, 29, 58, 0.08);
+  border-bottom: 1px solid rgba(15, 29, 58, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(246, 249, 253, 0.98));
+  vertical-align: middle;
+}
+
+.notifications-table :deep(tbody td:first-child) {
+  padding-left: var(--space-5);
+  border-left: 1px solid rgba(15, 29, 58, 0.08);
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+}
+
+.notifications-table :deep(tbody td:last-child) {
+  padding-right: var(--space-5);
+  border-right: 1px solid rgba(15, 29, 58, 0.08);
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+}
+
+.notifications-table :deep(tbody td p) {
+  margin: var(--space-2) 0 0;
+  font-size: 0.95rem;
+}
+
+.notifications-table :deep(.app-table__copy strong) {
+  display: block;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.notifications-table :deep(.app-table__copy small) {
+  display: block;
+  margin-top: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
 }
 
 .app-table__copy small {
   display: block;
   margin-top: var(--space-1);
   color: var(--color-text-muted);
+}
+
+@media (max-width: 767px) {
+  .notifications-panel :deep(.app-card__header) {
+    padding: var(--space-5) var(--space-5) 0;
+  }
+
+  .notifications-panel :deep(.app-card__body) {
+    padding: var(--space-5);
+  }
+
+  .reason-row {
+    padding: var(--space-4) var(--space-4) var(--space-4) var(--space-5);
+  }
 }
 </style>

@@ -1,13 +1,21 @@
 import { computed, ref, type Ref } from "vue";
 
 import { deleteUserSavedJob, fetchUserSavedJobs, saveUserSavedJob } from "../api/user.api";
-import type { JobOpportunity } from "../types";
+import type { JobOpportunity, MatchDecision } from "../types";
+
+export type JobDecisionFilter = "all" | MatchDecision;
+export type JobQueueFilter = "all" | "saved" | "APPLY_NOW" | "REVIEW";
+export type JobSortOption = "highest_match" | "newest" | "company" | "recently_updated";
+
+type UseJobsOptions = {
+  initialQuery?: string;
+};
 
 const savedJobIds = ref<string[]>([]);
 const loadingSavedJobs = ref(false);
 let loadSavedJobsPromise: Promise<void> | null = null;
 
-export function useJobs(source: Ref<JobOpportunity[]>) {
+export function useJobs(source: Ref<JobOpportunity[]>, options: UseJobsOptions = {}) {
   async function loadSavedJobs(force = false): Promise<void> {
     if (!force && loadSavedJobsPromise) {
       return loadSavedJobsPromise;
@@ -28,9 +36,13 @@ export function useJobs(source: Ref<JobOpportunity[]>) {
 
   void loadSavedJobs();
 
-  const query = ref("");
-  const decision = ref<"all" | "APPLY_NOW" | "REVIEW" | "IGNORE">("all");
+  const query = ref(options.initialQuery ?? "");
+  const decision = ref<JobDecisionFilter>("all");
+  const freshnessHours = ref<number | "all">("all");
   const minScore = ref(0);
+  const sortBy = ref<JobSortOption>("highest_match");
+  const activeQueue = ref<JobQueueFilter>("all");
+  const savedJobIdSet = computed(() => new Set(savedJobIds.value));
 
   async function toggleSavedJob(jobId: string): Promise<void> {
     const wasSaved = savedJobIds.value.includes(jobId);
@@ -49,26 +61,72 @@ export function useJobs(source: Ref<JobOpportunity[]>) {
   }
 
   function isSavedJob(jobId: string): boolean {
-    return savedJobIds.value.includes(jobId);
+    return savedJobIdSet.value.has(jobId);
   }
 
-  const filteredJobs = computed(() =>
+  const baseFilteredJobs = computed(() =>
     source.value.filter((job) => {
+      const normalizedQuery = query.value.trim().toLowerCase();
       const matchesQuery =
-        !query.value ||
-        `${job.title} ${job.company} ${job.location} ${job.remote_policy}`.toLowerCase().includes(query.value.toLowerCase());
+        !normalizedQuery ||
+        `${job.title} ${job.company} ${job.location} ${job.country_display} ${job.remote_policy} ${job.source} ${job.why.join(" ")} ${job.recommendation}`
+          .toLowerCase()
+          .includes(normalizedQuery);
       const matchesDecision = decision.value === "all" || job.decision === decision.value;
+      const matchesFreshness = freshnessHours.value === "all" || job.posted_minutes_ago <= freshnessHours.value * 60;
       const matchesScore = job.match_score >= minScore.value;
-      return matchesQuery && matchesDecision && matchesScore;
+      return matchesQuery && matchesDecision && matchesFreshness && matchesScore;
     }),
   );
 
-  const savedJobs = computed(() => source.value.filter((job) => savedJobIds.value.includes(job.id)));
+  function sortJobs(items: JobOpportunity[]): JobOpportunity[] {
+    const jobs = [...items];
+    jobs.sort((left, right) => {
+      if (sortBy.value === "newest" || sortBy.value === "recently_updated") {
+        return left.posted_minutes_ago - right.posted_minutes_ago || right.match_score - left.match_score;
+      }
+      if (sortBy.value === "company") {
+        return left.company.localeCompare(right.company) || right.match_score - left.match_score;
+      }
+      return right.match_score - left.match_score || left.posted_minutes_ago - right.posted_minutes_ago;
+    });
+    return jobs;
+  }
+
+  const queueCounts = computed(() => {
+    const jobs = baseFilteredJobs.value;
+    return {
+      all: jobs.length,
+      applyNow: jobs.filter((job) => job.decision === "APPLY_NOW").length,
+      review: jobs.filter((job) => job.decision === "REVIEW").length,
+      saved: jobs.filter((job) => savedJobIdSet.value.has(job.id)).length,
+    };
+  });
+
+  const filteredJobs = computed(() => {
+    const queuedJobs = baseFilteredJobs.value.filter((job) => {
+      if (activeQueue.value === "saved") {
+        return savedJobIdSet.value.has(job.id);
+      }
+      if (activeQueue.value === "all") {
+        return true;
+      }
+      return job.decision === activeQueue.value;
+    });
+    return sortJobs(queuedJobs);
+  });
+
+  const savedJobs = computed(() => source.value.filter((job) => savedJobIdSet.value.has(job.id)));
 
   return {
     query,
     decision,
+    freshnessHours,
     minScore,
+    sortBy,
+    activeQueue,
+    queueCounts,
+    baseFilteredJobs,
     filteredJobs,
     savedJobs,
     savedJobIds,

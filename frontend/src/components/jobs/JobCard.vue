@@ -55,33 +55,56 @@ defineEmits<{
 </template>
 
 <style scoped>
+.job-card {
+  height: 100%;
+}
+
+.job-card :deep(.app-card__body) {
+  height: 100%;
+  padding: var(--space-6);
+  gap: var(--space-5);
+}
+
 .job-card__header {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: var(--content-gap);
-  align-items: center;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.job-card__header > div {
+  min-width: 0;
 }
 
 .job-card__mark {
   display: grid;
   place-items: center;
-  width: 2.8rem;
-  height: 2.8rem;
-  border-radius: 0.9rem;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 1rem;
   font-weight: 700;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.job-card :deep(.match-indicator) {
+  width: 4.5rem;
+  height: 4.5rem;
+  flex-shrink: 0;
 }
 
 .job-card h3 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: var(--type-title);
-  line-height: 1.2;
+  font-size: clamp(1.35rem, 2vw, 1.65rem);
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
 }
 
 .job-card p {
-  margin: var(--space-1) 0 0;
+  margin: var(--space-2) 0 0;
   color: var(--color-text-muted);
-  font-size: var(--type-small);
+  font-size: 0.95rem;
 }
 
 .job-card__meta,
@@ -89,11 +112,20 @@ defineEmits<{
 .job-card__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--content-gap);
+  gap: var(--space-3);
 }
 
 .job-card__actions {
+  margin-top: auto;
   align-items: center;
+  justify-content: space-between;
+}
+
+.job-card__meta :deep(.app-badge),
+.job-card__skills :deep(.app-badge) {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .job-card__apply-link {
@@ -102,5 +134,25 @@ defineEmits<{
   justify-content: center;
   gap: var(--space-2);
   width: 100%;
+}
+
+@media (max-width: 767px) {
+  .job-card :deep(.app-card__body) {
+    padding: var(--space-5);
+  }
+
+  .job-card__header {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .job-card :deep(.match-indicator) {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .job-card__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 </style>
