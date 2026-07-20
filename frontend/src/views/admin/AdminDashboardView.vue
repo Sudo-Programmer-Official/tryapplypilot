@@ -11,9 +11,11 @@ import AppGrid from "../../components/layout/AppGrid.vue";
 import AppPage from "../../components/layout/AppPage.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
 import PageSection from "../../components/layout/PageSection.vue";
+import AppBadge from "../../components/ui/AppBadge.vue";
 import AppButton from "../../components/ui/AppButton.vue";
 import AppCard from "../../components/ui/AppCard.vue";
 import AppEmptyState from "../../components/ui/AppEmptyState.vue";
+import AppSkeleton from "../../components/ui/AppSkeleton.vue";
 import { useDashboard } from "../../composables/useDashboard";
 import { useJobs } from "../../composables/useJobs";
 import { useToast } from "../../composables/useToast";
@@ -32,6 +34,7 @@ const jobSparkline = computed(() => {
 });
 
 const scheduler = computed(() => dashboard.effectiveScheduler.value);
+const recentJobs = computed(() => dashboard.jobs.value.slice(0, 5));
 
 function activityTone(decision: MatchDecision): "success" | "warning" | "info" {
   if (decision === "APPLY_NOW") {
@@ -79,15 +82,20 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <AppPage>
+  <AppPage class="admin-dashboard-page">
     <PageHeader
       title="Admin dashboard"
       description="Watch the live pipeline, connector health, and notification output without leaving the operations workspace."
     >
       <template #actions>
-        <AppButton :disabled="dashboard.runningNow.value" @click="handleRunNow">
-          {{ dashboard.runningNow.value ? "Running..." : "Run Poll Now" }}
-        </AppButton>
+        <div class="admin-dashboard-actions">
+          <AppBadge :tone="dashboard.loading.value ? 'info' : 'neutral'">
+            {{ dashboard.loading.value ? "Refreshing" : "Auto-refresh 30s" }}
+          </AppBadge>
+          <AppButton :disabled="dashboard.runningNow.value" @click="handleRunNow">
+            {{ dashboard.runningNow.value ? "Running..." : "Run Poll Now" }}
+          </AppButton>
+        </div>
       </template>
     </PageHeader>
 
@@ -97,7 +105,48 @@ onBeforeUnmount(() => {
       </AppGrid>
     </PageSection>
 
+    <PageSection v-else-if="dashboard.loading.value && !dashboard.snapshot.value">
+      <AppGrid columns="4">
+        <AppCard v-for="index in 4" :key="index" class="admin-dashboard-loading-card">
+          <div class="admin-dashboard-loading-card__stack">
+            <AppSkeleton class="admin-dashboard-loading-card__eyebrow" />
+            <AppSkeleton class="admin-dashboard-loading-card__value" />
+            <AppSkeleton class="admin-dashboard-loading-card__detail" />
+          </div>
+        </AppCard>
+      </AppGrid>
+      <AppGrid columns="2">
+        <AppCard class="admin-dashboard-loading-card" title="Loading system status">
+          <div class="admin-dashboard-loading-card__stack">
+            <AppSkeleton v-for="index in 4" :key="`status-${index}`" class="admin-dashboard-loading-card__line" />
+          </div>
+        </AppCard>
+        <AppCard class="admin-dashboard-loading-card" title="Loading recent jobs">
+          <div class="admin-dashboard-loading-card__stack">
+            <AppSkeleton v-for="index in 4" :key="`jobs-${index}`" class="admin-dashboard-loading-card__line" />
+          </div>
+        </AppCard>
+      </AppGrid>
+    </PageSection>
+
     <template v-else-if="dashboard.snapshot.value">
+      <PageSection class="admin-dashboard-page__summary-section">
+        <div class="admin-dashboard-summary surface-card">
+          <div class="admin-dashboard-summary__item">
+            <strong>{{ formatDateTime(dashboard.snapshot.value.generated_at) }}</strong>
+            <span>last snapshot</span>
+          </div>
+          <div class="admin-dashboard-summary__item">
+            <strong>{{ scheduler?.current_connector ?? "Waiting" }}</strong>
+            <span>active connector</span>
+          </div>
+          <div class="admin-dashboard-summary__item">
+            <strong>{{ recentJobs.length }}</strong>
+            <span>recent jobs rendered</span>
+          </div>
+        </div>
+      </PageSection>
+
       <PageSection>
         <AppGrid columns="4">
           <MetricCard
@@ -166,10 +215,10 @@ onBeforeUnmount(() => {
 
       <PageSection>
         <AppGrid columns="1">
-          <AppCard title="Recent jobs" subtitle="Fresh jobs currently visible to the admin workspace.">
+          <AppCard title="Recent jobs" subtitle="Only the freshest rows are rendered here so the dashboard stays fast as inventory grows.">
             <div class="app-stack app-stack--content">
               <JobRow
-                v-for="job in dashboard.jobs.value.slice(0, 5)"
+                v-for="job in recentJobs"
                 :key="job.id"
                 :job="job"
                 :saved="isSavedJob(job.id)"
@@ -182,3 +231,70 @@ onBeforeUnmount(() => {
     </template>
   </AppPage>
 </template>
+
+<style scoped>
+.admin-dashboard-page {
+  --page-gap: var(--space-5);
+}
+
+.admin-dashboard-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.admin-dashboard-page__summary-section {
+  margin-bottom: calc(var(--space-2) * -1);
+}
+
+.admin-dashboard-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+  padding: clamp(var(--space-4), 2vw, var(--space-5));
+}
+
+.admin-dashboard-summary__item,
+.admin-dashboard-loading-card__stack {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.admin-dashboard-summary__item strong {
+  font-family: var(--font-display);
+  font-size: clamp(1.2rem, 1.8vw, 1.45rem);
+  letter-spacing: -0.03em;
+}
+
+.admin-dashboard-summary__item span {
+  color: var(--color-text-muted);
+  font-size: 0.92rem;
+}
+
+.admin-dashboard-loading-card__eyebrow {
+  max-width: 38%;
+}
+
+.admin-dashboard-loading-card__value {
+  min-height: 2.8rem;
+  max-width: 52%;
+}
+
+.admin-dashboard-loading-card__detail,
+.admin-dashboard-loading-card__line {
+  min-height: 1rem;
+}
+
+@media (max-width: 1023px) {
+  .admin-dashboard-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767px) {
+  .admin-dashboard-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+</style>

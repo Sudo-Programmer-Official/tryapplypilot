@@ -48,6 +48,14 @@ export interface JobOpportunity {
   notification_type?: string | null;
 }
 
+export interface JobListResponse {
+  items: JobOpportunity[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
 export interface CompanyPreference {
   id: string;
   company: string;

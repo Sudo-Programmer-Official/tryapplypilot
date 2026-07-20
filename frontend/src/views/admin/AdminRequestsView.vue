@@ -1,20 +1,25 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 
+import { fetchAdminCompanyRequests, reviewCompanyRequest } from "../../api/admin.api";
 import CompanyRequestTable from "../../components/admin/CompanyRequestTable.vue";
+import AppGrid from "../../components/layout/AppGrid.vue";
 import AppPage from "../../components/layout/AppPage.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
+import PageSection from "../../components/layout/PageSection.vue";
 import AppButton from "../../components/ui/AppButton.vue";
+import AppCard from "../../components/ui/AppCard.vue";
 import AppCheckbox from "../../components/ui/AppCheckbox.vue";
+import AppEmptyState from "../../components/ui/AppEmptyState.vue";
 import AppInput from "../../components/ui/AppInput.vue";
 import AppModal from "../../components/ui/AppModal.vue";
 import AppSelect from "../../components/ui/AppSelect.vue";
+import AppSkeleton from "../../components/ui/AppSkeleton.vue";
 import AppTextArea from "../../components/ui/AppTextArea.vue";
-import { fetchAdminCompanyRequests, reviewCompanyRequest } from "../../api/admin.api";
 import { connectorOptions, countryOptions } from "../../config/options";
 import { useToast } from "../../composables/useToast";
 import type { CompanyRequest } from "../../types";
-import { joinCsv, parseCsv } from "../../utils/forms";
+import { parseCsv } from "../../utils/forms";
 
 const { pushToast } = useToast();
 
@@ -36,6 +41,8 @@ const country = ref("US");
 const enabled = ref(true);
 const roleFamilies = ref("Software Engineer, Backend Engineer");
 const submitting = ref(false);
+
+const pendingCount = computed(() => requests.value.filter((request) => request.status === "pending").length);
 
 async function load(): Promise<void> {
   loading.value = true;
@@ -100,20 +107,53 @@ onMounted(load);
 </script>
 
 <template>
-  <AppPage>
+  <AppPage class="admin-requests-page">
     <PageHeader title="Company requests" description="Approve or reject user-submitted company requests without touching the database directly." />
 
-    <CompanyRequestTable
-      v-if="!error"
-      :requests="requests"
-      :show-actions="true"
-      @approve="openReview($event, 'approved')"
-      @reject="openReview($event, 'rejected')"
-      @edit="openReview($event, 'approved')"
-      @merge="openReview($event, 'approved')"
-    />
+    <PageSection class="admin-requests-page__summary-section">
+      <div class="admin-requests-summary surface-card">
+        <div class="admin-requests-summary__item">
+          <strong>{{ requests.length }}</strong>
+          <span>total requests</span>
+        </div>
+        <div class="admin-requests-summary__item">
+          <strong>{{ pendingCount }}</strong>
+          <span>pending review</span>
+        </div>
+      </div>
+    </PageSection>
 
-    <AppCard v-else title="Company requests unavailable" :subtitle="error" />
+    <PageSection v-if="error">
+      <AppGrid columns="1">
+        <AppEmptyState title="Company requests unavailable" :description="error" />
+      </AppGrid>
+    </PageSection>
+
+    <PageSection v-else-if="loading">
+      <AppGrid columns="1">
+        <AppCard class="admin-requests-panel" title="Loading request queue">
+          <div class="admin-requests-loading">
+            <div v-for="index in 4" :key="index" class="admin-requests-loading__row">
+              <AppSkeleton class="admin-requests-loading__title" />
+              <AppSkeleton class="admin-requests-loading__meta" />
+            </div>
+          </div>
+        </AppCard>
+      </AppGrid>
+    </PageSection>
+
+    <PageSection v-else>
+      <AppGrid columns="1">
+        <CompanyRequestTable
+          :requests="requests"
+          :show-actions="true"
+          @approve="openReview($event, 'approved')"
+          @reject="openReview($event, 'rejected')"
+          @edit="openReview($event, 'approved')"
+          @merge="openReview($event, 'approved')"
+        />
+      </AppGrid>
+    </PageSection>
 
     <AppModal
       :open="modalOpen"
@@ -152,3 +192,72 @@ onMounted(load);
     </AppModal>
   </AppPage>
 </template>
+
+<style scoped>
+.admin-requests-page {
+  --page-gap: var(--space-5);
+}
+
+.admin-requests-page__summary-section {
+  margin-bottom: calc(var(--space-2) * -1);
+}
+
+.admin-requests-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  padding: clamp(var(--space-4), 2vw, var(--space-5));
+}
+
+.admin-requests-summary__item,
+.admin-requests-loading__row {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.admin-requests-summary__item strong {
+  font-family: var(--font-display);
+  font-size: clamp(1.2rem, 1.8vw, 1.45rem);
+  letter-spacing: -0.03em;
+}
+
+.admin-requests-summary__item span {
+  color: var(--color-text-muted);
+  font-size: 0.92rem;
+}
+
+.admin-requests-panel :deep(.app-card__header) {
+  padding: clamp(var(--space-6), 3vw, 2.25rem) clamp(var(--space-6), 4vw, 2.5rem) 0;
+}
+
+.admin-requests-panel :deep(.app-card__body) {
+  padding: var(--space-5) clamp(var(--space-6), 4vw, 2.5rem) clamp(var(--space-6), 4vw, 2.25rem);
+}
+
+.admin-requests-loading {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.admin-requests-loading__row {
+  padding: var(--space-5);
+  border: 1px solid rgba(15, 29, 58, 0.08);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(246, 249, 253, 0.98));
+}
+
+.admin-requests-loading__title {
+  min-height: 1.2rem;
+  max-width: 36%;
+}
+
+.admin-requests-loading__meta {
+  min-height: 1rem;
+}
+
+@media (max-width: 767px) {
+  .admin-requests-summary {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

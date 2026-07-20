@@ -4,10 +4,12 @@ import { onMounted, ref } from "vue";
 import AppGrid from "../../components/layout/AppGrid.vue";
 import AppPage from "../../components/layout/AppPage.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
+import PageSection from "../../components/layout/PageSection.vue";
 import AppButton from "../../components/ui/AppButton.vue";
 import AppCard from "../../components/ui/AppCard.vue";
 import AppCheckbox from "../../components/ui/AppCheckbox.vue";
 import AppInput from "../../components/ui/AppInput.vue";
+import AppSkeleton from "../../components/ui/AppSkeleton.vue";
 import AppTextArea from "../../components/ui/AppTextArea.vue";
 import { fetchCatalogWatchlists, saveWatchlist } from "../../api/companies.api";
 import { useToast } from "../../composables/useToast";
@@ -86,38 +88,74 @@ onMounted(load);
 </script>
 
 <template>
-  <AppPage>
+  <AppPage class="admin-watchlists-page">
     <PageHeader title="Watchlists" description="Maintain reusable watchlists that job seekers can opt into from their workspace.">
       <template #actions>
         <AppButton @click="addWatchlist">Add watchlist</AppButton>
       </template>
     </PageHeader>
 
-    <AppCard v-if="error" title="Watchlists unavailable" :subtitle="error" />
+    <PageSection v-if="error">
+      <AppGrid columns="1">
+        <AppCard title="Watchlists unavailable" :subtitle="error" />
+      </AppGrid>
+    </PageSection>
 
-    <AppGrid v-else columns="3">
-      <AppCard
-        v-for="(watchlist, index) in watchlists"
-        :key="watchlist.id || `draft-${index}`"
-        :title="watchlist.name || 'New watchlist draft'"
-        :subtitle="`${watchlist.terms.length} terms`"
-      >
-        <div class="app-form-grid">
-          <AppInput v-model="watchlist.name" label="Watchlist name" placeholder="Azure AI" />
-          <AppCheckbox :model-value="watchlist.enabled" label="Enabled" @update:model-value="watchlist.enabled = $event" />
-          <AppTextArea
-            :model-value="serializeTerms(watchlist)"
-            label="Terms"
-            placeholder="Microsoft: Copilot&#10;OpenAI: Platform"
-            hint="Use one term per line. Prefix with `Company:` when you want a company-scoped term."
-            :rows="5"
-            @update:model-value="watchlist.terms = parseTerms($event)"
-          />
-          <AppButton :disabled="savingWatchlistId === (watchlist.id || `draft-${index}`)" @click="persistWatchlist(index)">
-            {{ savingWatchlistId === (watchlist.id || `draft-${index}`) ? "Saving..." : "Save watchlist" }}
-          </AppButton>
-        </div>
-      </AppCard>
-    </AppGrid>
+    <PageSection v-else-if="loading">
+      <AppGrid columns="3">
+        <AppCard v-for="index in 3" :key="index" class="admin-watchlists-loading-card" title="Loading watchlist">
+          <div class="admin-watchlists-loading-card__stack">
+            <AppSkeleton class="admin-watchlists-loading-card__line admin-watchlists-loading-card__line--short" />
+            <AppSkeleton v-for="row in 4" :key="row" class="admin-watchlists-loading-card__line" />
+          </div>
+        </AppCard>
+      </AppGrid>
+    </PageSection>
+
+    <PageSection v-else>
+      <AppGrid columns="3">
+        <AppCard
+          v-for="(watchlist, index) in watchlists"
+          :key="watchlist.id || `draft-${index}`"
+          :title="watchlist.name || 'New watchlist draft'"
+          :subtitle="`${watchlist.terms.length} terms`"
+        >
+          <div class="app-form-grid">
+            <AppInput v-model="watchlist.name" label="Watchlist name" placeholder="Azure AI" />
+            <AppCheckbox :model-value="watchlist.enabled" label="Enabled" @update:model-value="watchlist.enabled = $event" />
+            <AppTextArea
+              :model-value="serializeTerms(watchlist)"
+              label="Terms"
+              placeholder="Microsoft: Copilot&#10;OpenAI: Platform"
+              hint="Use one term per line. Prefix with `Company:` when you want a company-scoped term."
+              :rows="5"
+              @update:model-value="watchlist.terms = parseTerms($event)"
+            />
+            <AppButton :disabled="savingWatchlistId === (watchlist.id || `draft-${index}`)" @click="persistWatchlist(index)">
+              {{ savingWatchlistId === (watchlist.id || `draft-${index}`) ? "Saving..." : "Save watchlist" }}
+            </AppButton>
+          </div>
+        </AppCard>
+      </AppGrid>
+    </PageSection>
   </AppPage>
 </template>
+
+<style scoped>
+.admin-watchlists-page {
+  --page-gap: var(--space-5);
+}
+
+.admin-watchlists-loading-card__stack {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.admin-watchlists-loading-card__line {
+  min-height: 1rem;
+}
+
+.admin-watchlists-loading-card__line--short {
+  max-width: 40%;
+}
+</style>

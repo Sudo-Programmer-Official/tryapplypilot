@@ -11,6 +11,7 @@ import AppCard from "../../components/ui/AppCard.vue";
 import AppCheckbox from "../../components/ui/AppCheckbox.vue";
 import AppInput from "../../components/ui/AppInput.vue";
 import AppSelect from "../../components/ui/AppSelect.vue";
+import AppSkeleton from "../../components/ui/AppSkeleton.vue";
 import { fetchAdminSettings, saveAdminPreferences } from "../../api/companies.api";
 import { connectorOptions } from "../../config/options";
 import { useToast } from "../../composables/useToast";
@@ -77,7 +78,7 @@ onMounted(load);
 </script>
 
 <template>
-  <AppPage>
+  <AppPage class="admin-settings-page">
     <PageHeader title="Settings" description="Control platform-wide runtime behavior, discovery operations, and shared maintenance settings.">
       <template #actions>
         <AppButton :disabled="saving || !settings" @click="persist">{{ saving ? "Saving..." : "Save settings" }}</AppButton>
@@ -87,6 +88,17 @@ onMounted(load);
     <PageSection v-if="error">
       <AppGrid columns="1">
         <AppCard title="Settings unavailable" :subtitle="error" />
+      </AppGrid>
+    </PageSection>
+
+    <PageSection v-else-if="loading">
+      <AppGrid columns="2">
+        <AppCard v-for="index in 2" :key="index" class="admin-settings-loading-card" title="Loading settings">
+          <div class="admin-settings-loading-card__stack">
+            <AppSkeleton class="admin-settings-loading-card__line admin-settings-loading-card__line--short" />
+            <AppSkeleton v-for="row in 4" :key="row" class="admin-settings-loading-card__line" />
+          </div>
+        </AppCard>
       </AppGrid>
     </PageSection>
 
@@ -194,9 +206,26 @@ onMounted(load);
 </template>
 
 <style scoped>
+.admin-settings-page {
+  --page-gap: var(--space-5);
+}
+
 .admin-settings__default-list {
   display: grid;
   gap: 0.875rem;
+}
+
+.admin-settings-loading-card__stack {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.admin-settings-loading-card__line {
+  min-height: 1rem;
+}
+
+.admin-settings-loading-card__line--short {
+  max-width: 42%;
 }
 
 .admin-settings__default-row {
@@ -205,7 +234,7 @@ onMounted(load);
   justify-content: space-between;
   gap: 1rem;
   padding-bottom: 0.875rem;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .admin-settings__default-row:last-child {
@@ -214,7 +243,7 @@ onMounted(load);
 }
 
 .admin-settings__default-row span {
-  color: var(--text-muted);
+  color: var(--color-text-muted);
 }
 
 .admin-settings__default-row strong {

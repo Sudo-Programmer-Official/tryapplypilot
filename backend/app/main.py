@@ -57,7 +57,7 @@ from app.services.dashboard import (
     get_job,
     get_settings,
     list_alerts,
-    list_jobs,
+    list_jobs_page,
     list_sources,
 )
 from app.user_job_sync import sync_recent_jobs_for_user
@@ -779,16 +779,24 @@ async def jobs(
     company: str | None = Query(default=None),
     status: str | None = Query(default=None),
     max_age_hours: int | None = Query(default=None, ge=1, le=24 * 30),
+    query: str | None = Query(default=None),
+    decision: Literal["APPLY_NOW", "REVIEW", "IGNORE"] | None = Query(default=None),
+    sort_by: Literal["highest_match", "newest", "company", "recently_updated"] = Query(default="highest_match"),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     _: UserAccount = Depends(require_admin),
 ) -> dict[str, object]:
-    return {
-        "items": await list_jobs(
-            min_score=min_score,
-            company=company,
-            status=status,
-            max_age_hours=max_age_hours,
-        )
-    }
+    return await list_jobs_page(
+        min_score=min_score,
+        company=company,
+        status=status,
+        max_age_hours=max_age_hours,
+        query=query,
+        decision=decision,
+        sort_by=sort_by,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @app.get("/api/jobs/{job_id}")

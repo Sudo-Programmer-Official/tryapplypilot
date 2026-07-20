@@ -1,4 +1,4 @@
-import type { JobOpportunity } from "../types";
+import type { JobListResponse } from "../types";
 import { requestJson } from "./client";
 
 export function fetchAdminJobs(params: {
@@ -6,7 +6,12 @@ export function fetchAdminJobs(params: {
   company?: string;
   status?: string;
   maxAgeHours?: number;
-} = {}): Promise<{ items: JobOpportunity[] }> {
+  query?: string;
+  decision?: "APPLY_NOW" | "REVIEW" | "IGNORE" | "all";
+  sortBy?: "highest_match" | "newest" | "company" | "recently_updated";
+  limit?: number;
+  offset?: number;
+} = {}): Promise<JobListResponse> {
   const search = new URLSearchParams();
   if (params.minScore !== undefined) {
     search.set("min_score", String(params.minScore));
@@ -20,6 +25,21 @@ export function fetchAdminJobs(params: {
   if (params.maxAgeHours !== undefined) {
     search.set("max_age_hours", String(params.maxAgeHours));
   }
+  if (params.query?.trim()) {
+    search.set("query", params.query.trim());
+  }
+  if (params.decision && params.decision !== "all") {
+    search.set("decision", params.decision);
+  }
+  if (params.sortBy) {
+    search.set("sort_by", params.sortBy);
+  }
+  if (params.limit !== undefined) {
+    search.set("limit", String(params.limit));
+  }
+  if (params.offset !== undefined) {
+    search.set("offset", String(params.offset));
+  }
   const query = search.size ? `?${search.toString()}` : "";
-  return requestJson<{ items: JobOpportunity[] }>(`/api/jobs${query}`);
+  return requestJson<JobListResponse>(`/api/jobs${query}`);
 }

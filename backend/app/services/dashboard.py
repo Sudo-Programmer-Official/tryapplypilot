@@ -177,6 +177,9 @@ async def list_jobs(
     company: str | None = None,
     status: str | None = None,
     max_age_hours: int | None = None,
+    query: str | None = None,
+    decision: str | None = None,
+    sort_by: str = "highest_match",
 ) -> list[dict[str, Any]]:
     runtime = get_runtime()
     settings = await runtime.repositories.settings.get()
@@ -193,10 +196,69 @@ async def list_jobs(
     if company is not None:
         company_key = company.casefold()
         jobs = [job for job in jobs if str(job["company"]).casefold() == company_key]
+    if decision is not None:
+        decision_key = decision.casefold()
+        jobs = [job for job in jobs if str(job["decision"]).casefold() == decision_key]
     if status is not None:
         status_key = status.casefold()
         jobs = [job for job in jobs if str(job["status"]).casefold() == status_key]
+    if query is not None and query.strip():
+        query_key = query.casefold()
+        jobs = [
+            job
+            for job in jobs
+            if query_key
+            in " ".join(
+                [
+                    str(job.get("company") or ""),
+                    str(job.get("title") or ""),
+                    str(job.get("source") or ""),
+                    str(job.get("location") or ""),
+                    str(job.get("country_display") or ""),
+                    str(job.get("remote_policy") or ""),
+                    str(job.get("recommendation") or ""),
+                    " ".join(str(item) for item in list(job.get("why") or [])),
+                ]
+            ).casefold()
+        ]
+    if sort_by in {"newest", "recently_updated"}:
+        return sorted(jobs, key=lambda job: (int(job["posted_minutes_ago"]), -int(job["match_score"])))
+    if sort_by == "company":
+        return sorted(jobs, key=lambda job: (str(job["company"]).casefold(), -int(job["match_score"]), int(job["posted_minutes_ago"])))
     return sorted(jobs, key=lambda job: (-int(job["match_score"]), int(job["posted_minutes_ago"])))
+
+
+async def list_jobs_page(
+    min_score: int | None = None,
+    company: str | None = None,
+    status: str | None = None,
+    max_age_hours: int | None = None,
+    query: str | None = None,
+    decision: str | None = None,
+    sort_by: str = "highest_match",
+    limit: int = 20,
+    offset: int = 0,
+) -> dict[str, Any]:
+    jobs = await list_jobs(
+        min_score=min_score,
+        company=company,
+        status=status,
+        max_age_hours=max_age_hours,
+        query=query,
+        decision=decision,
+        sort_by=sort_by,
+    )
+    total = len(jobs)
+    safe_offset = min(max(offset, 0), total)
+    safe_limit = max(limit, 1)
+    items = jobs[safe_offset : safe_offset + safe_limit]
+    return {
+        "items": items,
+        "total": total,
+        "limit": safe_limit,
+        "offset": safe_offset,
+        "has_more": safe_offset + len(items) < total,
+    }
 
 
 async def get_job(job_id: str) -> dict[str, Any] | None:
@@ -210,7 +272,13 @@ async def build_dashboard_snapshot(now: datetime | None = None) -> dict[str, Any
     runtime = get_runtime()
     current_time = now or datetime.now(timezone.utc)
     settings = await runtime.repositories.settings.get()
-    jobs = await list_jobs(max_age_hours=settings.dashboard_freshness_hours)
+    jobs = (
+        await list_jobs_page(
+            max_age_hours=settings.dashboard_freshness_hours,
+            limit=12,
+            offset=0,
+        )
+    )["items"]
     alerts = await runtime.repositories.alerts.list()
     alerts = [
         alert
