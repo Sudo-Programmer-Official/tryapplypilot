@@ -5,6 +5,7 @@ As of July 18, 2026, this repo is intentionally scoped to Phase 1 only: one agen
 - `backend/`: FastAPI service modeling the `Market Scout Agent`, supported sources, user settings, job scoring, and alerts.
 - `frontend/`: Vue 3 + TypeScript radar dashboard for configuration, live opportunities, source health, and notification previews.
 - `docs/`: MVP roadmap and architecture notes for the Phase 1 build.
+- [docs/ui-guardrails.md](docs/ui-guardrails.md): page-level UI and performance guardrails for every new user or admin screen.
 - [ROADMAP.md](ROADMAP.md): multi-phase product roadmap from Job Discovery to AI Career Operating System.
 
 ## MVP philosophy
@@ -121,3 +122,4 @@ Only after that is reliable:
 4. `Version 4.0`: Career Intelligence Platform
 
 The full Version 1 scope freeze, exclusions, success metric, and dashboard readiness checklist are documented in [docs/v2.md](docs/v2.md).
+New page-level UX and performance rules are documented in [docs/ui-guardrails.md](docs/ui-guardrails.md).
