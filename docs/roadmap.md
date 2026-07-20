@@ -135,11 +135,26 @@ Each notification should include:
 
 - company
 - role
-- posted time
+- discovery context
+- original posted time
 - match score
 - top reasons
 - recommended resume
 - direct apply link
+
+## Notification freshness policy
+
+TryApplyPilot now separates notification freshness from browsing freshness.
+
+- `Notification freshness` answers: "How old can a job be before we notify the user?"
+- `Dashboard search window` answers: "How far back should the workspace show jobs for browsing and review?"
+
+Product rules:
+
+- Telegram push notifications must always respect the user's notification freshness window.
+- Recovery and rediscovery flows must not bypass that freshness setting.
+- Older high-match jobs can still appear in the dashboard and review queue if they fall inside the user's dashboard search window.
+- Telegram cards should describe both discovery time and original posting time when available.
 
 ### Sprint 5
 
@@ -160,6 +175,26 @@ LLM matching with structured JSON output:
 Connector enablement must come from configuration, not code changes.
 
 The company catalog in PostgreSQL is now the source of truth for which companies are enabled, which connector they use, and how often they are polled. Environment variables should only provide infrastructure settings and safe bootstrap defaults, not per-company monitoring lists.
+
+## Settings ownership rule
+
+Admin settings control platform-wide behavior.
+
+- scheduler cadence
+- connector orchestration
+- initial sync behavior
+- shared maintenance windows
+- runtime and infrastructure controls
+
+User preferences control personal behavior.
+
+- match thresholds
+- notification freshness
+- dashboard search window
+- country, location, remote, salary, and visa filters
+- resume and exclusion preferences
+
+Admin may expose default user settings for new accounts, but existing users keep control of their own preferences after onboarding.
 
 ## Health dashboard requirement
 

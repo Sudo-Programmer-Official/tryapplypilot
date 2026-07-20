@@ -214,6 +214,13 @@ Success metrics:
 - `<1%` duplicate jobs after normalization and deduplication
 - `<5%` clearly irrelevant alerts after user thresholds and filtering are configured
 
+Notification policy for `Phase 1`:
+
+- push notifications must respect the user's notification freshness setting
+- dashboard and review queues may show older jobs within a separate user-controlled search window
+- recovery or rediscovery flows must not send a Telegram alert for an older posting that falls outside the user's notification freshness window
+- alert copy should distinguish between when TryApplyPilot discovered a job and when the company originally posted it
+
 ## Phase 2A: Career Knowledge Platform
 
 Goal: build the structured career data platform before layering AI behavior on top.

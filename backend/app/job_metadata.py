@@ -177,8 +177,8 @@ def freshness_label(minutes: int, *, alert_freshness_hours: int, dashboard_fresh
     if tone == "aging":
         return f"🟡 Posted {_compact_age(minutes)} ago"
     if minutes < 48 * 60:
-        return "🔴 Posted yesterday"
-    return f"🔴 Posted {_compact_age(minutes)} ago"
+        return "🟡 Older opportunity · posted yesterday"
+    return f"🟡 Older opportunity · posted {_compact_age(minutes)} ago"
 
 
 def recommendation_label(decision: str) -> str:

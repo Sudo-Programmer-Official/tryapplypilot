@@ -423,7 +423,7 @@ def get_settings() -> AppSettings:
             apply_now_threshold_score=_read_int("JOB_RADAR_APPLY_NOW_THRESHOLD", 90),
             review_threshold_score=_read_int("JOB_RADAR_REVIEW_THRESHOLD", 75),
             selected_country=normalize_supported_country(os.getenv("JOB_RADAR_COUNTRY")),
-            alert_freshness_hours=_read_int("JOB_RADAR_ALERT_FRESHNESS_HOURS", 6),
+            alert_freshness_hours=_read_int("JOB_RADAR_ALERT_FRESHNESS_HOURS", 24),
             discovery_alert_freshness_hours=_read_int("JOB_RADAR_DISCOVERY_ALERT_FRESHNESS_HOURS", 24),
             recovery_alert_freshness_hours=_read_int("JOB_RADAR_RECOVERY_ALERT_FRESHNESS_HOURS", 24 * 7),
             high_priority_discovery_match_score=_read_int("JOB_RADAR_HIGH_PRIORITY_DISCOVERY_MATCH_SCORE", 95),

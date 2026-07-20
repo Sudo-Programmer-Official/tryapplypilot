@@ -21,6 +21,7 @@ from app.job_metadata import (
     recommendation_tone,
 )
 from app.repositories.interfaces import RadarRepositories
+from app.user_matching import search_window_hours
 
 
 def _json_object(value: object) -> dict[str, object]:
@@ -502,7 +503,13 @@ class StaticSettingsRepository:
 async def list_user_jobs(user_id: str, settings: AppSettings | None = None) -> list[JobOpportunity]:
     resolved_settings = settings or get_settings()
     now = datetime.now(timezone.utc)
+    user_window_hours = 24 * 7
     async with connection() as conn:
+        user_row = await conn.fetchrow("SELECT * FROM users WHERE user_id = $1", user_id)
+        if user_row is not None:
+            from app.user_accounts import _row_to_user
+
+            user_window_hours = search_window_hours(_row_to_user(user_row))
         rows = await conn.fetch(
             """
             SELECT
@@ -527,11 +534,12 @@ async def list_user_jobs(user_id: str, settings: AppSettings | None = None) -> l
             FROM job_matches jm
             INNER JOIN jobs j ON j.job_id = jm.job_id
             WHERE jm.user_id = $1
-              AND COALESCE(j.published_at, j.first_seen_at) >= NOW() - INTERVAL '14 days'
+              AND COALESCE(j.published_at, j.first_seen_at) >= NOW() - ($2::int * INTERVAL '1 hour')
             ORDER BY COALESCE(j.published_at, j.first_seen_at) DESC, jm.match_score DESC
             LIMIT 100
             """,
             user_id,
+            user_window_hours,
         )
     return [_job_from_row(row, now=now, settings=resolved_settings) for row in rows]
 
@@ -583,7 +591,13 @@ async def list_user_alerts(user_id: str, settings: AppSettings | None = None) ->
 async def list_user_missed_jobs(user_id: str, settings: AppSettings | None = None) -> list[JobOpportunity]:
     resolved_settings = settings or get_settings()
     now = datetime.now(timezone.utc)
+    user_window_hours = 24 * 7
     async with connection() as conn:
+        user_row = await conn.fetchrow("SELECT * FROM users WHERE user_id = $1", user_id)
+        if user_row is not None:
+            from app.user_accounts import _row_to_user
+
+            user_window_hours = search_window_hours(_row_to_user(user_row))
         rows = await conn.fetch(
             """
             SELECT
@@ -603,13 +617,14 @@ async def list_user_missed_jobs(user_id: str, settings: AppSettings | None = Non
             INNER JOIN jobs j ON j.job_id = jm.job_id
             WHERE jm.user_id = $1
               AND jm.alerted_at IS NULL
-              AND COALESCE(j.published_at, j.first_seen_at) >= NOW() - INTERVAL '14 days'
+              AND COALESCE(j.published_at, j.first_seen_at) >= NOW() - ($2::int * INTERVAL '1 hour')
               AND COALESCE(jm.notification_status, '') <> 'sent'
               AND COALESCE(jm.notification_reason, '') <> ''
             ORDER BY COALESCE(j.published_at, j.first_seen_at) DESC, jm.match_score DESC
             LIMIT 50
             """,
             user_id,
+            user_window_hours,
         )
     return [_job_from_row(row, now=now, settings=resolved_settings) for row in rows]
 

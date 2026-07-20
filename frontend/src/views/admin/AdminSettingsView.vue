@@ -6,16 +6,16 @@ import AppPage from "../../components/layout/AppPage.vue";
 import PageHeader from "../../components/layout/PageHeader.vue";
 import PageSection from "../../components/layout/PageSection.vue";
 import AppButton from "../../components/ui/AppButton.vue";
+import AppBadge from "../../components/ui/AppBadge.vue";
 import AppCard from "../../components/ui/AppCard.vue";
 import AppCheckbox from "../../components/ui/AppCheckbox.vue";
 import AppInput from "../../components/ui/AppInput.vue";
 import AppSelect from "../../components/ui/AppSelect.vue";
-import AppTextArea from "../../components/ui/AppTextArea.vue";
 import { fetchAdminSettings, saveAdminPreferences } from "../../api/companies.api";
-import { connectorOptions, countryOptions } from "../../config/options";
+import { connectorOptions } from "../../config/options";
 import { useToast } from "../../composables/useToast";
 import type { RolePreference, ScoutSettings } from "../../types";
-import { joinCsv, parseCsv } from "../../utils/forms";
+import { joinCsv } from "../../utils/forms";
 
 const { pushToast } = useToast();
 
@@ -24,27 +24,25 @@ const loading = ref(true);
 const saving = ref(false);
 const error = ref<string | null>(null);
 
-const excludedKeywordsText = computed({
-  get: () => joinCsv(settings.value?.excluded_keywords ?? []),
-  set: (value: string) => {
-    if (settings.value) {
-      settings.value.excluded_keywords = parseCsv(value);
-    }
-  },
-});
-
-const resumeVariantsText = computed({
-  get: () => joinCsv(settings.value?.resume_variants ?? []),
-  set: (value: string) => {
-    if (settings.value) {
-      settings.value.resume_variants = parseCsv(value);
-    }
-  },
-});
-
 function toggleRole(option: RolePreference): void {
   option.enabled = !option.enabled;
 }
+
+const defaultUserSettings = computed(() => {
+  if (!settings.value) {
+    return [];
+  }
+  return [
+    { label: "Minimum match", value: `${settings.value.minimum_match_score}%` },
+    { label: "Apply threshold", value: `${settings.value.apply_now_threshold_score}%` },
+    { label: "Review threshold", value: `${settings.value.review_threshold_score}%` },
+    { label: "Notification freshness", value: `${settings.value.alert_freshness_hours} hours` },
+    { label: "Dashboard window", value: `${settings.value.dashboard_freshness_hours} hours` },
+    { label: "Default country", value: settings.value.selected_country },
+    { label: "Resume variants", value: joinCsv(settings.value.resume_variants) || "Not configured" },
+    { label: "Excluded keywords", value: joinCsv(settings.value.excluded_keywords) || "None" },
+  ];
+});
 
 async function load(): Promise<void> {
   loading.value = true;
@@ -66,7 +64,7 @@ async function persist(): Promise<void> {
   try {
     const payload = await saveAdminPreferences(settings.value);
     settings.value = payload.item;
-    pushToast("Admin settings saved", "Runtime preferences are now DB-backed and updated.", "success");
+    pushToast("Admin settings saved", "Platform runtime controls are now updated.", "success");
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to save admin settings.";
     pushToast("Admin settings failed", message, "error");
@@ -80,7 +78,7 @@ onMounted(load);
 
 <template>
   <AppPage>
-    <PageHeader title="Settings" description="Control shared runtime behavior, thresholds, and sync settings from the database-backed admin workspace.">
+    <PageHeader title="Settings" description="Control platform-wide runtime behavior, discovery operations, and shared maintenance settings.">
       <template #actions>
         <AppButton :disabled="saving || !settings" @click="persist">{{ saving ? "Saving..." : "Save settings" }}</AppButton>
       </template>
@@ -95,19 +93,13 @@ onMounted(load);
     <template v-else-if="settings">
       <PageSection>
         <AppGrid columns="2">
-          <AppCard title="Runtime thresholds" subtitle="Core values that shape matching and polling behavior.">
+          <AppCard title="Platform runtime" subtitle="These settings affect connector orchestration and platform-wide scheduling for every user.">
             <div class="app-form-grid">
               <AppSelect
                 :model-value="settings.primary_connector"
                 label="Primary connector"
                 :options="connectorOptions"
                 @update:model-value="settings.primary_connector = $event"
-              />
-              <AppSelect
-                :model-value="settings.selected_country"
-                label="Default country"
-                :options="countryOptions"
-                @update:model-value="settings.selected_country = $event"
               />
               <AppInput
                 :model-value="settings.polling_interval_minutes"
@@ -116,55 +108,11 @@ onMounted(load);
                 :min="1"
                 @update:model-value="settings.polling_interval_minutes = Number($event) || 5"
               />
-              <AppInput
-                :model-value="settings.minimum_match_score"
-                label="Minimum match"
-                type="number"
-                :min="0"
-                :max="100"
-                @update:model-value="settings.minimum_match_score = Number($event) || 0"
-              />
-              <AppInput
-                :model-value="settings.apply_now_threshold_score"
-                label="Apply now threshold"
-                type="number"
-                :min="0"
-                :max="100"
-                @update:model-value="settings.apply_now_threshold_score = Number($event) || 0"
-              />
-              <AppInput
-                :model-value="settings.review_threshold_score"
-                label="Review threshold"
-                type="number"
-                :min="0"
-                :max="100"
-                @update:model-value="settings.review_threshold_score = Number($event) || 0"
-              />
-              <AppInput
-                :model-value="settings.alert_freshness_hours"
-                label="Alert freshness"
-                type="number"
-                :min="1"
-                @update:model-value="settings.alert_freshness_hours = Number($event) || 6"
-              />
-              <AppInput
-                :model-value="settings.dashboard_freshness_hours"
-                label="Dashboard freshness"
-                type="number"
-                :min="1"
-                @update:model-value="settings.dashboard_freshness_hours = Number($event) || 24"
-              />
             </div>
           </AppCard>
 
-          <AppCard title="Sync controls" subtitle="These values shape initial sync behavior and global low-signal suppression, but matching stays user-driven.">
+          <AppCard title="Discovery engine" subtitle="These values shape startup backfills, initial syncs, and shared discovery operations across the platform.">
             <div class="app-form-grid">
-              <AppTextArea
-                v-model="resumeVariantsText"
-                label="Resume variants"
-                hint="Comma-separated list of preferred resume variants."
-                :rows="3"
-              />
               <AppInput
                 :model-value="settings.initial_alert_window_hours"
                 label="Initial alert window"
@@ -186,12 +134,6 @@ onMounted(load);
                 :min="0"
                 @update:model-value="settings.initial_sync_max_alerts = Number($event) || 0"
               />
-              <AppTextArea
-                v-model="excludedKeywordsText"
-                label="Excluded keywords"
-                hint="Comma-separated exclusions used to suppress low-fit roles."
-                :rows="3"
-              />
             </div>
           </AppCard>
         </AppGrid>
@@ -199,7 +141,7 @@ onMounted(load);
 
       <PageSection>
         <AppGrid columns="2">
-          <AppCard title="Role families" subtitle="Catalog-level role families exposed to admin and user flows.">
+          <AppCard title="Shared option sets" subtitle="These are platform-level choices exposed across onboarding, catalog management, and user preference flows.">
             <div class="app-checkbox-group">
               <AppCheckbox
                 v-for="role in settings.role_families"
@@ -211,7 +153,23 @@ onMounted(load);
             </div>
           </AppCard>
 
-          <AppCard title="Experience and work modes" subtitle="These defaults appear in the shared configuration and onboarding flow.">
+          <AppCard title="Default user settings" subtitle="Applied only to newly created accounts. Existing users keep their own preferences.">
+            <div class="app-stack app-stack--content">
+              <AppBadge tone="info">Read only</AppBadge>
+              <div class="admin-settings__default-list">
+                <div v-for="item in defaultUserSettings" :key="item.label" class="admin-settings__default-row">
+                  <span>{{ item.label }}</span>
+                  <strong>{{ item.value }}</strong>
+                </div>
+              </div>
+            </div>
+          </AppCard>
+        </AppGrid>
+      </PageSection>
+
+      <PageSection>
+        <AppGrid columns="1">
+          <AppCard title="Experience and work modes" subtitle="Platform-defined option pools available inside user preference and onboarding flows.">
             <div class="app-checkbox-group">
               <AppCheckbox
                 v-for="role in settings.work_arrangements"
@@ -234,3 +192,33 @@ onMounted(load);
     </template>
   </AppPage>
 </template>
+
+<style scoped>
+.admin-settings__default-list {
+  display: grid;
+  gap: 0.875rem;
+}
+
+.admin-settings__default-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.875rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.admin-settings__default-row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.admin-settings__default-row span {
+  color: var(--text-muted);
+}
+
+.admin-settings__default-row strong {
+  max-width: 16rem;
+  text-align: right;
+}
+</style>

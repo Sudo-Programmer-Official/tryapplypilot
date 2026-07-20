@@ -89,7 +89,14 @@ def evaluate_notification_decision(
             reason_code="initial_sync_stale",
             notification_type="fresh_alert",
         )
-    if delivery_phase == "fresh" and published_at >= now - timedelta(hours=freshness_hours):
+    if published_at < now - timedelta(hours=freshness_hours):
+        return NotificationDecisionSnapshot(
+            should_send=False,
+            notification_status="suppressed",
+            reason_code="freshness_expired",
+            notification_type="recovery_alert" if delivery_phase == "recovery" else "fresh_alert",
+        )
+    if delivery_phase == "fresh":
         return NotificationDecisionSnapshot(
             should_send=True,
             notification_status="pending",

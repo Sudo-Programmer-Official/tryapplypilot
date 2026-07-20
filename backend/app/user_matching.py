@@ -399,6 +399,16 @@ def alert_freshness_hours(user: UserAccount, settings: AppSettings) -> int:
     return max(1, min(168, value))
 
 
+def search_window_hours(user: UserAccount) -> int:
+    preferences = _user_preferences(user)
+    raw_value = preferences.get("search_window_hours", 24 * 7)
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return 24 * 7
+    return max(1, min(24 * 30, value))
+
+
 def minimum_match_score(user: UserAccount, settings: AppSettings) -> int:
     preferences = _user_preferences(user)
     raw_value = preferences.get("minimum_match_score", settings.radar.minimum_match_score)

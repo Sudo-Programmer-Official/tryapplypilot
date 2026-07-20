@@ -27,6 +27,30 @@ from app.user_matching import (
 BACKFILL_ALERT_BUDGET = 5
 
 
+def _compact_age(minutes: int) -> str:
+    if minutes < 60:
+        return f"{minutes}m"
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours}h"
+    days = minutes // (24 * 60)
+    return f"{days}d"
+
+
+def _notification_freshness_lines(*, published_at: datetime | None, first_seen_at: datetime | None, now: datetime) -> list[str]:
+    lines: list[str] = []
+    if first_seen_at is not None:
+        discovered_minutes_ago = max(0, int((now - first_seen_at).total_seconds() // 60))
+        if discovered_minutes_ago <= 120:
+            lines.append("🟢 Just discovered by TryApplyPilot")
+        else:
+            lines.append(f"🟢 Discovered {_compact_age(discovered_minutes_ago)} ago")
+    if published_at is not None:
+        posted_minutes_ago = max(0, int((now - published_at).total_seconds() // 60))
+        lines.append(f"📅 Originally posted {_compact_age(posted_minutes_ago)} ago")
+    return lines or ["🟢 Recently discovered by TryApplyPilot"]
+
+
 def _json_object(value: object) -> dict[str, object]:
     if isinstance(value, dict):
         return value
@@ -48,7 +72,9 @@ def _format_alert_message(
     why: list[str],
     gaps: list[str],
     recommended_resume: str,
-    posted_minutes_ago: int,
+    published_at: datetime | None,
+    first_seen_at: datetime | None,
+    now: datetime,
     country_code: str | None,
     settings: AppSettings,
 ) -> str:
@@ -66,13 +92,7 @@ def _format_alert_message(
             "<b>🟢 Match</b>",
             f"{score}%",
             "<b>🕒 Freshness</b>",
-            escape(
-                freshness_label(
-                    posted_minutes_ago,
-                    alert_freshness_hours=settings.radar.alert_freshness_hours,
-                    dashboard_freshness_hours=settings.radar.dashboard_freshness_hours,
-                )
-            ),
+            *[escape(line) for line in _notification_freshness_lines(published_at=published_at, first_seen_at=first_seen_at, now=now)],
             "<b>🟢 Recommendation</b>",
             escape(recommendation_label(decision)),
             "<b>Why it matched</b>",
@@ -337,7 +357,6 @@ async def sync_recent_jobs_for_user(user: UserAccount, settings: AppSettings | N
                 )
                 continue
 
-            posted_minutes_ago = max(0, int((now - published_at).total_seconds() // 60))
             try:
                 await asyncio.to_thread(
                     retry_sync,
@@ -350,7 +369,9 @@ async def sync_recent_jobs_for_user(user: UserAccount, settings: AppSettings | N
                         why=match.top_strengths,
                         gaps=match.gaps,
                         recommended_resume=match.recommended_resume,
-                        posted_minutes_ago=posted_minutes_ago,
+                        published_at=row["published_at"],
+                        first_seen_at=row["first_seen_at"],
+                        now=now,
                         country_code=country_code,
                         settings=matching_settings,
                     ),

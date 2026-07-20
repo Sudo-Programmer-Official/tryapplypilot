@@ -50,6 +50,30 @@ from app.user_matching import (
 )
 
 
+def _compact_age(minutes: int) -> str:
+    if minutes < 60:
+        return f"{minutes}m"
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours}h"
+    days = minutes // (24 * 60)
+    return f"{days}d"
+
+
+def _notification_freshness_lines(*, published_at: datetime | None, first_seen_at: datetime | None, now: datetime) -> list[str]:
+    lines: list[str] = []
+    if first_seen_at is not None:
+        discovered_minutes_ago = max(0, int((now - first_seen_at).total_seconds() // 60))
+        if discovered_minutes_ago <= 120:
+            lines.append("🟢 Just discovered by TryApplyPilot")
+        else:
+            lines.append(f"🟢 Discovered {_compact_age(discovered_minutes_ago)} ago")
+    if published_at is not None:
+        posted_minutes_ago = max(0, int((now - published_at).total_seconds() // 60))
+        lines.append(f"📅 Originally posted {_compact_age(posted_minutes_ago)} ago")
+    return lines or ["🟢 Recently discovered by TryApplyPilot"]
+
+
 @dataclass(frozen=True)
 class ConnectorRunSummary:
     connector_key: str
@@ -221,8 +245,10 @@ def _decision_rank(decision: str) -> int:
 def _format_alert_message(
     job: NormalizedJobRecord,
     match: MatchResult,
-    posted_minutes_ago: int,
     *,
+    published_at: datetime | None,
+    first_seen_at: datetime | None,
+    now: datetime,
     country_code: str | None,
     settings: AppSettings,
 ) -> str:
@@ -240,13 +266,7 @@ def _format_alert_message(
             "<b>🟢 Match</b>",
             f"{match.score}%",
             "<b>🕒 Freshness</b>",
-            escape(
-                freshness_label(
-                    posted_minutes_ago,
-                    alert_freshness_hours=settings.radar.alert_freshness_hours,
-                    dashboard_freshness_hours=settings.radar.dashboard_freshness_hours,
-                )
-            ),
+            *[escape(line) for line in _notification_freshness_lines(published_at=published_at, first_seen_at=first_seen_at, now=now)],
             "<b>🟢 Recommendation</b>",
             escape(recommendation_label(match.decision)),
             "<b>Why it matched</b>",
@@ -1582,6 +1602,7 @@ class MarketScoutAgent:
                         match=match,
                         user_context=user_context,
                         published_at=published_at,
+                        first_seen_at=now,
                         country_code=country_code,
                         now=now,
                         notification_type=notification_decision.notification_type,
@@ -1791,6 +1812,7 @@ class MarketScoutAgent:
                 match=match,
                 user_context=user_context,
                 published_at=published_at,
+                first_seen_at=(job_timestamps["first_seen_at"] if job_timestamps is not None else None),
                 country_code=country_code,
                 now=now,
                 notification_type=notification_decision.notification_type,
@@ -1899,12 +1921,12 @@ class MarketScoutAgent:
         match: MatchResult,
         user_context: UserMatchContext,
         published_at: datetime,
+        first_seen_at: datetime | None,
         country_code: str | None,
         now: datetime,
         notification_type: str,
         reason_code: str,
     ) -> tuple[int, int]:
-        posted_minutes_ago = max(0, int((now - published_at).total_seconds() // 60))
         try:
             await asyncio.to_thread(
                 retry_sync,
@@ -1913,7 +1935,9 @@ class MarketScoutAgent:
                 _format_alert_message(
                     job,
                     match,
-                    posted_minutes_ago,
+                    published_at=published_at,
+                    first_seen_at=first_seen_at,
+                    now=now,
                     country_code=country_code,
                     settings=user_context.settings,
                 ),

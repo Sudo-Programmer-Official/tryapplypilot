@@ -16,10 +16,22 @@ export const countryOptions = [
   { label: "Any", value: "ANY" },
 ];
 
-export const freshnessOptions = [1, 3, 6, 12, 24].map((value) => ({
-  label: `${value} hour${value === 1 ? "" : "s"}`,
+export const freshnessOptions = [1, 6, 12, 24, 48, 72, 168].map((value) => ({
+  label:
+    value < 24
+      ? `${value} hour${value === 1 ? "" : "s"}`
+      : value % 24 === 0
+        ? `${value / 24} day${value === 24 ? "" : "s"}`
+        : `${value} hours`,
   value,
 }));
+
+export const searchWindowOptions = [
+  { label: "Today", value: 24 },
+  { label: "Last 3 days", value: 24 * 3 },
+  { label: "Last week", value: 24 * 7 },
+  { label: "Last month", value: 24 * 30 },
+];
 
 export const notificationFrequencyOptions = [
   { label: "Instant", value: "instant" },

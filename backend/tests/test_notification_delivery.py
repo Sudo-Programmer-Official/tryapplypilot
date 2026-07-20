@@ -139,7 +139,7 @@ class NotificationDeliveryTests(unittest.TestCase):
         self.assertEqual(decision.reason_code, "daily_digest_scheduled")
         self.assertEqual(decision.notification_type, "daily_digest")
 
-    def test_discovery_alert_allows_recently_discovered_older_job(self) -> None:
+    def test_discovery_alert_does_not_override_notification_freshness(self) -> None:
         with patch.dict(
             os.environ,
             {
@@ -198,12 +198,12 @@ class NotificationDeliveryTests(unittest.TestCase):
             freshness_hours_override=24,
         )
 
-        self.assertTrue(decision.should_send)
-        self.assertEqual(decision.notification_status, "pending")
-        self.assertEqual(decision.reason_code, "discovery_match")
-        self.assertEqual(decision.notification_type, "discovery_alert")
+        self.assertFalse(decision.should_send)
+        self.assertEqual(decision.notification_status, "suppressed")
+        self.assertEqual(decision.reason_code, "freshness_expired")
+        self.assertEqual(decision.notification_type, "fresh_alert")
 
-    def test_recovery_alert_uses_recent_change_window_not_published_at(self) -> None:
+    def test_recovery_alert_respects_notification_freshness(self) -> None:
         with patch.dict(
             os.environ,
             {
@@ -261,9 +261,9 @@ class NotificationDeliveryTests(unittest.TestCase):
             freshness_hours_override=24,
         )
 
-        self.assertTrue(decision.should_send)
-        self.assertEqual(decision.notification_status, "pending")
-        self.assertEqual(decision.reason_code, "recovery_match")
+        self.assertFalse(decision.should_send)
+        self.assertEqual(decision.notification_status, "suppressed")
+        self.assertEqual(decision.reason_code, "freshness_expired")
         self.assertEqual(decision.notification_type, "recovery_alert")
 
     def test_recovery_alerts_still_expire_after_recovery_window(self) -> None:
@@ -329,7 +329,7 @@ class NotificationDeliveryTests(unittest.TestCase):
         self.assertEqual(decision.reason_code, "freshness_expired")
         self.assertEqual(decision.notification_type, "recovery_alert")
 
-    def test_high_priority_discovery_override_prevents_missing_strong_recent_match(self) -> None:
+    def test_high_priority_discovery_override_still_respects_notification_freshness(self) -> None:
         with patch.dict(
             os.environ,
             {
@@ -389,10 +389,10 @@ class NotificationDeliveryTests(unittest.TestCase):
             freshness_hours_override=6,
         )
 
-        self.assertTrue(decision.should_send)
-        self.assertEqual(decision.notification_status, "pending")
-        self.assertEqual(decision.reason_code, "high_priority_discovery_match")
-        self.assertEqual(decision.notification_type, "discovery_alert")
+        self.assertFalse(decision.should_send)
+        self.assertEqual(decision.notification_status, "suppressed")
+        self.assertEqual(decision.reason_code, "freshness_expired")
+        self.assertEqual(decision.notification_type, "fresh_alert")
 
 
 if __name__ == "__main__":

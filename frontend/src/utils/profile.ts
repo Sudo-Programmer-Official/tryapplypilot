@@ -124,7 +124,8 @@ export function createPreferenceDraft(user: AuthUser | null): UserPreferenceDraf
       typeof user?.preferences.desired_salary === "number" ? user.preferences.desired_salary : null,
     travel_preference: user?.preferences.travel_preference ?? "up_to_10",
     remote_preference: user?.preferences.remote_preference ?? "mostly_remote",
-    freshness_hours: Number(user?.preferences.freshness_hours ?? 6),
+    freshness_hours: Number(user?.preferences.freshness_hours ?? 24),
+    search_window_hours: Number(user?.preferences.search_window_hours ?? 24 * 7),
     minimum_match_score: Number(user?.preferences.minimum_match_score ?? 90),
     notification_frequency: user?.preferences.notification_frequency ?? "instant",
     notification_rules:
@@ -179,6 +180,7 @@ export function buildPreferencePayload(draft: UserPreferenceDraft): Record<strin
     travel_preference: draft.travel_preference,
     remote_preference: draft.remote_preference,
     freshness_hours: draft.freshness_hours,
+    search_window_hours: draft.search_window_hours,
     minimum_match_score: draft.minimum_match_score,
     notification_frequency: draft.notification_frequency,
     notification_rules: draft.notification_rules,

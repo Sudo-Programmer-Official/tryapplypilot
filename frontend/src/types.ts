@@ -130,6 +130,7 @@ export interface UserPreferencesRecord {
   travel_preference?: string;
   remote_preference?: string;
   freshness_hours?: number;
+  search_window_hours?: number;
   minimum_match_score?: number;
   notification_frequency?: string;
   notification_rules?: string[];
@@ -728,6 +729,7 @@ export interface UserPreferenceDraft {
   travel_preference: string;
   remote_preference: string;
   freshness_hours: number;
+  search_window_hours: number;
   minimum_match_score: number;
   notification_frequency: string;
   notification_rules: string[];

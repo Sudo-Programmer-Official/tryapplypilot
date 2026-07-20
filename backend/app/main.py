@@ -165,7 +165,8 @@ class OnboardingPayload(BaseModel):
     watchlists: list[str] = Field(default_factory=list)
     work_arrangements: list[str] = Field(default_factory=list)
     experience_levels: list[str] = Field(default_factory=list)
-    freshness_hours: int = Field(default=6, ge=1, le=168)
+    freshness_hours: int = Field(default=24, ge=1, le=168)
+    search_window_hours: int = Field(default=24 * 7, ge=1, le=24 * 30)
     minimum_match_score: int = Field(default=90, ge=0, le=100)
     notification_frequency: str = "instant"
 
@@ -205,7 +206,8 @@ class UserPreferencesPayload(BaseModel):
     years_of_experience: int | None = Field(default=None, ge=0, le=60)
     travel_preference: str = ""
     remote_preference: str = ""
-    freshness_hours: int = Field(default=6, ge=1, le=168)
+    freshness_hours: int = Field(default=24, ge=1, le=168)
+    search_window_hours: int = Field(default=24 * 7, ge=1, le=24 * 30)
     minimum_match_score: int = Field(default=90, ge=0, le=100)
     notification_frequency: str = "instant"
     notification_rules: list[str] = Field(default_factory=list)

@@ -131,7 +131,7 @@ onMounted(load);
             title="Preferences"
             :value="`${auth.user.value?.preferences.minimum_match_score ?? 90}% min match`"
             tone="info"
-            :detail="`${auth.user.value?.preferences.country ?? auth.user.value?.country ?? 'US'} · ${auth.user.value?.preferences.freshness_hours ?? 6} hour freshness window`"
+            :detail="`${auth.user.value?.preferences.country ?? auth.user.value?.country ?? 'US'} · ${auth.user.value?.preferences.freshness_hours ?? 24} hour notification window`"
           />
         </AppGrid>
       </AppGrid>

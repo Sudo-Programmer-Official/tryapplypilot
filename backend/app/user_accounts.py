@@ -75,6 +75,7 @@ def _default_preferences(settings: AppSettings) -> dict[str, object]:
         "travel_preference": "up_to_10",
         "remote_preference": "mostly_remote",
         "freshness_hours": settings.radar.alert_freshness_hours,
+        "search_window_hours": 24 * 7,
         "minimum_match_score": settings.radar.minimum_match_score,
         "notification_frequency": "instant",
         "notification_rules": ["only_new_jobs"],
@@ -597,6 +598,7 @@ async def update_user_preferences(
             "travel_preference": str(payload.get("travel_preference", preferences.get("travel_preference", "up_to_10"))).strip(),
             "remote_preference": str(payload.get("remote_preference", preferences.get("remote_preference", "mostly_remote"))).strip(),
             "freshness_hours": int(payload.get("freshness_hours", preferences.get("freshness_hours", resolved_settings.radar.alert_freshness_hours))),
+            "search_window_hours": int(payload.get("search_window_hours", preferences.get("search_window_hours", 24 * 7))),
             "minimum_match_score": int(
                 payload.get("minimum_match_score", preferences.get("minimum_match_score", resolved_settings.radar.minimum_match_score))
             ),
@@ -699,6 +701,7 @@ async def update_user_onboarding(
             "work_arrangements": _string_list(payload.get("work_arrangements", preferences.get("work_arrangements", []))),
             "experience_levels": _string_list(payload.get("experience_levels", preferences.get("experience_levels", []))),
             "freshness_hours": int(payload.get("freshness_hours", preferences.get("freshness_hours", resolved_settings.radar.alert_freshness_hours))),
+            "search_window_hours": int(payload.get("search_window_hours", preferences.get("search_window_hours", 24 * 7))),
             "minimum_match_score": int(
                 payload.get("minimum_match_score", preferences.get("minimum_match_score", resolved_settings.radar.minimum_match_score))
             ),

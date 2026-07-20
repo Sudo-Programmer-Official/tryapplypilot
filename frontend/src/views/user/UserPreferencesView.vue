@@ -23,6 +23,7 @@ import {
   notificationRuleOptions,
   remotePreferenceOptions,
   resumeStrategyOptions,
+  searchWindowOptions,
   skillImportanceOptions,
   travelPreferenceOptions,
   visaStatusOptions,
@@ -224,9 +225,15 @@ onMounted(loadCompanies);
           />
           <AppSelect
             :model-value="draft.freshness_hours"
-            label="Alert freshness"
+            label="Notification freshness"
             :options="freshnessOptions"
-            @update:model-value="draft.freshness_hours = Number($event) || 6"
+            @update:model-value="draft.freshness_hours = Number($event) || 24"
+          />
+          <AppSelect
+            :model-value="draft.search_window_hours"
+            label="Dashboard search window"
+            :options="searchWindowOptions"
+            @update:model-value="draft.search_window_hours = Number($event) || 24 * 7"
           />
           <AppInput
             :model-value="draft.minimum_match_score"
