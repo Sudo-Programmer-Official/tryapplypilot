@@ -6,8 +6,12 @@ defineProps<{
   type?: string;
   disabled?: boolean;
   hint?: string;
+  autocomplete?: string;
+  name?: string;
   min?: number;
   max?: number;
+  required?: boolean;
+  spellcheck?: boolean;
   step?: number;
 }>();
 
@@ -22,11 +26,15 @@ defineEmits<{
     <input
       class="app-input"
       :value="modelValue"
+      :name="name"
       :type="type ?? 'text'"
       :placeholder="placeholder"
       :disabled="disabled"
+      :autocomplete="autocomplete"
       :min="min"
       :max="max"
+      :required="required"
+      :spellcheck="spellcheck"
       :step="step"
       @input="
         $emit(

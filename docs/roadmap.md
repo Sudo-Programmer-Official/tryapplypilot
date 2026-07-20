@@ -146,7 +146,7 @@ Each notification should include:
 
 TryApplyPilot now separates notification freshness from browsing freshness.
 
-- `Notification freshness` answers: "How old can a job be before we notify the user?"
+- `Only notify me about jobs posted within` answers: "How old can a job be before we notify the user?"
 - `Dashboard search window` answers: "How far back should the workspace show jobs for browsing and review?"
 
 Product rules:

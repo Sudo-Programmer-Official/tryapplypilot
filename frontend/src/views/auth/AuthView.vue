@@ -168,9 +168,34 @@ async function handleSubmit(): Promise<void> {
 
           <AppCard class="auth__card" :title="cardTitle" :subtitle="cardSubtitle">
             <form class="app-form-grid auth__form" @submit.prevent="handleSubmit">
-              <AppInput v-if="isSignup" v-model="fullName" label="Full name" placeholder="Abhishek Kumar Jha" />
-              <AppInput v-model="email" label="Email" type="email" placeholder="you@example.com" />
-              <AppInput v-if="!isForgot" v-model="password" label="Password" type="password" placeholder="••••••••" />
+              <AppInput
+                v-if="isSignup"
+                v-model="fullName"
+                autocomplete="name"
+                label="Full name"
+                name="fullName"
+                placeholder="Abhishek Kumar Jha"
+                required
+              />
+              <AppInput
+                v-model="email"
+                autocomplete="email"
+                label="Email"
+                name="email"
+                placeholder="you@example.com"
+                required
+                type="email"
+              />
+              <AppInput
+                v-if="!isForgot"
+                v-model="password"
+                :autocomplete="isSignup ? 'new-password' : 'current-password'"
+                label="Password"
+                name="password"
+                placeholder="••••••••"
+                required
+                type="password"
+              />
 
               <p v-if="error" class="auth__error">{{ error }}</p>
               <p v-if="resetNotice" class="auth__notice">{{ resetNotice }}</p>
@@ -204,6 +229,8 @@ async function handleSubmit(): Promise<void> {
 
 <style scoped>
 .auth {
+  position: relative;
+  overflow: hidden;
   background:
     radial-gradient(circle at top right, rgba(35, 98, 255, 0.16), transparent 26rem),
     radial-gradient(circle at bottom left, rgba(15, 163, 177, 0.12), transparent 30rem),
@@ -212,12 +239,15 @@ async function handleSubmit(): Promise<void> {
 
 .auth__page {
   min-height: 100vh;
-  --app-page-max-width: 1240px;
+  --app-page-max-width: 1280px;
+  padding-block: clamp(var(--space-6), 5vw, var(--space-12));
 }
 
 .auth__panel {
-  align-items: stretch;
-  width: min(100%, 1160px);
+  align-items: center;
+  gap: clamp(var(--space-6), 3vw, var(--space-10));
+  grid-template-columns: minmax(0, 1.05fr) minmax(22rem, 35rem);
+  width: min(100%, 1180px);
   margin: 0 auto;
 }
 
@@ -229,26 +259,38 @@ async function handleSubmit(): Promise<void> {
 
 .auth__intro {
   display: grid;
-  gap: var(--space-8);
+  gap: clamp(var(--space-6), 3vw, var(--space-10));
   align-content: center;
   padding: 0;
+  padding-right: clamp(0px, 2vw, var(--space-8));
 }
 
 .auth__hero {
   display: grid;
-  gap: var(--space-5);
-  max-width: 34rem;
+  gap: var(--space-6);
+  max-width: 36rem;
 }
 
 .auth__headline {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-5);
 }
 
 .auth__brand {
+  display: inline-flex;
+  width: fit-content;
   font-family: var(--font-display);
   font-size: var(--type-title);
   font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.auth__headline .type-display {
+  text-wrap: balance;
+}
+
+.auth__headline .type-body-lg {
+  max-width: 24ch;
 }
 
 .auth__intro p,
@@ -258,22 +300,44 @@ async function handleSubmit(): Promise<void> {
 
 .auth__notes {
   display: grid;
-  gap: var(--space-4);
-  max-width: 38rem;
+  gap: var(--space-5);
+  max-width: 40rem;
 }
 
 .auth__notes li {
+  position: relative;
   display: grid;
-  gap: var(--space-2);
-  padding: var(--space-5) var(--space-6);
-  border: 1px solid rgba(15, 29, 58, 0.06);
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-6) var(--space-6) calc(var(--space-6) + var(--space-2));
+  border: 1px solid rgba(15, 29, 58, 0.08);
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(238, 243, 251, 0.92));
-  box-shadow: 0 10px 28px rgba(15, 29, 58, 0.05);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(238, 243, 251, 0.94));
+  box-shadow: 0 16px 40px rgba(15, 29, 58, 0.06);
+  transition:
+    transform var(--transition-base),
+    box-shadow var(--transition-base),
+    border-color var(--transition-base);
+}
+
+.auth__notes li::before {
+  content: "";
+  position: absolute;
+  left: var(--space-4);
+  top: var(--space-5);
+  bottom: var(--space-5);
+  width: 4px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(180deg, rgba(37, 99, 255, 0.88), rgba(36, 160, 237, 0.52));
+}
+
+.auth__notes li:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 22px 48px rgba(15, 29, 58, 0.08);
+  border-color: rgba(37, 99, 255, 0.16);
 }
 
 .auth__notes strong {
-  font-size: var(--type-small);
+  font-size: 1rem;
   line-height: 1.35;
 }
 
@@ -284,28 +348,88 @@ async function handleSubmit(): Promise<void> {
 
 .auth__card {
   width: 100%;
-  max-width: 34rem;
+  max-width: 35rem;
   justify-self: end;
+  overflow: hidden;
+}
+
+.auth__card :deep(.app-card__header) {
+  padding: clamp(var(--space-6), 3vw, 2.25rem) clamp(var(--space-6), 4vw, 2.5rem) 0;
+}
+
+.auth__card :deep(.app-card__header-copy) {
+  gap: var(--space-3);
+}
+
+.auth__card :deep(.app-card__title) {
+  font-size: clamp(1.625rem, 2.4vw, 2rem);
+  letter-spacing: -0.03em;
+}
+
+.auth__card :deep(.app-card__subtitle) {
+  max-width: 38ch;
+  font-size: 0.95rem;
 }
 
 .auth__card :deep(.app-card__body) {
   height: 100%;
   align-content: start;
   gap: var(--space-6);
+  padding: var(--space-6) clamp(var(--space-6), 4vw, 2.5rem) clamp(var(--space-6), 4vw, 2.25rem);
 }
 
 .auth__form {
-  gap: var(--space-4);
+  gap: var(--space-5);
+}
+
+.auth__form :deep(.app-field__label) {
+  font-size: 0.95rem;
+}
+
+.auth__form :deep(.app-input) {
+  min-height: 3.5rem;
+  border-radius: 1.125rem;
+  padding-inline: 1.125rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.auth__form :deep(.app-input:hover) {
+  border-color: var(--color-border-strong);
+}
+
+.auth__form :deep(.app-input:focus) {
+  background: rgba(255, 255, 255, 0.98);
+}
+
+.auth__form :deep(.app-button) {
+  min-height: 3.75rem;
+  border-radius: 1.125rem;
+  font-size: 1rem;
 }
 
 .auth__links a {
   display: inline-flex;
   align-items: center;
+  width: fit-content;
   min-height: 44px;
   color: var(--color-text-muted);
+  transition:
+    color var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.auth__links a:hover {
+  color: var(--color-primary);
+  transform: translateX(2px);
+}
+
+.auth__links a:last-child {
+  color: var(--color-text);
+  font-weight: 600;
 }
 
 .auth__links {
+  gap: var(--space-3);
   padding-top: var(--space-4);
   border-top: 1px solid var(--color-border);
 }
@@ -313,14 +437,29 @@ async function handleSubmit(): Promise<void> {
 .auth__error {
   margin: 0;
   color: var(--color-danger);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-soft);
 }
 
 .auth__notice {
   margin: 0;
   color: var(--color-warning);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-soft);
 }
 
 @media (max-width: 1023px) {
+  .auth__panel {
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .auth__intro {
+    padding-right: 0;
+  }
+
   .auth__card {
     max-width: none;
     justify-self: stretch;
@@ -329,11 +468,30 @@ async function handleSubmit(): Promise<void> {
 
 @media (max-width: 767px) {
   .auth__page {
-    padding-block: var(--space-6) var(--space-8);
+    padding-block: var(--space-5) var(--space-8);
+  }
+
+  .auth__panel,
+  .auth__intro {
+    gap: var(--space-6);
   }
 
   .auth__notes li {
-    padding: var(--space-4) var(--space-5);
+    padding: var(--space-5) var(--space-5) var(--space-5) calc(var(--space-5) + var(--space-2));
+  }
+
+  .auth__notes li::before {
+    left: var(--space-3);
+    top: var(--space-4);
+    bottom: var(--space-4);
+  }
+
+  .auth__card :deep(.app-card__header) {
+    padding: var(--space-5) var(--space-5) 0;
+  }
+
+  .auth__card :deep(.app-card__body) {
+    padding: var(--space-5);
   }
 }
 </style>

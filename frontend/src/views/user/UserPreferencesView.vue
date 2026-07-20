@@ -225,8 +225,9 @@ onMounted(loadCompanies);
           />
           <AppSelect
             :model-value="draft.freshness_hours"
-            label="Notification freshness"
+            label="Only notify me about jobs posted within"
             :options="freshnessOptions"
+            hint="Push alerts respect this window. Older opportunities can still appear in your dashboard based on the separate search window."
             @update:model-value="draft.freshness_hours = Number($event) || 24"
           />
           <AppSelect
