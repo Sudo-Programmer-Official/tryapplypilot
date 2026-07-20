@@ -16,6 +16,7 @@ const API_BASE_URL = resolveApiBaseUrl();
 const ACCESS_TOKEN_KEY = "tryapplypilot-access-token";
 const REFRESH_TOKEN_KEY = "tryapplypilot-refresh-token";
 const USER_SNAPSHOT_KEY = "tryapplypilot-user";
+export const AUTH_SESSION_CLEARED_EVENT = "tryapplypilot:auth-session-cleared";
 
 export class RequestError extends Error {
   status: number;
@@ -65,6 +66,7 @@ export function clearAuthSession(): void {
   window.localStorage.removeItem(ACCESS_TOKEN_KEY);
   window.localStorage.removeItem(REFRESH_TOKEN_KEY);
   window.localStorage.removeItem(USER_SNAPSHOT_KEY);
+  window.dispatchEvent(new CustomEvent(AUTH_SESSION_CLEARED_EVENT));
 }
 
 async function parseRequestError(path: string, response: Response): Promise<RequestError> {

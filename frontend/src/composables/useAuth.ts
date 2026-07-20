@@ -1,18 +1,35 @@
 import { computed, ref } from "vue";
 
 import { fetchCurrentUser, login, logout, signup } from "../api/auth.api";
-import { clearAuthSession, getStoredUserSnapshot, hasStoredSession, RequestError, storeUserSnapshot } from "../api/client";
+import {
+  AUTH_SESSION_CLEARED_EVENT,
+  clearAuthSession,
+  getStoredUserSnapshot,
+  hasStoredSession,
+  RequestError,
+  storeUserSnapshot,
+} from "../api/client";
 import type { AuthUser, UserRole } from "../types";
 
 const user = ref<AuthUser | null>(null);
 const loading = ref(false);
 const initialized = ref(false);
+let authSessionListenerRegistered = false;
 
 export function homeRouteForRole(role: UserRole): string {
   return role === "admin" || role === "super_admin" ? "/admin/dashboard" : "/user/dashboard";
 }
 
 export function useAuth() {
+  if (!authSessionListenerRegistered && typeof window !== "undefined") {
+    window.addEventListener(AUTH_SESSION_CLEARED_EVENT, () => {
+      user.value = null;
+      initialized.value = true;
+      loading.value = false;
+    });
+    authSessionListenerRegistered = true;
+  }
+
   async function init(): Promise<void> {
     if (initialized.value || loading.value) {
       return;
