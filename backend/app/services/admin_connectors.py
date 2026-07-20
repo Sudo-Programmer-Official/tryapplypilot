@@ -76,6 +76,11 @@ def _monitoring_reason(
             "planned",
             "BambooHR's official ATS API requires authenticated company credentials, and a reusable public candidate feed is not validated yet.",
         )
+    if company.connector == "ibm-careers":
+        return (
+            "planned",
+            "As of July 20, 2026, IBM's public careers search is protected by an AWS WAF JavaScript challenge, so there is no stable unauthenticated feed to poll yet.",
+        )
     if definition.admin_status == "planned":
         return ("planned", "This connector is still planned and cannot poll yet.")
     if company.connector not in RUNTIME_SUPPORTED_CONNECTORS:

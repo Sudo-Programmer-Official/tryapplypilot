@@ -834,6 +834,42 @@ class AdminConnectorValidationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("authenticated company credentials", readiness_by_key["discovery"]["detail"])
         self.assertEqual(len(conn.executed), 1)
 
+    async def test_validate_ibm_company_is_blocked_by_public_waf_challenge(self) -> None:
+        with patch.dict(os.environ, {"JOB_RADAR_RUNTIME_MODE": "seed"}, clear=True):
+            get_settings.cache_clear()
+            settings = get_settings()
+
+        company = CompanyPreference(
+            id="ibm-test",
+            company="IBM",
+            enabled=True,
+            tier=1,
+            priority=5,
+            connector="ibm-careers",
+            poll_interval_minutes=5,
+            country="US",
+            career_url="https://www.ibm.com/careers/search",
+            external_identifier="ibm.com",
+            role_families=["Platform Engineering"],
+        )
+        conn = _ValidationConnection()
+
+        with (
+            patch("app.services.admin_connectors.list_catalog_companies", return_value=[company]),
+            patch("app.services.admin_connectors.connection", return_value=conn),
+        ):
+            validation = await validate_company_connector(company.id, settings)
+
+        self.assertEqual(validation["status"], "failed")
+        self.assertEqual(validation["reason"], "planned")
+        readiness = validation["production_readiness"]
+        self.assertEqual(readiness["status"], "blocked")
+        readiness_by_key = {item["key"]: item for item in readiness["checks"]}
+        self.assertEqual(readiness_by_key["discovery"]["status"], "blocked")
+        self.assertIn("AWS WAF JavaScript challenge", readiness_by_key["discovery"]["detail"])
+        self.assertIn("July 20, 2026", readiness_by_key["discovery"]["detail"])
+        self.assertEqual(len(conn.executed), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

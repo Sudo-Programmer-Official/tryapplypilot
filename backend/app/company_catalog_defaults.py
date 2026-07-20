@@ -60,6 +60,7 @@ RECOMMENDED_COMPANY_DEFAULTS: tuple[CompanyCatalogDefault, ...] = (
     _company("Anthropic", "greenhouse", "anthropic", "https://job-boards.greenhouse.io/anthropic", 1, 2),
     _company("Databricks", "greenhouse", "databricks", "https://job-boards.greenhouse.io/databricks", 1, 3),
     _company("Microsoft", "microsoft-careers", "microsoft.com", "https://jobs.careers.microsoft.com/", 1, 4),
+    _company("IBM", "ibm-careers", "ibm.com", "https://www.ibm.com/careers/search", 1, 5),
     _company("Stripe", "greenhouse", "stripe", "https://job-boards.greenhouse.io/stripe", 1, 5),
     _company("Cloudflare", "greenhouse", "cloudflare", "https://job-boards.greenhouse.io/cloudflare", 1, 6),
     _company("Snowflake", "company-api", "snowflake", "https://careers.snowflake.com/", 1, 7),

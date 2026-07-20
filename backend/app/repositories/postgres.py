@@ -68,6 +68,7 @@ def _connector_source_label(connector_key: str) -> str:
         "oracle-recruiting-cloud": "Oracle Recruiting Cloud",
         "jobvite": "Jobvite",
         "microsoft-careers": "Microsoft Careers",
+        "ibm-careers": "IBM Careers",
         "successfactors": "SuccessFactors",
         "workday": "Workday",
         "smartrecruiters": "SmartRecruiters",

@@ -176,6 +176,16 @@ def build_default_registry() -> ConnectorRegistry:
                 rate_limit_per_minute=12,
             ),
             _connector(
+                key="ibm-careers",
+                display_name="IBM Careers",
+                layer="company_careers",
+                admin_status="planned",
+                rollout_stage="later",
+                pagination_mode="page",
+                supports_incremental_sync=True,
+                rate_limit_per_minute=8,
+            ),
+            _connector(
                 key="google-careers",
                 display_name="Google Careers",
                 layer="company_careers",

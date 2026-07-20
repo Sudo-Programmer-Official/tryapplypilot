@@ -97,6 +97,16 @@ class RuntimeInfrastructureTests(unittest.TestCase):
         self.assertEqual(definitions[0].admin_status, "live")
         self.assertEqual(definitions[0].rollout_stage, "live")
 
+    def test_connector_registry_exposes_ibm_as_planned_company_connector(self) -> None:
+        registry = build_default_registry()
+        definition = registry.get("ibm-careers")
+        self.assertIsNotNone(definition)
+        assert definition is not None
+        self.assertEqual(definition.display_name, "IBM Careers")
+        self.assertEqual(definition.layer, "company_careers")
+        self.assertEqual(definition.admin_status, "planned")
+        self.assertEqual(definition.rollout_stage, "later")
+
     def test_default_cors_origins_include_production_domains(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             get_settings.cache_clear()

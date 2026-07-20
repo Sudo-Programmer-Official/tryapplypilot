@@ -41,8 +41,11 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
             effective = await build_effective_app_settings()
         runtime_companies = {company.company: company for company in effective.radar.companies}
         self.assertIn("Databricks", runtime_companies)
+        self.assertIn("IBM", runtime_companies)
         self.assertEqual(runtime_companies["Databricks"].connector, "greenhouse")
         self.assertEqual(runtime_companies["Databricks"].external_identifier, "databricks")
+        self.assertEqual(runtime_companies["IBM"].connector, "ibm-careers")
+        self.assertFalse(runtime_companies["IBM"].enabled)
         self.assertEqual(effective.radar.selected_country, "US")
 
     async def test_effective_settings_derive_enabled_connectors_from_catalog_not_env(self) -> None:
