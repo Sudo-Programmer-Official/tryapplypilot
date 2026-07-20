@@ -38,7 +38,10 @@ PREFERENCE_DEFAULTS = (
     "minimum_match_score",
     "selected_country",
     "alert_freshness_hours",
+    "discovery_alert_freshness_hours",
     "recovery_alert_freshness_hours",
+    "high_priority_discovery_match_score",
+    "high_priority_discovery_window_hours",
     "dashboard_freshness_hours",
     "roles",
     "role_families",
@@ -87,7 +90,10 @@ def _preference_defaults_payload(settings: AppSettings) -> dict[str, object]:
         "minimum_match_score": settings.radar.minimum_match_score,
         "selected_country": settings.radar.selected_country,
         "alert_freshness_hours": settings.radar.alert_freshness_hours,
+        "discovery_alert_freshness_hours": settings.radar.discovery_alert_freshness_hours,
         "recovery_alert_freshness_hours": settings.radar.recovery_alert_freshness_hours,
+        "high_priority_discovery_match_score": settings.radar.high_priority_discovery_match_score,
+        "high_priority_discovery_window_hours": settings.radar.high_priority_discovery_window_hours,
         "dashboard_freshness_hours": settings.radar.dashboard_freshness_hours,
         "roles": list(settings.radar.target_roles),
         "role_families": list(settings.radar.role_families),
@@ -681,8 +687,23 @@ async def build_scout_settings(settings: AppSettings | None = None) -> ScoutSett
         minimum_match_score=int(values.get("minimum_match_score", resolved_settings.radar.minimum_match_score)),
         selected_country=normalize_supported_country(str(values.get("selected_country", resolved_settings.radar.selected_country))),
         alert_freshness_hours=int(values.get("alert_freshness_hours", resolved_settings.radar.alert_freshness_hours)),
+        discovery_alert_freshness_hours=int(
+            values.get("discovery_alert_freshness_hours", resolved_settings.radar.discovery_alert_freshness_hours)
+        ),
         recovery_alert_freshness_hours=int(
             values.get("recovery_alert_freshness_hours", resolved_settings.radar.recovery_alert_freshness_hours)
+        ),
+        high_priority_discovery_match_score=int(
+            values.get(
+                "high_priority_discovery_match_score",
+                resolved_settings.radar.high_priority_discovery_match_score,
+            )
+        ),
+        high_priority_discovery_window_hours=int(
+            values.get(
+                "high_priority_discovery_window_hours",
+                resolved_settings.radar.high_priority_discovery_window_hours,
+            )
         ),
         dashboard_freshness_hours=int(values.get("dashboard_freshness_hours", resolved_settings.radar.dashboard_freshness_hours)),
         resume_variants=_read_list(values.get("resume_variants"), resolved_settings.radar.resume_variants),
@@ -711,8 +732,23 @@ async def update_preference_settings(
         "minimum_match_score": int(payload.get("minimum_match_score", resolved_settings.radar.minimum_match_score)),
         "selected_country": normalize_supported_country(str(payload.get("selected_country", resolved_settings.radar.selected_country))),
         "alert_freshness_hours": int(payload.get("alert_freshness_hours", resolved_settings.radar.alert_freshness_hours)),
+        "discovery_alert_freshness_hours": int(
+            payload.get("discovery_alert_freshness_hours", resolved_settings.radar.discovery_alert_freshness_hours)
+        ),
         "recovery_alert_freshness_hours": int(
             payload.get("recovery_alert_freshness_hours", resolved_settings.radar.recovery_alert_freshness_hours)
+        ),
+        "high_priority_discovery_match_score": int(
+            payload.get(
+                "high_priority_discovery_match_score",
+                resolved_settings.radar.high_priority_discovery_match_score,
+            )
+        ),
+        "high_priority_discovery_window_hours": int(
+            payload.get(
+                "high_priority_discovery_window_hours",
+                resolved_settings.radar.high_priority_discovery_window_hours,
+            )
         ),
         "dashboard_freshness_hours": int(payload.get("dashboard_freshness_hours", resolved_settings.radar.dashboard_freshness_hours)),
         "roles": [str(value).strip() for value in payload.get("roles", []) if str(value).strip()],
@@ -768,7 +804,10 @@ async def build_effective_app_settings(settings: AppSettings | None = None) -> A
             review_threshold_score=scout_settings.review_threshold_score,
             selected_country=scout_settings.selected_country,
             alert_freshness_hours=scout_settings.alert_freshness_hours,
+            discovery_alert_freshness_hours=scout_settings.discovery_alert_freshness_hours,
             recovery_alert_freshness_hours=scout_settings.recovery_alert_freshness_hours,
+            high_priority_discovery_match_score=scout_settings.high_priority_discovery_match_score,
+            high_priority_discovery_window_hours=scout_settings.high_priority_discovery_window_hours,
             dashboard_freshness_hours=scout_settings.dashboard_freshness_hours,
             companies=tuple(scout_settings.companies),
             target_roles=tuple(role.label for role in scout_settings.roles if role.enabled),

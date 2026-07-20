@@ -294,7 +294,10 @@ class ScoutSettings:
     minimum_match_score: int = 90
     selected_country: str = "US"
     alert_freshness_hours: int = 6
+    discovery_alert_freshness_hours: int = 24
     recovery_alert_freshness_hours: int = 24 * 7
+    high_priority_discovery_match_score: int = 95
+    high_priority_discovery_window_hours: int = 48
     dashboard_freshness_hours: int = 24
     resume_variants: list[str] = field(default_factory=list)
     initial_alert_window_hours: int = 24

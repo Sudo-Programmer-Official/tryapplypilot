@@ -1527,6 +1527,8 @@ class MarketScoutAgent:
                         user=user_context.user,
                         settings=self.settings,
                         published_at=published_at,
+                        first_seen_at=now,
+                        last_changed_at=now,
                         delivery_phase="fresh",
                         initial_sync=initial_sync,
                         now=now,
@@ -1692,6 +1694,14 @@ class MarketScoutAgent:
         country_code: str | None,
         now: datetime,
     ) -> tuple[int, int]:
+        job_timestamps = await conn.fetchrow(
+            """
+            SELECT first_seen_at, last_changed_at
+            FROM jobs
+            WHERE job_id = $1
+            """,
+            job_id,
+        )
         pending_matches = await conn.fetch(
             """
             SELECT user_id, match_score, decision, recommended_resume, why, gaps, provider
@@ -1727,6 +1737,8 @@ class MarketScoutAgent:
                 user=user_context.user,
                 settings=self.settings,
                 published_at=published_at,
+                first_seen_at=(job_timestamps["first_seen_at"] if job_timestamps is not None else None),
+                last_changed_at=(job_timestamps["last_changed_at"] if job_timestamps is not None else None),
                 delivery_phase="recovery",
                 initial_sync=False,
                 now=now,

@@ -284,6 +284,8 @@ async def sync_recent_jobs_for_user(user: UserAccount, settings: AppSettings | N
                 user=user,
                 settings=resolved_settings,
                 published_at=published_at,
+                first_seen_at=row["first_seen_at"],
+                last_changed_at=row["last_changed_at"],
                 now=now,
                 initial_sync=False,
                 remaining_initial_alert_budget=0,
