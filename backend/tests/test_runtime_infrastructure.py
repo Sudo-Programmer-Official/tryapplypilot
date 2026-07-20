@@ -108,16 +108,15 @@ class RuntimeInfrastructureTests(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "JOB_RADAR_CORS_ORIGINS": "https://www.tryapplypilot.com,https://admin.tryapplypilot.com",
+                "JOB_RADAR_CORS_ORIGINS": "https://www.tryapplypilot.com/,https://admin.tryapplypilot.com",
             },
             clear=True,
         ):
             get_settings.cache_clear()
             settings = get_settings()
-        self.assertEqual(
-            settings.cors_allowed_origins,
-            ("https://www.tryapplypilot.com", "https://admin.tryapplypilot.com"),
-        )
+        self.assertIn("https://tryapplypilot.com", settings.cors_allowed_origins)
+        self.assertIn("https://www.tryapplypilot.com", settings.cors_allowed_origins)
+        self.assertIn("https://admin.tryapplypilot.com", settings.cors_allowed_origins)
 
     def test_retry_sync_retries_before_succeeding(self) -> None:
         attempts = {"count": 0}

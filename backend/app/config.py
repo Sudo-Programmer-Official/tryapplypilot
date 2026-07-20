@@ -105,6 +105,11 @@ DEFAULT_CORS_ORIGINS = (
     "http://127.0.0.1:5173",
 )
 
+PRODUCTION_CORS_ORIGINS = (
+    "https://tryapplypilot.com",
+    "https://www.tryapplypilot.com",
+)
+
 @dataclass(frozen=True)
 class DatabaseSettings:
     admin_dsn: str
@@ -301,6 +306,23 @@ def _read_csv(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
     return values or default
 
 
+def _normalize_origin(value: str) -> str:
+    return value.strip().rstrip("/")
+
+
+def _read_cors_origins(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
+    configured = _read_csv(name, default)
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for origin in (*PRODUCTION_CORS_ORIGINS, *configured):
+        cleaned = _normalize_origin(origin)
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        normalized.append(cleaned)
+    return tuple(normalized)
+
+
 def _read_connector_keys(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(value.casefold() for value in _read_csv(name, default))
 
@@ -362,7 +384,7 @@ def get_settings() -> AppSettings:
     return AppSettings(
         environment=os.getenv("JOB_RADAR_ENV", "development"),
         log_level=os.getenv("JOB_RADAR_LOG_LEVEL", "INFO").upper(),
-        cors_allowed_origins=_read_csv("JOB_RADAR_CORS_ORIGINS", DEFAULT_CORS_ORIGINS),
+        cors_allowed_origins=_read_cors_origins("JOB_RADAR_CORS_ORIGINS", DEFAULT_CORS_ORIGINS),
         database=DatabaseSettings(
             admin_dsn=admin_dsn,
             dsn=resolved_dsn,

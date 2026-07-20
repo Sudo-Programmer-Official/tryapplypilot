@@ -984,6 +984,7 @@ async def build_admin_connectors_workspace(settings: AppSettings | None = None) 
         connector_workspace_rows.append(
             {
                 **source.to_dict(),
+                "roadmap_status": source.admin_status,
                 "coverage_percent": coverage_percent,
                 "reliability_percent": reliability_percent,
                 "uptime_percent": uptime_percent,
