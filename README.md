@@ -6,6 +6,7 @@ As of July 18, 2026, this repo is intentionally scoped to Phase 1 only: one agen
 - `frontend/`: Vue 3 + TypeScript radar dashboard for configuration, live opportunities, source health, and notification previews.
 - `docs/`: MVP roadmap and architecture notes for the Phase 1 build.
 - [docs/ui-guardrails.md](docs/ui-guardrails.md): page-level UI and performance guardrails for every new user or admin screen.
+- [docs/connector-checklist.md](docs/connector-checklist.md): source-validation, runtime-wiring, and test checklist for every new connector.
 - [ROADMAP.md](ROADMAP.md): multi-phase product roadmap from Job Discovery to AI Career Operating System.
 
 ## MVP philosophy
@@ -123,3 +124,4 @@ Only after that is reliable:
 
 The full Version 1 scope freeze, exclusions, success metric, and dashboard readiness checklist are documented in [docs/v2.md](docs/v2.md).
 New page-level UX and performance rules are documented in [docs/ui-guardrails.md](docs/ui-guardrails.md).
+New connector delivery rules are documented in [docs/connector-checklist.md](docs/connector-checklist.md).
