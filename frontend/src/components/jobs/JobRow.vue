@@ -16,6 +16,7 @@ const props = defineProps<{
 
 defineEmits<{
   (event: "toggle-save", jobId: string): void;
+  (event: "review-resume", jobId: string): void;
 }>();
 
 const freshnessTone = computed(() => {
@@ -82,6 +83,14 @@ const decisionLabel = computed(() => {
           <AppIconButton size="sm" :label="saved ? 'Remove saved job' : 'Save job'" @click="$emit('toggle-save', job.id)">
             <Bookmark :fill="saved ? 'currentColor' : 'none'" />
           </AppIconButton>
+          <AppButton
+            v-if="job.decision !== 'IGNORE'"
+            size="sm"
+            variant="secondary"
+            @click="$emit('review-resume', job.id)"
+          >
+            Review resume
+          </AppButton>
           <AppButton size="sm" :href="job.apply_url" target="_blank" rel="noreferrer">
             <span class="job-row__apply-link">
               Apply

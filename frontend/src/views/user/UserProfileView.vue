@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 
 import AppGrid from "../../components/layout/AppGrid.vue";
 import AppPage from "../../components/layout/AppPage.vue";
@@ -10,11 +10,27 @@ import AppButton from "../../components/ui/AppButton.vue";
 import AppCard from "../../components/ui/AppCard.vue";
 import AppInput from "../../components/ui/AppInput.vue";
 import AppTextArea from "../../components/ui/AppTextArea.vue";
+import ProfileEvolutionPanel from "../../components/profile-evolution/ProfileEvolutionPanel.vue";
+import StagedChangesList from "../../components/profile-evolution/StagedChangesList.vue";
+import {
+  approveUserProfileEvolutionChange,
+  fetchUserProfileEvolutionChanges,
+  fetchUserProfileEvolutionNextQuestion,
+  fetchUserProfileEvolutionState,
+  rejectUserProfileEvolutionChange,
+  submitUserProfileEvolutionAnswer,
+} from "../../api/user.api";
 import { createTelegramConnectSession, verifyTelegramConnection } from "../../api/telegram.api";
 import { useAuth } from "../../composables/useAuth";
 import { usePreferences } from "../../composables/usePreferences";
 import { useToast } from "../../composables/useToast";
-import type { TelegramConnectSession } from "../../types";
+import type {
+  ProfileEvolutionChangeItem,
+  ProfileEvolutionQuestion,
+  ProfileEvolutionSession,
+  ProfileEvolutionSubmissionResult,
+  TelegramConnectSession,
+} from "../../types";
 import { formatDateTime } from "../../utils/format";
 
 const auth = useAuth();
@@ -25,7 +41,66 @@ const connectSession = ref<TelegramConnectSession | null>(null);
 const connecting = ref(false);
 const verifying = ref(false);
 
+const profileEvolutionLoading = ref(true);
+const profileEvolutionRefreshing = ref(false);
+const profileEvolutionSubmitting = ref(false);
+const profileEvolutionError = ref("");
+const profileEvolutionAnswer = ref("");
+const profileEvolutionSession = ref<ProfileEvolutionSession | null>(null);
+const profileEvolutionQuestion = ref<ProfileEvolutionQuestion | null>(null);
+const profileEvolutionRemainingTopics = ref<string[]>([]);
+const profileEvolutionChanges = ref<ProfileEvolutionChangeItem[]>([]);
+const lastProfileEvolutionResult = ref<ProfileEvolutionSubmissionResult | null>(null);
+const lastCompletionDelta = ref<{ before: number; after: number } | null>(null);
+const reviewNotes = ref<Record<string, string>>({});
+const activeDecisionId = ref("");
+
 const telegramStatus = computed(() => (auth.user.value?.telegram_chat_id ? "Connected" : "Pending"));
+const pendingChangeCount = computed(() => profileEvolutionChanges.value.length);
+const canSubmitProfileEvolutionAnswer = computed(
+  () => Boolean(profileEvolutionQuestion.value) && profileEvolutionAnswer.value.trim().length > 0 && !profileEvolutionSubmitting.value,
+);
+
+function calculateCompletionPercent(session: ProfileEvolutionSession | null): number {
+  if (!session) {
+    return 0;
+  }
+  const total = session.completed_topics.length + session.pending_topics.length + session.skipped_topics.length;
+  if (total === 0) {
+    return 100;
+  }
+  return Math.round((session.completed_topics.length / total) * 100);
+}
+
+const profileEvolutionCompletionPercent = computed(() => calculateCompletionPercent(profileEvolutionSession.value));
+
+async function loadProfileEvolution(options: { silent?: boolean } = {}): Promise<void> {
+  if (options.silent) {
+    profileEvolutionRefreshing.value = true;
+  } else {
+    profileEvolutionLoading.value = true;
+  }
+  profileEvolutionError.value = "";
+  try {
+    const [statePayload, questionPayload] = await Promise.all([
+      fetchUserProfileEvolutionState(),
+      fetchUserProfileEvolutionNextQuestion(),
+    ]);
+    profileEvolutionSession.value = statePayload.session;
+    profileEvolutionRemainingTopics.value = statePayload.remaining_topics;
+    profileEvolutionQuestion.value = questionPayload.item;
+    const changesPayload = await fetchUserProfileEvolutionChanges({
+      sessionId: statePayload.session.id,
+      limit: 50,
+    });
+    profileEvolutionChanges.value = changesPayload.items;
+  } catch (err) {
+    profileEvolutionError.value = err instanceof Error ? err.message : "Failed to load profile evolution.";
+  } finally {
+    profileEvolutionLoading.value = false;
+    profileEvolutionRefreshing.value = false;
+  }
+}
 
 async function handleSaveProfile(): Promise<void> {
   await persistProfile(auth.setUser);
@@ -74,13 +149,78 @@ async function verifyTelegram(): Promise<void> {
     verifying.value = false;
   }
 }
+
+async function submitProfileEvolution(): Promise<void> {
+  if (!profileEvolutionQuestion.value || !profileEvolutionAnswer.value.trim()) {
+    return;
+  }
+  profileEvolutionSubmitting.value = true;
+  try {
+    const result = await submitUserProfileEvolutionAnswer({
+      answer: profileEvolutionAnswer.value.trim(),
+      topic: profileEvolutionQuestion.value.topic,
+      question_id: profileEvolutionQuestion.value.id,
+      question_prompt: profileEvolutionQuestion.value.prompt,
+    });
+    lastCompletionDelta.value = {
+      before: calculateCompletionPercent(profileEvolutionSession.value),
+      after: calculateCompletionPercent(result.session),
+    };
+    lastProfileEvolutionResult.value = result;
+    profileEvolutionSession.value = result.session;
+    profileEvolutionQuestion.value = result.next_question;
+    profileEvolutionRemainingTopics.value = result.session.pending_topics;
+    profileEvolutionAnswer.value = "";
+    const changesPayload = await fetchUserProfileEvolutionChanges({
+      sessionId: result.session.id,
+      limit: 50,
+    });
+    profileEvolutionChanges.value = changesPayload.items;
+    pushToast(
+      "Profile insight captured",
+      result.staged_version_ids.length > 0
+        ? `${result.staged_version_ids.length} suggested update${result.staged_version_ids.length === 1 ? "" : "s"} queued for review.`
+        : "Your answer was saved to the current profile evolution thread.",
+      "success",
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to submit profile evolution answer.";
+    pushToast("Profile evolution failed", message, "error");
+  } finally {
+    profileEvolutionSubmitting.value = false;
+  }
+}
+
+async function reviewProfileEvolutionChange(versionId: string, decision: "approve" | "reject"): Promise<void> {
+  activeDecisionId.value = versionId;
+  try {
+    if (decision === "approve") {
+      await approveUserProfileEvolutionChange(versionId, reviewNotes.value[versionId] ?? "");
+      pushToast("Update approved", "The suggested profile change is now part of your canonical knowledge.", "success");
+    } else {
+      await rejectUserProfileEvolutionChange(versionId, reviewNotes.value[versionId] ?? "");
+      pushToast("Update rejected", "The suggested profile change was rejected and kept out of your canonical profile.", "info");
+    }
+    delete reviewNotes.value[versionId];
+    await loadProfileEvolution({ silent: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to review suggested update.";
+    pushToast("Review action failed", message, "error");
+  } finally {
+    activeDecisionId.value = "";
+  }
+}
+
+onMounted(() => {
+  void loadProfileEvolution();
+});
 </script>
 
 <template>
   <AppPage>
     <PageHeader
       title="Profile"
-      description="Keep your account details current and connect Telegram so the notification pipeline can deliver alerts privately."
+      description="Keep your account details current, connect Telegram for private alerts, and turn career experience into evidence-backed knowledge."
     >
       <template #actions>
         <AppButton :disabled="saving" @click="handleSaveProfile">{{ saving ? "Saving..." : "Save profile" }}</AppButton>
@@ -189,11 +329,45 @@ async function verifyTelegram(): Promise<void> {
         </div>
       </AppGrid>
     </PageSection>
+
+    <PageSection>
+      <AppGrid columns="2" class="profile-evolution-grid">
+        <ProfileEvolutionPanel
+          :loading="profileEvolutionLoading"
+          :error="profileEvolutionError"
+          :question="profileEvolutionQuestion"
+          :answer="profileEvolutionAnswer"
+          :can-submit="canSubmitProfileEvolutionAnswer"
+          :submitting="profileEvolutionSubmitting"
+          :refreshing="profileEvolutionRefreshing"
+          :completion-percent="profileEvolutionCompletionPercent"
+          :current-topic="profileEvolutionQuestion?.topic ?? profileEvolutionSession?.current_topic ?? null"
+          :pending-topics-count="profileEvolutionRemainingTopics.length"
+          :queued-changes-count="pendingChangeCount"
+          :last-result="lastProfileEvolutionResult"
+          :completion-delta="lastCompletionDelta"
+          @update:answer="profileEvolutionAnswer = $event"
+          @submit="submitProfileEvolution"
+          @refresh="loadProfileEvolution({ silent: true })"
+        />
+
+        <StagedChangesList
+          :loading="profileEvolutionLoading"
+          :items="profileEvolutionChanges"
+          :review-notes="reviewNotes"
+          :active-decision-id="activeDecisionId"
+          @update:review-note="reviewNotes[$event[0]] = $event[1]"
+          @approve="reviewProfileEvolutionChange($event, 'approve')"
+          @reject="reviewProfileEvolutionChange($event, 'reject')"
+        />
+      </AppGrid>
+    </PageSection>
   </AppPage>
 </template>
 
 <style scoped>
-.profile-grid {
+.profile-grid,
+.profile-evolution-grid {
   align-items: stretch;
 }
 
@@ -261,7 +435,8 @@ async function verifyTelegram(): Promise<void> {
   border-radius: 1rem;
 }
 
-.profile-status-row {
+.profile-status-row,
+.profile-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -280,13 +455,6 @@ async function verifyTelegram(): Promise<void> {
   font-size: 0.95rem;
 }
 
-.profile-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3);
-}
-
 .profile-actions :deep(.app-button) {
   min-width: 11rem;
 }
@@ -295,7 +463,9 @@ async function verifyTelegram(): Promise<void> {
   gap: var(--space-4);
 }
 
-.profile-meta-card {
+.profile-meta-card,
+.profile-evolution-summary__metric,
+.profile-review-card {
   padding: var(--space-5);
   border: 1px solid rgba(15, 29, 58, 0.08);
   border-radius: var(--radius-lg);
@@ -303,11 +473,13 @@ async function verifyTelegram(): Promise<void> {
   box-shadow: 0 12px 26px rgba(15, 29, 58, 0.04);
 }
 
-.profile-meta-card .eyebrow {
+.profile-meta-card .eyebrow,
+.profile-review-card__content .eyebrow {
   display: block;
 }
 
-.app-meta-grid strong {
+.app-meta-grid strong,
+.profile-evolution-summary__metric strong {
   display: block;
   margin-top: var(--space-2);
   font-size: 1rem;
@@ -323,7 +495,8 @@ async function verifyTelegram(): Promise<void> {
     padding: var(--space-5);
   }
 
-  .profile-actions {
+  .profile-actions,
+  .profile-evolution-actions {
     flex-direction: column;
     align-items: stretch;
   }

@@ -201,6 +201,822 @@ export interface ResumeAsset {
   created_at: string | null;
 }
 
+export interface ResumeSelectionReason {
+  label: string;
+  detail: string;
+}
+
+export interface ResumeSelectionResult {
+  status: string;
+  confidence: number;
+  resume_id: string | null;
+  display_name: string;
+  original_filename: string;
+  role_focus: string;
+  matched_requirements: string[];
+  reason_summary: ResumeSelectionReason[];
+  fallback_behavior: string;
+}
+
+export interface ResumeIntelligenceGapEvidence {
+  source_type: string;
+  source_id: string;
+  excerpt: string;
+  confidence: number;
+}
+
+export interface JobRequirement {
+  label: string;
+  category: string;
+  keywords: string[];
+}
+
+export interface RequirementAssessment {
+  label: string;
+  category: string;
+  status: string;
+  source: string;
+  confidence: number;
+  reason: string;
+  evidence: ResumeIntelligenceGapEvidence[];
+}
+
+export interface GapAnalysisResult {
+  covered_requirements: RequirementAssessment[];
+  weak_requirements: RequirementAssessment[];
+  missing_requirements: RequirementAssessment[];
+  keyword_opportunities: string[];
+  risk_flags: string[];
+}
+
+export interface RetrievedRequirementEvidence {
+  requirement_label: string;
+  category: string;
+  support_level: string;
+  rationale: string;
+  entity_names: string[];
+  evidence: ResumeIntelligenceGapEvidence[];
+}
+
+export interface EvidenceRetrievalResult {
+  items: RetrievedRequirementEvidence[];
+  missing_proof_flags: string[];
+}
+
+export interface ResumeChange {
+  change_id: string;
+  section: string;
+  entry_id: string;
+  operation: string;
+  original_text: string;
+  suggested_text: string;
+  rationale: string;
+  job_requirements: string[];
+  evidence: ResumeIntelligenceGapEvidence[];
+  confidence: number;
+  risk_level: string;
+  status: string;
+}
+
+export interface ResumeChangeSet {
+  status: string;
+  source_resume_id: string | null;
+  source_resume_name: string;
+  changes: ResumeChange[];
+  blocked_requirements: string[];
+  summary: string;
+  added_count: number;
+  modified_count: number;
+  removed_count: number;
+}
+
+export interface CritiqueDimensionScore {
+  label: string;
+  before: number;
+  after: number;
+  rationale: string;
+}
+
+export interface ResumeCritiqueResult {
+  verdict: string;
+  overall_before: number;
+  overall_after: number;
+  dimensions: CritiqueDimensionScore[];
+  issues: string[];
+  strengths: string[];
+  summary: string;
+}
+
+export interface ResumeIntelligenceAnalysis {
+  generated_at: string;
+  job: {
+    job_id: string;
+    user_id: string;
+    company: string;
+    title: string;
+    location: string;
+    remote_policy: string;
+    apply_url: string;
+    description_text: string;
+    connector_key: string;
+    published_at: string | null;
+    match_score: number | null;
+    decision: string;
+    recommended_resume: string;
+    why: string[];
+    gaps: string[];
+  };
+  requirements: JobRequirement[];
+  selection: ResumeSelectionResult;
+  gap_analysis: GapAnalysisResult;
+  evidence_retrieval: EvidenceRetrievalResult;
+  change_set: ResumeChangeSet;
+  critique: ResumeCritiqueResult;
+}
+
+export interface ResumeVersionRecord {
+  version_id: string;
+  user_id: string;
+  job_id: string;
+  source_resume_id: string | null;
+  source_resume_name: string;
+  file_name: string;
+  pdf_storage_path: string;
+  text_storage_path: string;
+  status: string;
+  version_signature: string;
+  accepted_changes: Array<Record<string, unknown>>;
+  rejected_changes: Array<Record<string, unknown>>;
+  blocked_requirements: string[];
+  metadata: Record<string, unknown>;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface ApplicationPackageArtifact {
+  artifact_id: string;
+  kind: string;
+  label: string;
+  status: string;
+  version: number;
+  source: string;
+  url: string;
+  file_name: string;
+  mime_type: string;
+  detail: string;
+  source_id: string;
+  metadata: Record<string, unknown>;
+  created_at: string | null;
+  audit_history: Array<Record<string, unknown>>;
+}
+
+export interface ApplicationTask {
+  task_id: string;
+  label: string;
+  status: string;
+  detail: string;
+  action: string;
+  action_url: string;
+  due_at: string | null;
+  completed_at: string | null;
+  priority: string;
+  category: string;
+  source: string;
+  generated: boolean;
+  reminder_status: string;
+  updated_at: string | null;
+}
+
+export interface ApplicationNote {
+  note_id: string;
+  note_type: string;
+  body: string;
+  created_at: string | null;
+  created_by_user_id: string | null;
+}
+
+export interface ApplicationAnswer {
+  answer_id: string;
+  application_id: string;
+  question: string;
+  normalized_question_key: string;
+  answer: string;
+  source: string;
+  created_at: string | null;
+  last_used_at: string | null;
+  reusable: boolean;
+  sensitive_data: boolean;
+  user_approved: boolean;
+  status: string;
+}
+
+export interface ApplicationStructuredMetadata {
+  recruiter_name: string;
+  recruiter_email: string;
+  hiring_manager: string;
+  application_portal: string;
+  external_application_id: string;
+  confirmation_number: string;
+  submitted_url: string;
+  submission_timestamp: string | null;
+  deadline: string | null;
+  assessment_deadline: string | null;
+  follow_up_date: string | null;
+  referral_source: string;
+  referral_contact: string;
+  salary_range: string;
+  location: string;
+  work_arrangement: string;
+  sponsorship_status: string;
+  application_source: string;
+}
+
+export interface ApplicationSubmissionRecord {
+  submitted_at: string | null;
+  portal: string;
+  confirmation_number: string;
+  external_application_id: string;
+  submitted_url: string;
+  resume_version_id: string;
+  answer_ids: string[];
+  artifact_ids: string[];
+}
+
+export interface ApplicationTimelineEvent {
+  event_type: string;
+  label: string;
+  detail: string;
+  occurred_at: string | null;
+}
+
+export interface ApplicationRecord {
+  application_id: string;
+  user_id: string;
+  job_id: string;
+  resume_version_id: string;
+  status: string;
+  package_signature: string;
+  company: string;
+  title: string;
+  apply_url: string;
+  match_score: number | null;
+  decision: string;
+  artifacts: ApplicationPackageArtifact[];
+  tasks: ApplicationTask[];
+  notes: ApplicationNote[];
+  answers: ApplicationAnswer[];
+  structured_metadata: ApplicationStructuredMetadata;
+  submission: ApplicationSubmissionRecord;
+  timeline: ApplicationTimelineEvent[];
+  metadata: Record<string, unknown>;
+  created_at: string | null;
+  updated_at: string | null;
+  applied_at: string | null;
+}
+
+export interface InterviewParticipant {
+  participant_id: string;
+  name: string;
+  email: string;
+  title: string;
+  role: string;
+  source_contact_id: string;
+}
+
+export interface InterviewPreparationItem {
+  item_id: string;
+  label: string;
+  status: string;
+  detail: string;
+  reason: string;
+  estimated_effort: string;
+  priority: string;
+  category: string;
+  source: string;
+  due_at: string | null;
+  completed_at: string | null;
+  generated: boolean;
+  updated_at: string | null;
+  supporting_evidence: InterviewPreparationEvidenceReference[];
+}
+
+export interface InterviewTimelineEvent {
+  event_type: string;
+  label: string;
+  detail: string;
+  occurred_at: string | null;
+}
+
+export interface InterviewAuditEntry {
+  event_type: string;
+  detail: string;
+  actor_user_id: string | null;
+  created_at: string | null;
+}
+
+export interface InterviewPreparationEvidenceReference {
+  reference_id: string;
+  source_type: string;
+  source_id: string;
+  label: string;
+  excerpt: string;
+  evidence_id: string;
+  relevance_explanation: string;
+  confidence: number;
+  entity_type: string;
+  entity_id: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface InterviewPreparationSection {
+  section_key: string;
+  title: string;
+  content: string[];
+  evidence_references: InterviewPreparationEvidenceReference[];
+  confidence: number;
+  generated_at: string | null;
+  strategy_version: string;
+}
+
+export interface InterviewPreparationRisk {
+  risk_id: string;
+  title: string;
+  detail: string;
+  recommendation: string;
+  severity: string;
+  confidence: number;
+  evidence_references: InterviewPreparationEvidenceReference[];
+  generated_at: string | null;
+  strategy_version: string;
+}
+
+export interface InterviewPreparationPlan {
+  plan_id: string;
+  interview_id: string;
+  application_id: string;
+  user_id: string;
+  version_number: number;
+  status: string;
+  strategy_version: string;
+  focus_labels: string[];
+  overall_confidence: number;
+  sections: InterviewPreparationSection[];
+  checklist: InterviewPreparationItem[];
+  risks: InterviewPreparationRisk[];
+  metadata: Record<string, unknown>;
+  generated_at: string | null;
+  updated_at: string | null;
+}
+
+export interface InterviewQuestionNote {
+  note_id: string;
+  body: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface InterviewQuestionFollowUp {
+  follow_up_id: string;
+  question: string;
+  rationale: string;
+  evaluation_dimensions: string[];
+  confidence: number;
+}
+
+export interface InterviewQuestion {
+  question_id: string;
+  question_set_id: string;
+  interview_id: string;
+  application_id: string;
+  user_id: string;
+  category: string;
+  question: string;
+  rationale: string;
+  evaluation_dimensions: string[];
+  related_job_requirements: string[];
+  related_evidence: InterviewPreparationEvidenceReference[];
+  follow_up_questions: InterviewQuestionFollowUp[];
+  difficulty: string;
+  priority: string;
+  confidence: number;
+  expected_answer_outline: string[];
+  risk_tags: string[];
+  sequence_order: number;
+  preparation_status: string;
+  hidden: boolean;
+  archived: boolean;
+  user_notes: InterviewQuestionNote[];
+  metadata: Record<string, unknown>;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface InterviewQuestionSet {
+  question_set_id: string;
+  interview_id: string;
+  application_id: string;
+  user_id: string;
+  version_number: number;
+  status: string;
+  title: string;
+  interview_type: string;
+  interview_round: string;
+  strategy_version: string;
+  source_preparation_plan_id: string;
+  provider: string;
+  model_key: string;
+  metadata: Record<string, unknown>;
+  generated_at: string | null;
+  updated_at: string | null;
+  superseded_by_question_set_id: string;
+  questions: InterviewQuestion[];
+}
+
+export interface InterviewStorySection {
+  section_key: string;
+  title: string;
+  content: string[];
+  evidence_references: InterviewPreparationEvidenceReference[];
+  missing_fields: string[];
+}
+
+export interface InterviewStoryGapPrompt {
+  prompt_id: string;
+  field_key: string;
+  prompt: string;
+  reason: string;
+  topic: string;
+  status: string;
+  related_evidence: InterviewPreparationEvidenceReference[];
+  profile_evolution_payload: Record<string, unknown>;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface InterviewStoryCoverageLink {
+  question_id: string;
+  question: string;
+  category: string;
+  coverage_score: number;
+  reason: string;
+  confidence: number;
+}
+
+export interface InterviewStoryQualityDimension {
+  label: string;
+  score: number;
+  rationale: string;
+}
+
+export interface InterviewStoryQualityAssessment {
+  overall_score: number;
+  dimensions: InterviewStoryQualityDimension[];
+  summary: string;
+  generated_at: string | null;
+  strategy_version: string;
+}
+
+export interface InterviewStory {
+  story_id: string;
+  story_group_id: string;
+  user_id: string;
+  application_id: string | null;
+  interview_id: string | null;
+  linked_application_ids: string[];
+  linked_interview_ids: string[];
+  title: string;
+  category: string;
+  source_evidence: InterviewPreparationEvidenceReference[];
+  related_projects: string[];
+  related_resume_version_id: string;
+  related_question_ids: string[];
+  interview_types: string[];
+  tags: string[];
+  version_number: number;
+  status: string;
+  sections: InterviewStorySection[];
+  technical_decisions: string[];
+  tradeoffs: string[];
+  leadership_moments: string[];
+  measurable_outcomes: string[];
+  lessons_learned: string[];
+  interviewer_follow_ups: string[];
+  coverage: InterviewStoryCoverageLink[];
+  quality: InterviewStoryQualityAssessment;
+  missing_information_prompts: InterviewStoryGapPrompt[];
+  superseded_by_story_id: string;
+  metadata: Record<string, unknown>;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface InterviewRecord {
+  interview_id: string;
+  application_id: string;
+  user_id: string;
+  interview_type: string;
+  interview_round: string;
+  interview_status: string;
+  preparation_status: string;
+  scheduled_start_at: string | null;
+  scheduled_end_at: string | null;
+  timezone: string;
+  meeting_url: string;
+  recruiter_name: string;
+  recruiter_email: string;
+  recruiter_contact_id: string;
+  notes: string;
+  source: string;
+  interviewers: InterviewParticipant[];
+  preparation_checklist: InterviewPreparationItem[];
+  timeline: InterviewTimelineEvent[];
+  audit_history: InterviewAuditEntry[];
+  metadata: Record<string, unknown>;
+  created_at: string | null;
+  updated_at: string | null;
+  completed_at: string | null;
+}
+
+export interface CommunicationEvidence {
+  source_type: string;
+  source_id: string;
+  label: string;
+  excerpt: string;
+}
+
+export interface CommunicationInsightSummary {
+  summary_id: string;
+  scope_type: string;
+  scope_id: string;
+  thread_id: string;
+  application_id: string | null;
+  message_id: string;
+  title: string;
+  summary: string;
+  communication_objective: string;
+  key_points: string[];
+  pending_action: string;
+  risks: string[];
+  evidence: CommunicationEvidence[];
+  assumptions: string[];
+  confidence: number;
+  strategy_version: string;
+  generated_at: string | null;
+}
+
+export interface CommunicationDraft {
+  draft_id: string;
+  draft_group_id: string;
+  version_number: number;
+  user_id: string;
+  thread_id: string;
+  draft_kind: string;
+  tone: string;
+  status: string;
+  intended_recipient: string;
+  intended_recipient_email: string;
+  communication_objective: string;
+  subject: string;
+  body: string;
+  confidence: number;
+  explanation: string;
+  strategy_version: string;
+  model_key: string;
+  application_id: string | null;
+  source_message_id: string;
+  parent_draft_id: string;
+  evidence: CommunicationEvidence[];
+  assumptions: string[];
+  user_edited: boolean;
+  generated_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface ConversationSla {
+  waiting_on: string;
+  last_recruiter_message_at: string | null;
+  last_candidate_response_at: string | null;
+  last_contact_at: string | null;
+  response_latency_hours: number | null;
+  average_response_latency_hours: number | null;
+  days_since_last_contact: number | null;
+  overdue_threshold_hours: number;
+  overdue: boolean;
+}
+
+export interface ConversationState {
+  application_id: string | null;
+  thread_id: string;
+  state: string;
+  label: string;
+  waiting_on: string;
+  derived_from_message_id: string;
+  last_message_type: string;
+  last_message_at: string | null;
+  reason: string;
+  sla: ConversationSla;
+}
+
+export interface CommunicationHealth {
+  application_id: string | null;
+  status: string;
+  label: string;
+  score: number;
+  waiting_on: string;
+  last_message_at: string | null;
+  needs_follow_up: boolean;
+  reason: string;
+}
+
+export interface ConversationSuggestion {
+  suggestion_id: string;
+  action_type: string;
+  label: string;
+  reason: string;
+  confidence: number;
+  supporting_message_id: string;
+  supporting_message_subject: string;
+  related_application_id: string | null;
+  due_at: string | null;
+  waiting_on: string;
+}
+
+export interface CommunicationSummary {
+  application_id: string | null;
+  last_message_id: string;
+  last_thread_id: string;
+  last_message_type: string;
+  last_message_subject: string;
+  last_contact_date: string | null;
+  pending_action: string;
+  conversation_status: string;
+  response_overdue: boolean;
+  suggested_actions: string[];
+  recruiter_name: string;
+  recruiter_email: string;
+  confidence: number;
+  reason: string;
+  waiting_on: string;
+  conversation_state: ConversationState;
+  health: CommunicationHealth;
+  sla: ConversationSla;
+  suggestions: ConversationSuggestion[];
+}
+
+export interface RecruiterContactApplicationLink {
+  application_id: string;
+  company: string;
+  title: string;
+  status: string;
+  last_contact_at: string | null;
+}
+
+export interface RecruiterContact {
+  contact_id: string;
+  user_id: string;
+  display_name: string;
+  email: string;
+  company: string;
+  title: string;
+  metadata: Record<string, unknown>;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface RecruiterContactProfile {
+  contact: RecruiterContact;
+  applications_connected: RecruiterContactApplicationLink[];
+  last_contact_at: string | null;
+  total_conversations: number;
+  total_messages: number;
+  average_response_time_hours: number | null;
+  waiting_on: string;
+  latest_conversation_state: string;
+  latest_health_status: string;
+}
+
+export interface RecruiterThread {
+  thread_id: string;
+  user_id: string;
+  application_id: string | null;
+  recruiter: RecruiterContact;
+  subject: string;
+  company: string;
+  job_title: string;
+  last_message_id: string;
+  last_message_at: string | null;
+  message_count: number;
+  source: string;
+  confidence: number;
+  conversation_status: string;
+  pending_action: string;
+  response_overdue: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface RecruiterMessage {
+  message_id: string;
+  thread_id: string;
+  user_id: string;
+  application_id: string | null;
+  recruiter: RecruiterContact;
+  sender: string;
+  recipients: string[];
+  subject: string;
+  body_reference: string;
+  body_preview: string;
+  received_at: string | null;
+  message_type: string;
+  confidence: number;
+  source: string;
+  timeline_id: string;
+  company: string;
+  job_title: string;
+  matched: boolean;
+  match_confidence: number;
+  match_reason: string;
+  classification_reason: string;
+  suggested_actions: string[];
+  metadata: Record<string, unknown>;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface CommunicationEvent {
+  event_id: string;
+  user_id: string;
+  application_id: string | null;
+  thread_id: string;
+  message_id: string;
+  event_type: string;
+  title: string;
+  detail: string;
+  occurred_at: string | null;
+  source: string;
+  metadata: Record<string, unknown>;
+  created_at: string | null;
+}
+
+export interface ProviderAuthorizationRequest {
+  provider: string;
+  authorization_url: string;
+  expires_in_seconds: number;
+  scopes: string[];
+  metadata: Record<string, unknown>;
+}
+
+export interface EmailProviderConnection {
+  connection_id: string;
+  user_id: string;
+  provider: string;
+  account_email: string;
+  status: string;
+  scopes: string[];
+  connected_at: string | null;
+  disconnected_at: string | null;
+  last_sync_at: string | null;
+  sync_cursor: string;
+  token_configured: boolean;
+}
+
+export interface EmailProviderStatus {
+  provider: string;
+  account_email: string;
+  status: string;
+  connected_at: string | null;
+  disconnected_at: string | null;
+  last_sync_at: string | null;
+  sync_cursor: string;
+  token_configured: boolean;
+  last_run_status: string;
+  last_run_started_at: string | null;
+  last_run_completed_at: string | null;
+  last_imported_count: number;
+  last_skipped_count: number;
+  last_duplicate_count: number;
+  last_error_count: number;
+}
+
+export interface EmailSyncRun {
+  sync_run_id: string;
+  connection_id: string;
+  user_id: string;
+  provider: string;
+  account_email: string;
+  run_status: string;
+  started_at: string | null;
+  completed_at: string | null;
+  failed_at: string | null;
+  imported_count: number;
+  skipped_count: number;
+  duplicate_count: number;
+  error_count: number;
+  metadata: Record<string, unknown>;
+}
+
 export interface CompanyRequest {
   id: string;
   user_id: string;
@@ -224,6 +1040,113 @@ export interface SavedJobRecord {
   user_id: string;
   job_id: string;
   saved_at: string | null;
+}
+
+export interface ProfileEvolutionQuestion {
+  id: string;
+  topic: string;
+  prompt: string;
+  rationale: string;
+  missing_fields: string[];
+  confidence: number;
+}
+
+export interface ProfileEvolutionTopicProgress {
+  topic: string;
+  answers: string[];
+  extracted_fields: Record<string, unknown>;
+  asked_follow_ups: string[];
+  staged_version_ids: string[];
+  status: "pending" | "completed" | "skipped";
+  confidence: number;
+}
+
+export interface ProfileEvolutionSession {
+  id: string;
+  user_id: string;
+  current_topic: string | null;
+  completed_topics: string[];
+  pending_topics: string[];
+  skipped_topics: string[];
+  confidence: number;
+  extracted_entities: Array<Record<string, unknown>>;
+  topic_progress: Record<string, ProfileEvolutionTopicProgress>;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface ProfileEvolutionStateResponse {
+  session: ProfileEvolutionSession;
+  remaining_topics: string[];
+}
+
+export interface ProfileEvolutionExtractedFact {
+  topic: string;
+  entity_type: string;
+  canonical_name: string;
+  content: Record<string, unknown>;
+  reason: string;
+  confidence: number;
+  extracted_fields: Record<string, unknown>;
+}
+
+export interface ProfileEvolutionSubmissionResult {
+  session: ProfileEvolutionSession;
+  extracted_facts: ProfileEvolutionExtractedFact[];
+  staged_version_ids: string[];
+  knowledge_gain: Record<string, number>;
+  next_question: ProfileEvolutionQuestion | null;
+}
+
+export interface KnowledgeEvidenceRecord {
+  id: string;
+  user_id: string;
+  source_type: string;
+  source_id: string;
+  excerpt: string;
+  metadata: Record<string, unknown>;
+  created_at: string | null;
+}
+
+export interface KnowledgeEntityVersionRecord {
+  id: string;
+  entity_id: string;
+  user_id: string;
+  version_number: number;
+  status: string;
+  source: string;
+  reason: string;
+  actor_user_id: string | null;
+  reviewed_by_user_id: string | null;
+  agent_name: string;
+  confidence: number;
+  evidence_ids: string[];
+  previous_content: Record<string, unknown>;
+  new_content: Record<string, unknown>;
+  created_at: string | null;
+  reviewed_at: string | null;
+  review_notes: string;
+}
+
+export interface KnowledgeEntityRecord {
+  id: string;
+  user_id: string;
+  entity_type: string;
+  canonical_name: string;
+  content: Record<string, unknown>;
+  source: string;
+  confidence: number;
+  evidence_ids: string[];
+  version: number;
+  status: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface ProfileEvolutionChangeItem {
+  version: KnowledgeEntityVersionRecord;
+  entity: KnowledgeEntityRecord | null;
+  evidence: KnowledgeEvidenceRecord[];
 }
 
 export interface SourceStatus {
