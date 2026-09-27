@@ -17,6 +17,7 @@ const props = defineProps<{
 defineEmits<{
   (event: "toggle-save", jobId: string): void;
   (event: "review-resume", jobId: string): void;
+  (event: "apply", jobId: string): void;
 }>();
 
 const freshnessTone = computed(() => {
@@ -91,7 +92,7 @@ const decisionLabel = computed(() => {
           >
             Review resume
           </AppButton>
-          <AppButton size="sm" :href="job.apply_url" target="_blank" rel="noreferrer">
+          <AppButton size="sm" :href="job.apply_url" target="_blank" rel="noreferrer" @click="$emit('apply', job.id)">
             <span class="job-row__apply-link">
               Apply
               <ExternalLink />

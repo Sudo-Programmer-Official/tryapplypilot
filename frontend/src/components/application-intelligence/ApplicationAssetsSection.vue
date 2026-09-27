@@ -15,6 +15,7 @@ import AppTextArea from "../ui/AppTextArea.vue";
 
 const props = defineProps<{
   application: ApplicationRecord;
+  collapsible?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -129,7 +130,7 @@ async function saveArtifact(): Promise<void> {
 </script>
 
 <template>
-  <AppCard title="Answers" subtitle="Keep structured answers attached to the application so later submission details remain grounded in the record.">
+  <AppCard title="Saved answers" subtitle="Reusable answers to this application's questions." :collapsible="collapsible">
     <div class="assets-form">
       <AppInput v-model="answerForm.question" label="Question" placeholder="Why do you want to work here?" />
       <AppInput v-model="answerForm.question_key" label="Question key" placeholder="why_company" />
@@ -177,7 +178,7 @@ async function saveArtifact(): Promise<void> {
     />
   </AppCard>
 
-  <AppCard title="Artifacts" subtitle="Attach supporting references and keep the submission package auditable beyond the resume PDF.">
+  <AppCard title="Files & links" subtitle="Supporting documents and links for this application." :collapsible="collapsible">
     <div class="assets-form">
       <AppSelect
         v-model="artifactForm.kind"

@@ -141,6 +141,9 @@ function localDateTimeToIso(value: string): string | undefined {
 }
 
 const canSubmit = computed(() => props.application?.status === "ready_to_apply" || props.application?.status === "applied");
+// Before submission, recording it is the next step; afterwards, status updates are.
+const submissionIsNextStep = computed(() => props.application?.status === "ready_to_apply");
+const showSubmissionDetails = ref(false);
 const statusOptions = computed(() => allowedStatusOptions(props.application?.status ?? ""));
 const canUpdateStatus = computed(() => Boolean(props.application && statusOptions.value.length > 0 && statusForm.value.status));
 
@@ -273,7 +276,7 @@ const resumeFileName = computed(() => {
     :description="application ? `${application.company} · ${application.title}` : 'Review package details, submission state, and workflow tasks.'"
     @close="$emit('close')"
   >
-    <div class="application-drawer">
+    <div :key="application?.application_id ?? 'empty'" class="application-drawer">
       <AppEmptyState
         v-if="!application"
         title="No package selected"
@@ -300,37 +303,31 @@ const resumeFileName = computed(() => {
           </div>
         </AppCard>
 
-        <ApplicationTimelineSection
-          :application="application"
-        />
-
-        <ApplicationMetadataSection
-          :application="application"
-          @updated="$emit('updated', $event)"
-        />
-
         <AppCard
+          v-if="canSubmit"
           title="Record submission"
-          subtitle="Capture the actual submission event and confirmation details after using the official apply link."
+          :subtitle="submissionIsNextStep ? 'Applied on the company site? Record it here to track next steps.' : 'Update the submission details you recorded.'"
+          :collapsible="!submissionIsNextStep"
         >
-          <AppEmptyState
-            v-if="!canSubmit"
-            title="Submission already progressed"
-            description="Use status updates and notes below to keep the package current after the initial submission."
-          />
-
-          <div v-else class="application-drawer__form-grid">
+          <div class="application-drawer__form-grid">
             <AppInput v-model="submitForm.submitted_at" label="Submitted at" type="datetime-local" />
-            <AppInput v-model="submitForm.portal" label="Portal" placeholder="Greenhouse, Lever, company portal..." />
-            <AppInput v-model="submitForm.confirmation_number" label="Confirmation number" placeholder="CONF-123" />
-            <AppInput v-model="submitForm.external_application_id" label="External application ID" placeholder="APP-789" />
-            <AppInput v-model="submitForm.submitted_url" label="Submission URL" placeholder="https://..." />
-            <AppTextArea
-              v-model="submitForm.notes"
-              label="Submission note"
-              :rows="4"
-              placeholder="Recorded after final review on Tuesday, July 21, 2026."
-            />
+            <AppInput v-model="submitForm.confirmation_number" label="Confirmation number (optional)" placeholder="CONF-123" />
+            <template v-if="showSubmissionDetails">
+              <AppInput v-model="submitForm.portal" label="Portal" placeholder="Greenhouse, Lever, company portal..." />
+              <AppInput v-model="submitForm.external_application_id" label="External application ID" placeholder="APP-789" />
+              <AppInput v-model="submitForm.submitted_url" label="Submission URL" placeholder="https://..." />
+              <AppTextArea
+                v-model="submitForm.notes"
+                label="Submission note"
+                :rows="4"
+                placeholder="Recorded after final review on Tuesday, July 21, 2026."
+              />
+            </template>
+            <div>
+              <AppButton size="sm" variant="ghost" @click="showSubmissionDetails = !showSubmissionDetails">
+                {{ showSubmissionDetails ? "Fewer details" : "More details" }}
+              </AppButton>
+            </div>
             <div class="application-drawer__actions">
               <AppButton variant="secondary" :disabled="submitting" @click="handleSubmitApplication">
                 {{ submitting ? "Saving..." : application.status === "applied" ? "Refresh submission details" : "Record submission" }}
@@ -339,14 +336,10 @@ const resumeFileName = computed(() => {
           </div>
         </AppCard>
 
-        <ApplicationAssetsSection
-          :application="application"
-          @updated="$emit('updated', $event)"
-        />
-
         <AppCard
           title="Update status"
-          subtitle="Move the application through valid downstream states after submission."
+          subtitle="Move the application forward, e.g. interviewing, offer or rejected."
+          :collapsible="submissionIsNextStep"
         >
           <div class="application-drawer__form-grid">
             <AppSelect
@@ -371,7 +364,7 @@ const resumeFileName = computed(() => {
 
         <AppCard
           title="Tasks"
-          subtitle="Keep generated workflow tasks accurate as you complete steps outside the platform."
+          subtitle="Mark steps done as you complete them outside the app."
         >
           <div class="application-drawer__task-list">
             <article v-for="task in application.tasks" :key="task.task_id" class="application-drawer__task">
@@ -406,9 +399,27 @@ const resumeFileName = computed(() => {
           </div>
         </AppCard>
 
+        <ApplicationTimelineSection
+          :application="application"
+          collapsible
+        />
+
+        <ApplicationMetadataSection
+          :application="application"
+          collapsible
+          @updated="$emit('updated', $event)"
+        />
+
+        <ApplicationAssetsSection
+          :application="application"
+          collapsible
+          @updated="$emit('updated', $event)"
+        />
+
         <AppCard
           title="Notes"
-          subtitle="Attach recruiter context, follow-up details, or manual observations to the application timeline."
+          subtitle="Recruiter context, follow-ups and your own observations."
+          collapsible
         >
           <div class="application-drawer__form-grid">
             <AppSelect

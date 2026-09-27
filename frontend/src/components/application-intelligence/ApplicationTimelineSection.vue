@@ -9,6 +9,7 @@ import AppEmptyState from "../ui/AppEmptyState.vue";
 
 const props = defineProps<{
   application: ApplicationRecord;
+  collapsible?: boolean;
 }>();
 
 const timelineItems = computed(() => [...props.application.timeline].reverse());
@@ -37,7 +38,7 @@ function eventLabel(eventType: string): string {
 </script>
 
 <template>
-  <AppCard title="Timeline" subtitle="Use the application timeline as the primary activity feed for everything that has happened on this package.">
+  <AppCard title="Timeline" subtitle="Everything that has happened on this application." :collapsible="collapsible">
     <div v-if="timelineItems.length > 0" class="timeline-list">
       <article v-for="item in timelineItems" :key="`${item.event_type}-${item.occurred_at}-${item.label}`" class="timeline-item">
         <div class="timeline-item__header">

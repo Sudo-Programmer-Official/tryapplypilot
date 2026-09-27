@@ -10,3 +10,7 @@ export function uploadUserResume(file: File): Promise<{ item: ResumeAsset; user:
   form.append("file", file);
   return requestMultipart<{ item: ResumeAsset; user: AuthUser }>("/api/auth/me/resumes", form);
 }
+
+export function deleteUserResume(resumeId: string): Promise<{ user: AuthUser }> {
+  return requestJson<{ user: AuthUser }>(`/api/auth/me/resumes/${encodeURIComponent(resumeId)}`, { method: "DELETE" });
+}

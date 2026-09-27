@@ -61,6 +61,12 @@ export function finalizeUserResumeIntelligenceReview(
   });
 }
 
+export function trackUserJobApplication(jobId: string): Promise<{ item: ApplicationRecord; created: boolean }> {
+  return requestJson<{ item: ApplicationRecord; created: boolean }>(`/api/auth/me/applications/jobs/${jobId}/track`, {
+    method: "POST",
+  });
+}
+
 export function buildUserApplicationPackage(
   jobId: string,
   payload: {

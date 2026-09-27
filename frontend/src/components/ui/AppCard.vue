@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, useSlots } from "vue";
+import { computed, ref, useSlots } from "vue";
+import { ChevronDown } from "lucide-vue-next";
 
 // Vue casts an omitted boolean prop to false, so the padded default must be explicit.
 const props = withDefaults(
@@ -7,19 +8,27 @@ const props = withDefaults(
     title?: string;
     subtitle?: string;
     padded?: boolean;
+    collapsible?: boolean;
+    defaultOpen?: boolean;
   }>(),
-  { padded: true },
+  { padded: true, collapsible: false, defaultOpen: false },
 );
 
 const slots = useSlots();
 
 const hasHeader = computed(() => Boolean(props.title || props.subtitle || slots.header || slots.actions));
-const hasStructuredSlots = computed(() => Boolean(slots.header || slots.body || slots.footer));
+// The standard layout already renders a padded footer; only custom header/body slots need
+// the structured layout (which skips the title, subtitle and padding).
+const hasStructuredSlots = computed(() => Boolean(slots.header || slots.body));
 const hasNamedBody = computed(() => Boolean(slots.body));
+const isOpen = ref(!props.collapsible || props.defaultOpen);
 </script>
 
 <template>
-  <section class="app-card surface-card" :class="{ 'app-card--padded': props.padded }">
+  <section
+    class="app-card surface-card"
+    :class="{ 'app-card--padded': props.padded, 'app-card--collapsed': collapsible && !isOpen }"
+  >
     <template v-if="hasStructuredSlots">
       <slot name="header" />
       <slot v-if="hasNamedBody" name="body" />
@@ -30,20 +39,33 @@ const hasNamedBody = computed(() => Boolean(slots.body));
     </template>
     <template v-else>
       <header v-if="hasHeader" class="app-card__header">
-        <div class="app-card__header-copy">
+        <button
+          v-if="collapsible"
+          type="button"
+          class="app-card__header-copy app-card__toggle"
+          :aria-expanded="isOpen"
+          @click="isOpen = !isOpen"
+        >
+          <span class="app-card__toggle-copy">
+            <span v-if="title" class="app-card__title">{{ title }}</span>
+            <span v-if="subtitle" class="app-card__subtitle">{{ subtitle }}</span>
+          </span>
+          <ChevronDown class="app-card__chevron" aria-hidden="true" />
+        </button>
+        <div v-else class="app-card__header-copy">
           <slot name="header">
             <h3 v-if="title" class="app-card__title">{{ title }}</h3>
             <p v-if="subtitle" class="app-card__subtitle">{{ subtitle }}</p>
           </slot>
         </div>
-        <div v-if="$slots.actions" class="app-card__actions">
+        <div v-if="$slots.actions && isOpen" class="app-card__actions">
           <slot name="actions" />
         </div>
       </header>
-      <div class="app-card__body card-content" :class="{ 'app-card__body--standalone': !hasHeader }">
+      <div v-show="isOpen" class="app-card__body card-content" :class="{ 'app-card__body--standalone': !hasHeader }">
         <slot />
       </div>
-      <footer v-if="$slots.footer" class="app-card__footer">
+      <footer v-if="$slots.footer" v-show="isOpen" class="app-card__footer">
         <slot name="footer" />
       </footer>
     </template>
@@ -114,5 +136,43 @@ const hasNamedBody = computed(() => Boolean(slots.body));
 
 .app-card__footer {
   padding: 0 var(--card-padding) var(--card-padding);
+}
+
+.app-card__toggle {
+  display: flex;
+  flex: 1;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--content-gap);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-card__toggle-copy {
+  display: grid;
+  gap: var(--heading-gap);
+  min-width: 0;
+}
+
+.app-card__chevron {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  color: var(--color-text-muted);
+  transition: transform var(--transition-fast);
+}
+
+.app-card__toggle[aria-expanded="true"] .app-card__chevron {
+  transform: rotate(180deg);
+}
+
+:where(.app-card--collapsed.app-card--padded) .app-card__header {
+  padding-bottom: var(--card-padding);
 }
 </style>

@@ -9,7 +9,7 @@ import PageSection from "../../components/layout/PageSection.vue";
 import ResumeReviewDrawer from "../../components/resume-intelligence/ResumeReviewDrawer.vue";
 import AppButton from "../../components/ui/AppButton.vue";
 import AppEmptyState from "../../components/ui/AppEmptyState.vue";
-import { fetchUserJobs, fetchUserResumeIntelligenceAnalysis } from "../../api/user.api";
+import { fetchUserJobs, fetchUserResumeIntelligenceAnalysis, trackUserJobApplication } from "../../api/user.api";
 import { useJobs } from "../../composables/useJobs";
 import type { JobOpportunity, ResumeIntelligenceAnalysis } from "../../types";
 import { useToast } from "../../composables/useToast";
@@ -64,6 +64,24 @@ function loadMore(): void {
 function disconnectLoadMoreObserver(): void {
   loadMoreObserver?.disconnect();
   loadMoreObserver = null;
+}
+
+// The apply link opens in a new tab; track the application alongside it so the user
+// can record the submission later without the resume-review detour.
+async function trackApplication(jobId: string): Promise<void> {
+  try {
+    const payload = await trackUserJobApplication(jobId);
+    if (payload.created) {
+      pushToast(
+        "Tracked in Applications",
+        `${payload.item.company} was added to Applications. Record your submission there once you apply.`,
+        "success",
+      );
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Could not track this application.";
+    pushToast("Application not tracked", message, "error");
+  }
 }
 
 async function openResumeReview(jobId: string): Promise<void> {
@@ -219,6 +237,7 @@ onBeforeUnmount(disconnectLoadMoreObserver);
           :saved="isSavedJob(job.id)"
           @toggle-save="toggleSavedJob"
           @review-resume="openResumeReview"
+          @apply="trackApplication"
         />
       </div>
 

@@ -11,6 +11,7 @@ import AppInput from "../ui/AppInput.vue";
 
 const props = defineProps<{
   application: ApplicationRecord;
+  collapsible?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -134,7 +135,7 @@ async function saveMetadata(): Promise<void> {
     </div>
   </AppCard>
 
-  <AppCard title="Structured metadata" subtitle="Update recruiter context, deadlines, and follow-up scheduling through one reviewable form.">
+  <AppCard title="Recruiter & deadlines" subtitle="Recruiter contact, deadlines, referral and salary details." :collapsible="collapsible">
     <div class="metadata-form">
       <AppInput v-model="form.recruiter_name" label="Recruiter name" placeholder="Avery Chen" />
       <AppInput v-model="form.recruiter_email" label="Recruiter email" placeholder="avery@example.com" />
