@@ -257,6 +257,11 @@ async function handleNoteSave(): Promise<void> {
     savingNote.value = false;
   }
 }
+
+const resumeFileName = computed(() => {
+  const artifact = props.application?.artifacts.find((item) => item.kind === "resume");
+  return artifact?.file_name || artifact?.label || "version on file";
+});
 </script>
 
 <template>
@@ -285,7 +290,7 @@ async function handleNoteSave(): Promise<void> {
                 <AppBadge tone="info">{{ application.artifacts.length }} artifacts</AppBadge>
               </div>
               <p class="application-drawer__helper">
-                Resume version `{{ application.resume_version_id }}` · Created {{ formatDateTime(application.created_at) }}
+                Resume {{ resumeFileName }} · Created {{ formatDateTime(application.created_at) }}
               </p>
               <p class="application-drawer__helper">
                 {{ application.submission.submitted_at ? `Submitted ${formatDateTime(application.submission.submitted_at)}` : "Submission not recorded yet." }}
@@ -499,6 +504,7 @@ async function handleNoteSave(): Promise<void> {
   margin: 0;
   color: var(--color-text-muted);
   line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 .application-drawer__task-actions {

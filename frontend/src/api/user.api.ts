@@ -539,6 +539,20 @@ export function updateUserRecruiterDraft(
   });
 }
 
+export function importUserRecruiterMessages(items: Array<{
+  sender_email: string;
+  sender_name?: string;
+  subject: string;
+  body_text: string;
+  received_at?: string;
+  source?: string;
+}>): Promise<{ items: RecruiterMessage[] }> {
+  return requestJson<{ items: RecruiterMessage[] }>("/api/auth/me/recruiter/messages/import", {
+    method: "POST",
+    body: JSON.stringify({ items }),
+  });
+}
+
 export function fetchUserRecruiterProviderStatuses(): Promise<{ items: EmailProviderStatus[] }> {
   return requestJson<{ items: EmailProviderStatus[] }>("/api/auth/me/recruiter/providers/status");
 }

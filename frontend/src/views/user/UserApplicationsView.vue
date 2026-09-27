@@ -315,7 +315,7 @@ onMounted(load);
             </div>
             <div class="application-card__meta">
               <span class="application-card__meta-label">Applied</span>
-              <strong>{{ formatDate(item.applied_at) }}</strong>
+              <strong>{{ item.applied_at ? formatDate(item.applied_at) : "Not yet" }}</strong>
             </div>
           </div>
 
@@ -476,6 +476,14 @@ onMounted(load);
 .application-card__actions {
   justify-content: space-between;
   align-items: flex-start;
+  flex-wrap: wrap;
+  padding: 0 var(--card-padding) var(--card-padding);
+}
+
+/* Custom header/footer slots bypass AppCard's own padding. */
+.application-card__header {
+  padding: var(--card-padding) var(--card-padding) 0;
+  flex-wrap: wrap;
 }
 
 .application-card__identity {

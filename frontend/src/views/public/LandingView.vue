@@ -60,7 +60,7 @@ const highlights = [
 
         <AppCard class="landing__signal">
           <template #header>
-            <div>
+            <div class="landing__signal-header">
               <p class="eyebrow">Live signal</p>
               <h2 class="type-heading">What the product does every few minutes</h2>
             </div>
@@ -250,5 +250,10 @@ const highlights = [
     flex-direction: column;
     align-items: flex-start;
   }
+}
+
+/* Custom header slots bypass AppCard's own padding. */
+.landing__signal-header {
+  padding: var(--card-padding) var(--card-padding) 0;
 }
 </style>

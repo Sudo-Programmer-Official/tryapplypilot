@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { RouterLink } from "vue-router";
 
 import AppCard from "../ui/AppCard.vue";
 import AppProgress from "../ui/AppProgress.vue";
@@ -11,6 +12,25 @@ const props = defineProps<{
 }>();
 
 const completedSteps = computed(() => props.steps.filter((step) => step.completed).length);
+
+// Tell new users exactly what finishes each step and take them there.
+const stepGuidance: Record<string, { to: string; action: string; hint: string }> = {
+  resume_uploaded: {
+    to: "/user/resumes",
+    action: "Upload resume",
+    hint: "Your resume powers matching and interview prep.",
+  },
+  preferences_set: {
+    to: "/user/preferences",
+    action: "Set preferences",
+    hint: "Add target roles and pick at least one company under Company priorities.",
+  },
+  telegram_connected: {
+    to: "/user/profile",
+    action: "Connect Telegram",
+    hint: "Get instant alerts for high-match jobs.",
+  },
+};
 </script>
 
 <template>
@@ -32,6 +52,16 @@ const completedSteps = computed(() => props.steps.filter((step) => step.complete
           <span class="setup-progress__copy">
             <span class="setup-progress__step-title">{{ step.label }}</span>
             <span class="setup-progress__step-state">{{ step.completed ? "Complete" : "Pending" }}</span>
+            <span v-if="!step.completed && stepGuidance[step.id]" class="setup-progress__hint">
+              {{ stepGuidance[step.id].hint }}
+            </span>
+            <RouterLink
+              v-if="!step.completed && stepGuidance[step.id]"
+              class="setup-progress__action"
+              :to="stepGuidance[step.id].to"
+            >
+              {{ stepGuidance[step.id].action }} →
+            </RouterLink>
           </span>
         </li>
       </ul>
@@ -166,6 +196,23 @@ const completedSteps = computed(() => props.steps.filter((step) => step.complete
   font-size: 1.05rem;
   font-weight: 600;
   line-height: 1.35;
+}
+
+.setup-progress__hint {
+  color: var(--color-text-muted);
+  font-size: var(--type-small);
+  line-height: 1.45;
+}
+
+.setup-progress__action {
+  justify-self: start;
+  color: var(--color-primary);
+  font-size: var(--type-small);
+  font-weight: 600;
+}
+
+.setup-progress__action:hover {
+  text-decoration: underline;
 }
 
 .setup-progress__step-state {

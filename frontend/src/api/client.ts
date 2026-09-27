@@ -86,11 +86,17 @@ async function refreshAuthSession(): Promise<boolean> {
   if (!refreshToken) {
     return false;
   }
-  const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh_token: refreshToken }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+  } catch {
+    // Network failure: keep the session so the user is not logged out while offline.
+    return false;
+  }
   if (!response.ok) {
     clearAuthSession();
     return false;

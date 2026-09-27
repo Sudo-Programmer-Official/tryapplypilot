@@ -51,11 +51,16 @@ const showLabels = computed(() => props.expanded);
     </nav>
 
     <div class="app-sidebar__footer">
-      <div class="app-sidebar__status">
-        <strong v-if="showLabels">{{ footerTitle }}</strong>
-        <span v-if="showLabels">{{ footerBody }}</span>
+      <div v-if="showLabels" class="app-sidebar__status">
+        <strong>{{ footerTitle }}</strong>
+        <span>{{ footerBody }}</span>
       </div>
-      <button class="app-sidebar__logout" @click="$emit('logout')">
+      <button
+        class="app-sidebar__logout"
+        :aria-label="showLabels ? undefined : 'Logout'"
+        :title="showLabels ? undefined : 'Logout'"
+        @click="$emit('logout')"
+      >
         <LogOut />
         <span v-if="showLabels">Logout</span>
       </button>

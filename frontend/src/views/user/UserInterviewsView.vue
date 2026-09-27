@@ -94,7 +94,8 @@ const createInterviewRound = ref("Round 1");
 const createInterviewStatus = ref("planned");
 const createScheduledStart = ref("");
 const createScheduledEnd = ref("");
-const createTimezone = ref("America/Denver");
+const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+const createTimezone = ref(browserTimezone);
 const createMeetingUrl = ref("");
 const createRecruiterName = ref("");
 const createRecruiterEmail = ref("");
@@ -107,7 +108,7 @@ const detailInterviewStatus = ref("planned");
 const detailPreparationStatus = ref("not_started");
 const detailScheduledStart = ref("");
 const detailScheduledEnd = ref("");
-const detailTimezone = ref("America/Denver");
+const detailTimezone = ref(browserTimezone);
 const detailMeetingUrl = ref("");
 const detailRecruiterName = ref("");
 const detailRecruiterEmail = ref("");
@@ -600,7 +601,7 @@ function resetCreateForm(): void {
   createInterviewStatus.value = "planned";
   createScheduledStart.value = "";
   createScheduledEnd.value = "";
-  createTimezone.value = "America/Denver";
+  createTimezone.value = browserTimezone;
   createMeetingUrl.value = "";
   createRecruiterName.value = "";
   createRecruiterEmail.value = "";
@@ -616,7 +617,7 @@ function syncDetailForm(interview: InterviewRecord | null): void {
     detailPreparationStatus.value = "not_started";
     detailScheduledStart.value = "";
     detailScheduledEnd.value = "";
-    detailTimezone.value = "America/Denver";
+    detailTimezone.value = browserTimezone;
     detailMeetingUrl.value = "";
     detailRecruiterName.value = "";
     detailRecruiterEmail.value = "";
@@ -1250,10 +1251,8 @@ onMounted(() => {
               <AppSelect v-model="createInterviewStatus" label="Status" :options="interviewStatusOptions" />
             </AppGrid>
             <AppInput v-model="createInterviewRound" label="Round" placeholder="Round 1" />
-            <AppGrid columns="2" gap="content">
-              <AppInput v-model="createScheduledStart" label="Start" type="datetime-local" />
-              <AppInput v-model="createScheduledEnd" label="End" type="datetime-local" />
-            </AppGrid>
+            <AppInput v-model="createScheduledStart" label="Start" type="datetime-local" />
+            <AppInput v-model="createScheduledEnd" label="End" type="datetime-local" />
             <AppInput v-model="createTimezone" label="Timezone" placeholder="America/Denver" />
             <AppInput v-model="createMeetingUrl" label="Meeting URL" placeholder="https://meet.example.com/interview" />
             <AppGrid columns="2" gap="content">

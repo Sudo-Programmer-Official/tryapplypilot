@@ -19,7 +19,12 @@ const active = computed(() => route.path === props.item.to);
 
 <template>
   <AppTooltip :text="item.label" :disabled="!collapsed">
-    <RouterLink class="sidebar-item" :class="{ 'sidebar-item--active': active }" :to="item.to">
+    <RouterLink
+      class="sidebar-item"
+      :class="{ 'sidebar-item--active': active }"
+      :to="item.to"
+      :aria-label="collapsed ? item.label : undefined"
+    >
       <component :is="icon" />
       <span v-if="!collapsed" class="sidebar-item__label">{{ item.label }}</span>
       <AppBadge v-if="item.badge && !collapsed" tone="info" size="sm">{{ item.badge }}</AppBadge>

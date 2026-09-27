@@ -174,7 +174,15 @@ async function loadCompanies(): Promise<void> {
 
 async function saveUserPreferences(): Promise<void> {
   await persistPreferences(auth.setUser);
-  pushToast("Preferences saved", "Your matching profile and alert rules will be used on the next poll cycle.", "success");
+  if (draft.value.preferred_companies.length === 0) {
+    pushToast(
+      "Pick at least one company",
+      "Preferences were saved, but jobs are only matched from companies you set above Hidden under Company priorities.",
+      "info",
+    );
+    return;
+  }
+  pushToast("Preferences saved", "Your job matches were refreshed with these preferences.", "success");
 }
 
 onMounted(loadCompanies);
@@ -381,7 +389,7 @@ onMounted(loadCompanies);
 
     <PageSection>
       <AppGrid columns="2" class="preferences-grid">
-        <AppCard class="preferences-panel" title="Company priorities" subtitle="Rank companies explicitly instead of treating every selection the same. Hidden companies stay out of your personalized queue.">
+        <AppCard class="preferences-panel" title="Company priorities" subtitle="Jobs are only matched from companies you set above Hidden. Choose at least one, then rank your favourites as Dream or High Priority.">
           <div v-if="companiesLoading" class="company-priority-empty">Loading companies…</div>
           <div v-else class="company-priority-list">
             <div v-for="company in prioritizedCompanies" :key="company.id" class="company-priority-row">

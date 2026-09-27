@@ -53,9 +53,9 @@ defineEmits<{
         @update:model-value="$emit('update:freshness', $event === 'all' ? 'all' : Number($event) || 'all')"
       />
       <AppInput
-        :model-value="minScore"
+        :model-value="minScore || ''"
         type="number"
-        placeholder="Match >= 90"
+        placeholder="Min match %"
         :min="0"
         :max="100"
         @update:model-value="$emit('update:minScore', Number($event) || 0)"

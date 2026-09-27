@@ -14,6 +14,7 @@ import {
   fetchUserRecruiterThreadSummary,
   fetchUserRecruiterThreads,
   generateUserRecruiterDraft,
+  importUserRecruiterMessages,
   startUserRecruiterGmailConnect,
   syncUserRecruiterProvider,
   updateUserRecruiterDraft,
@@ -29,6 +30,7 @@ import AppEmptyState from "../../components/ui/AppEmptyState.vue";
 import AppInput from "../../components/ui/AppInput.vue";
 import AppSelect from "../../components/ui/AppSelect.vue";
 import AppTextArea from "../../components/ui/AppTextArea.vue";
+import { useToast } from "../../composables/useToast";
 import type {
   CommunicationDraft,
   CommunicationInsightSummary,
@@ -41,6 +43,7 @@ import type {
 import { companyMarkStyle, formatDate, formatDateTime, getInitials } from "../../utils/format";
 
 const route = useRoute();
+const { pushToast } = useToast();
 const router = useRouter();
 
 const loading = ref(true);
@@ -53,6 +56,15 @@ const savingDraft = ref(false);
 
 const workspaceError = ref<string | null>(null);
 const providerError = ref<string | null>(null);
+const importSender = ref("");
+const importSenderName = ref("");
+const importSubject = ref("");
+const importBody = ref("");
+const importingMessage = ref(false);
+const importError = ref<string | null>(null);
+const canImportMessage = computed(
+  () => importSender.value.includes("@") && importBody.value.trim().length > 0 && !importingMessage.value,
+);
 const detailError = ref<string | null>(null);
 const draftError = ref<string | null>(null);
 
@@ -388,6 +400,40 @@ async function completeGmailOAuthFromQuery(): Promise<void> {
   }
 }
 
+async function importRecruiterEmail(): Promise<void> {
+  importingMessage.value = true;
+  importError.value = null;
+  try {
+    const payload = await importUserRecruiterMessages([
+      {
+        sender_email: importSender.value.trim(),
+        sender_name: importSenderName.value.trim(),
+        subject: importSubject.value.trim(),
+        body_text: importBody.value.trim(),
+        received_at: new Date().toISOString(),
+        source: "manual_import",
+      },
+    ]);
+    const linked = payload.items.some((item) => Boolean(item.application_id));
+    pushToast(
+      "Recruiter email added",
+      linked
+        ? "It was linked to the matching application."
+        : "No application matched yet. Add the recruiter's email on the application to link it.",
+      "success",
+    );
+    importSender.value = "";
+    importSenderName.value = "";
+    importSubject.value = "";
+    importBody.value = "";
+    await loadWorkspace();
+  } catch (err) {
+    importError.value = err instanceof Error ? err.message : "Failed to add the recruiter email.";
+  } finally {
+    importingMessage.value = false;
+  }
+}
+
 async function disconnectGmail(): Promise<void> {
   disconnectingProvider.value = true;
   workspaceError.value = null;
@@ -581,6 +627,28 @@ onMounted(async () => {
           <span>{{ humanize(latestSyncRun.run_status) }} · {{ latestSyncRun.provider }} · {{ formatDateTime(latestSyncRun.started_at) }}</span>
           <span>Imported {{ latestSyncRun.imported_count }}, duplicates {{ latestSyncRun.duplicate_count }}, errors {{ latestSyncRun.error_count }}</span>
         </div>
+      </AppCard>
+    </PageSection>
+
+    <PageSection>
+      <AppCard
+        title="Add a recruiter email"
+        subtitle="No Gmail? Paste a recruiter's email here. It is linked to the matching application by the sender's address."
+      >
+        <form class="recruiter-import" @submit.prevent="importRecruiterEmail">
+          <div class="recruiter-import__row">
+            <AppInput v-model="importSender" label="From (email)" placeholder="recruiter@company.com" type="email" />
+            <AppInput v-model="importSenderName" label="From (name)" placeholder="Avery Chen" />
+          </div>
+          <AppInput v-model="importSubject" label="Subject" placeholder="Next steps for your application" />
+          <AppTextArea v-model="importBody" label="Message" placeholder="Paste the email body" :rows="5" />
+          <div v-if="importError" class="recruiter-inline-error">{{ importError }}</div>
+          <div>
+            <AppButton type="submit" :disabled="!canImportMessage">
+              {{ importingMessage ? "Adding..." : "Add email" }}
+            </AppButton>
+          </div>
+        </form>
       </AppCard>
     </PageSection>
 
@@ -837,6 +905,17 @@ onMounted(async () => {
   margin: 0;
   color: var(--color-text-muted);
   line-height: 1.6;
+}
+
+.recruiter-import {
+  display: grid;
+  gap: var(--form-row-gap);
+}
+
+.recruiter-import__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: var(--form-row-gap);
 }
 
 .recruiter-workspace {
