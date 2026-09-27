@@ -70,10 +70,15 @@
   --color-border: rgba(27, 41, 71, 0.1);
   --color-border-strong: rgba(27, 41, 71, 0.18);
   --color-text: #0f1d3a;
-  --color-text-muted: #66728d;
+  --color-text-muted: #5d6882;
   --color-primary: #2563ff;
   --color-primary-hover: #184edd;
   --color-primary-soft: rgba(37, 99, 255, 0.12);
+  /* Filled backgrounds behind white text, and text on soft tints (both WCAG AA). */
+  --color-primary-strong: #2563ff;
+  --color-primary-strong-hover: #184edd;
+  --color-primary-text: #1d4ed8;
+  --color-success-text: #137a3a;
   --color-success: #22b35b;
   --color-success-soft: rgba(34, 179, 91, 0.14);
   --color-warning: #f5a524;

@@ -34,7 +34,7 @@ const router = createRouter({
     return { top: 0 };
   },
   routes: [
-    { path: "/", name: "landing", component: LandingView, meta: { title: "Never miss a job" } },
+    { path: "/", name: "landing", component: LandingView, meta: { title: "AI co-pilot for your job search" } },
     { path: "/auth", redirect: "/auth/login" },
     {
       path: "/auth/login",
