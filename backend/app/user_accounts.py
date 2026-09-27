@@ -6,12 +6,16 @@ from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
 from asyncpg import Record
+import jwt
 
 from app.auth import hash_password, hash_refresh_token, issue_auth_tokens, onboarding_status_for_user, verify_password
 from app.config import AppSettings, get_settings
 from app.db.client import connection
 from app.domain import AuthTokens, UserAccount, UserRole
 from app.job_metadata import normalize_supported_country
+from app.logging_utils import get_logger
+
+logger = get_logger(__name__)
 
 
 def _json_object(value: object) -> dict[str, object]:
@@ -360,7 +364,10 @@ async def rotate_refresh_token(
     resolved_settings = settings or get_settings()
     if resolved_settings.radar.mode == "seed":
         return None, None
-    payload = decode_token(raw_refresh_token, expected_type="refresh", settings=resolved_settings)
+    try:
+        payload = decode_token(raw_refresh_token, expected_type="refresh", settings=resolved_settings)
+    except jwt.PyJWTError:
+        return None, None
     refresh_token_id = str(payload["jti"])
     token_hash = hash_refresh_token(raw_refresh_token)
     async with connection() as conn:
@@ -394,7 +401,11 @@ async def revoke_refresh_token(raw_refresh_token: str, settings: AppSettings | N
     resolved_settings = settings or get_settings()
     if resolved_settings.radar.mode == "seed":
         return
-    payload = decode_token(raw_refresh_token, expected_type="refresh", settings=resolved_settings)
+    try:
+        payload = decode_token(raw_refresh_token, expected_type="refresh", settings=resolved_settings)
+    except jwt.PyJWTError:
+        # An expired or foreign token has no live session to revoke; logout still succeeds.
+        return
     await ensure_super_admin(resolved_settings)
     async with connection() as conn:
         await conn.execute(
@@ -449,6 +460,20 @@ async def set_user_telegram_chat(
     return _row_to_user(row)
 
 
+async def _sync_profile_to_knowledge_platform(user: UserAccount, settings: AppSettings) -> None:
+    # The profile row is already committed; a knowledge-platform failure must not turn a
+    # successful save into an error. The next profile save re-syncs the snapshot.
+    from app.knowledge_platform import build_knowledge_platform_service, sync_profile_snapshot_to_knowledge_platform
+
+    try:
+        await sync_profile_snapshot_to_knowledge_platform(
+            service=build_knowledge_platform_service(settings),
+            user=user,
+        )
+    except Exception:
+        logger.exception("Knowledge platform profile sync failed for user %s", user.id)
+
+
 async def update_user_profile_fields(
     user_id: str,
     profile_updates: dict[str, object],
@@ -478,7 +503,9 @@ async def update_user_profile_fields(
         )
     if row is None:
         return None
-    return _row_to_user(row)
+    updated = _row_to_user(row)
+    await _sync_profile_to_knowledge_platform(updated, resolved_settings)
+    return updated
 
 
 async def update_user_profile(
@@ -524,7 +551,9 @@ async def update_user_profile(
         )
     if row is None:
         return None
-    return _row_to_user(row)
+    updated = _row_to_user(row)
+    await _sync_profile_to_knowledge_platform(updated, resolved_settings)
+    return updated
 
 
 async def update_user_preferences(

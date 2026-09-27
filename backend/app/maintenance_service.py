@@ -240,6 +240,12 @@ class MaintenanceService:
                           AND NOT EXISTS (
                               SELECT 1 FROM user_alerts ua WHERE ua.job_id = j.job_id
                           )
+                          AND NOT EXISTS (
+                              SELECT 1 FROM resume_versions rv WHERE rv.job_id = j.job_id
+                          )
+                          AND NOT EXISTS (
+                              SELECT 1 FROM applications ap WHERE ap.job_id = j.job_id
+                          )
                         ORDER BY COALESCE(j.archived_at, j.closed_at, j.last_seen_at) ASC
                         LIMIT $2
                     ),

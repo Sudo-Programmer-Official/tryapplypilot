@@ -83,7 +83,7 @@ defineEmits<{
   height: 3.25rem;
   border-radius: 1rem;
   font-weight: 700;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  box-shadow: inset 0 1px 0 var(--color-inset-highlight);
 }
 
 .job-card :deep(.match-indicator) {

@@ -237,19 +237,57 @@ Only after local stability:
 
 `tryapplypilot.com` is the candidate staging target once the local loop is dependable.
 
-## Version boundary after Phase 1
+## Current sequencing
 
-Treat the current Phase 1 scope as Version 1.0.
+`Phase 1`, `Phase 2A`, `Phase 2B`, `Phase 3`, `Phase 4`, and `Phase 5` Recruiter Intelligence are now in place.
 
-Do not start new major features until the current product is deployed and used in production long enough to validate the daily workflow.
+Applications are now the canonical workflow object, and recruiter communication is attached to that workflow instead of creating a parallel system. Provider status, recruiter thread review, deterministic workflow suggestions, and versioned communication drafts now live in the same workspace.
 
-The Version 1 boundary and post-launch roadmap are documented in [V2 planning notes](v2.md).
+`Phase 6: Interview Intelligence` is now active with the canonical `Interview Workspace`, `Personalized Preparation`, `Question Generation`, and `Story Builder` slices in place.
+
+Recommended `Phase 6` sprint sequence:
+
+1. Interview Workspace
+   Implemented: canonical interview records, schedule metadata, preparation checklist state, timeline and audit history, dedicated APIs, upcoming interview queries, and a minimum user workspace.
+2. Personalized Preparation
+   Implemented: versioned preparation plans, deterministic focus-area detection, knowledge-platform evidence retrieval, resume-highlight selection from the submitted version metadata, generated questions-to-ask, risk analysis, and dedicated generate/update/regenerate APIs plus workspace UI.
+3. Question Generation
+   Implemented: versioned interview question sets, deterministic category coverage, grounded resume-claim deep dives, evidence-backed follow-up prompts, question-set APIs, and Question Bank review UI.
+4. Story Builder
+   Implemented: canonical interview stories, deterministic generation from approved evidence, question-to-story coverage mapping, profile-evolution follow-up prompts, story quality scoring, version history, and Story Library review APIs plus workspace UI.
+5. Mock Interview
+6. Feedback Engine
+
+Interview preparation should be grounded in:
+
+- submitted resume version
+- job description
+- application package
+- recruiter communication
+- company context
+- approved evidence from the knowledge platform
+
+Parallel roadmap tracks should continue without changing the primary phase order:
+
+- `Market Intelligence`: public hiring signals, trend detection, emerging skills, recommendation freshness
+- `Platform Intelligence`: evaluation, prompt versioning, quality metrics, cost and latency monitoring, explainability, and AI safety guardrails
 
 ## Post-launch versions
 
-Only after Phase 1 is stable and used in production:
-
 1. `Version 1.5`: Resume Intelligence
-2. `Version 2.0`: Application Copilot
-3. `Version 3.0`: Networking Intelligence
-4. `Version 4.0`: Career Intelligence Platform
+2. `Version 2.0`: Application Intelligence
+3. `Version 3.0`: Recruiter Intelligence
+4. `Version 4.0`: Interview Intelligence
+5. `Version 5.0`: Career Intelligence
+6. `Version 6.0` future direction: Career Agent
+
+`Phase 8`: `Career Agent` is the long-range convergence point for the roadmap.
+
+It should continuously combine:
+
+- user intelligence
+- market intelligence
+- workflow intelligence
+- interview intelligence
+
+The result is an always-on system that can find roles, improve the profile, watch recruiter communication, track hiring trends, support interview preparation, and stay useful after the user lands a job.

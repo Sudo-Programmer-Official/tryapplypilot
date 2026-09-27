@@ -174,7 +174,15 @@ async function loadCompanies(): Promise<void> {
 
 async function saveUserPreferences(): Promise<void> {
   await persistPreferences(auth.setUser);
-  pushToast("Preferences saved", "Your matching profile and alert rules will be used on the next poll cycle.", "success");
+  if (draft.value.preferred_companies.length === 0) {
+    pushToast(
+      "Pick at least one company",
+      "Preferences were saved, but jobs are only matched from companies you set above Hidden under Company priorities.",
+      "info",
+    );
+    return;
+  }
+  pushToast("Preferences saved", "Your job matches were refreshed with these preferences.", "success");
 }
 
 onMounted(loadCompanies);
@@ -381,7 +389,7 @@ onMounted(loadCompanies);
 
     <PageSection>
       <AppGrid columns="2" class="preferences-grid">
-        <AppCard class="preferences-panel" title="Company priorities" subtitle="Rank companies explicitly instead of treating every selection the same. Hidden companies stay out of your personalized queue.">
+        <AppCard class="preferences-panel" title="Company priorities" subtitle="Jobs are only matched from companies you set above Hidden. Choose at least one, then rank your favourites as Dream or High Priority.">
           <div v-if="companiesLoading" class="company-priority-empty">Loading companies…</div>
           <div v-else class="company-priority-list">
             <div v-for="company in prioritizedCompanies" :key="company.id" class="company-priority-row">
@@ -497,7 +505,7 @@ onMounted(loadCompanies);
   min-height: 3.5rem;
   border-radius: 1.125rem;
   padding-inline: 1.125rem;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 var(--color-inset-highlight);
 }
 
 .preferences-panel :deep(.app-textarea) {
@@ -514,16 +522,16 @@ onMounted(loadCompanies);
 .preferences-panel :deep(.app-input:focus),
 .preferences-panel :deep(.app-select:focus),
 .preferences-panel :deep(.app-textarea:focus) {
-  background: rgba(255, 255, 255, 0.98);
+  background: var(--color-field-focus);
 }
 
 .preference-cluster {
   display: grid;
   gap: var(--space-4);
   padding: var(--space-5);
-  border: 1px solid rgba(15, 29, 58, 0.08);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(246, 249, 253, 0.96));
+  background: var(--gradient-surface-soft);
   box-shadow: 0 12px 26px rgba(15, 29, 58, 0.04);
 }
 
@@ -547,9 +555,9 @@ onMounted(loadCompanies);
   align-items: flex-start;
   gap: var(--space-3);
   padding: var(--space-4);
-  border: 1px solid rgba(15, 29, 58, 0.08);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.78);
+  background: var(--color-surface-glass);
   transition:
     border-color var(--transition-fast),
     background var(--transition-fast),
@@ -586,9 +594,9 @@ onMounted(loadCompanies);
   grid-template-columns: minmax(0, 1fr) 140px auto;
   align-items: end;
   padding: var(--space-5);
-  border: 1px solid rgba(15, 29, 58, 0.08);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(246, 249, 253, 0.96));
+  background: var(--gradient-surface-soft);
   box-shadow: 0 12px 26px rgba(15, 29, 58, 0.04);
 }
 
@@ -610,9 +618,9 @@ onMounted(loadCompanies);
   gap: var(--space-4);
   align-items: center;
   padding: var(--space-5);
-  border: 1px solid rgba(15, 29, 58, 0.08);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(246, 249, 253, 0.96));
+  background: var(--gradient-surface-soft);
   box-shadow: 0 12px 26px rgba(15, 29, 58, 0.04);
 }
 
@@ -631,9 +639,9 @@ onMounted(loadCompanies);
 
 .company-priority-empty {
   padding: var(--space-5);
-  border: 1px dashed rgba(15, 29, 58, 0.12);
+  border: 1px dashed var(--color-border);
   border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.7);
+  background: var(--color-surface-glass);
 }
 
 @media (max-width: 1023px) {

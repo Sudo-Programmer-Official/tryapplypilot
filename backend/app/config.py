@@ -173,6 +173,27 @@ class OpenAISettings:
 
 
 @dataclass(frozen=True)
+class GmailSettings:
+    client_id: str | None
+    client_secret: str | None
+    redirect_uri: str | None
+    auth_base_url: str
+    token_url: str
+    revoke_url: str
+    api_base_url: str
+    scopes: tuple[str, ...]
+    timeout_seconds: int
+    full_sync_max_pages: int
+    page_size: int
+    ca_bundle_path: Path | None
+    skip_ssl_verify: bool
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.client_id and self.client_secret and self.redirect_uri)
+
+
+@dataclass(frozen=True)
 class AuthSettings:
     jwt_secret: str
     jwt_issuer: str
@@ -181,6 +202,7 @@ class AuthSettings:
     super_admin_email: str | None
     super_admin_password: str | None
     super_admin_name: str
+    provider_token_encryption_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -238,6 +260,7 @@ class AppSettings:
     connectors: ConnectorSettings
     telegram: TelegramSettings
     openai: OpenAISettings
+    gmail: GmailSettings
     auth: AuthSettings
     lifecycle: JobLifecycleSettings
     maintenance: MaintenanceSettings
@@ -417,6 +440,21 @@ def get_settings() -> AppSettings:
             ca_bundle_path=_read_path("OPENAI_CA_BUNDLE_PATH"),
             skip_ssl_verify=_read_bool("OPENAI_SKIP_SSL_VERIFY", False),
         ),
+        gmail=GmailSettings(
+            client_id=os.getenv("GMAIL_OAUTH_CLIENT_ID"),
+            client_secret=os.getenv("GMAIL_OAUTH_CLIENT_SECRET"),
+            redirect_uri=os.getenv("GMAIL_OAUTH_REDIRECT_URI"),
+            auth_base_url=os.getenv("GMAIL_OAUTH_AUTH_BASE_URL", "https://accounts.google.com/o/oauth2/v2/auth"),
+            token_url=os.getenv("GMAIL_OAUTH_TOKEN_URL", "https://oauth2.googleapis.com/token"),
+            revoke_url=os.getenv("GMAIL_OAUTH_REVOKE_URL", "https://oauth2.googleapis.com/revoke"),
+            api_base_url=os.getenv("GMAIL_API_BASE_URL", "https://gmail.googleapis.com/gmail/v1"),
+            scopes=_read_csv("GMAIL_OAUTH_SCOPES", ("https://www.googleapis.com/auth/gmail.readonly",)),
+            timeout_seconds=_read_int("GMAIL_API_TIMEOUT_SECONDS", _read_int("JOB_RADAR_CONNECTOR_TIMEOUT_SECONDS", 20)),
+            full_sync_max_pages=_read_int("GMAIL_FULL_SYNC_MAX_PAGES", 10),
+            page_size=_read_int("GMAIL_PAGE_SIZE", 100),
+            ca_bundle_path=_read_path("GMAIL_CA_BUNDLE_PATH"),
+            skip_ssl_verify=_read_bool("GMAIL_SKIP_SSL_VERIFY", False),
+        ),
         auth=AuthSettings(
             jwt_secret=os.getenv("JOB_RADAR_JWT_SECRET", "dev-only-change-me"),
             jwt_issuer=os.getenv("JOB_RADAR_JWT_ISSUER", "ai-job-radar"),
@@ -425,6 +463,7 @@ def get_settings() -> AppSettings:
             super_admin_email=os.getenv("JOB_RADAR_SUPER_ADMIN_EMAIL"),
             super_admin_password=os.getenv("JOB_RADAR_SUPER_ADMIN_PASSWORD"),
             super_admin_name=os.getenv("JOB_RADAR_SUPER_ADMIN_NAME", "Super Admin"),
+            provider_token_encryption_key=os.getenv("EMAIL_TOKEN_ENCRYPTION_KEY"),
         ),
         lifecycle=JobLifecycleSettings(
             stale_after_missed_syncs=_read_int("JOB_RADAR_JOB_STALE_AFTER_MISSED_SYNCS", 2),

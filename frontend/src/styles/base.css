@@ -41,6 +41,31 @@ button {
   color: inherit;
 }
 
+input,
+select,
+textarea {
+  color: var(--color-text);
+  caret-color: var(--color-primary);
+}
+
+/* Browser autofill paints its own light background; keep typed text readable in both themes. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: var(--color-text);
+  box-shadow: 0 0 0 1000px var(--color-surface-elevated) inset;
+  transition: background-color 9999s ease-out 0s;
+}
+
+/* Native dropdown lists don't always follow color-scheme (e.g. Windows). */
+option,
+optgroup {
+  background-color: var(--color-surface-elevated);
+  color: var(--color-text);
+}
+
 a {
   color: inherit;
   text-decoration: none;

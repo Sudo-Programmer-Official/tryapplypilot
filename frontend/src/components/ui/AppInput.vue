@@ -51,6 +51,7 @@ defineEmits<{
 
 <style scoped>
 .app-field {
+  min-width: 0;
   display: grid;
   gap: var(--field-gap);
 }
@@ -67,6 +68,8 @@ defineEmits<{
 }
 
 .app-input {
+  width: 100%;
+  min-width: 0;
   min-height: 3.25rem;
   padding: var(--input-padding-y) var(--input-padding-x);
   border: 1px solid var(--color-border);

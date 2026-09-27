@@ -244,9 +244,9 @@ onMounted(load);
   justify-content: space-between;
   gap: var(--space-4);
   padding: var(--space-5) var(--space-5) var(--space-5) var(--space-6);
-  border: 1px solid rgba(15, 29, 58, 0.08);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(246, 249, 253, 0.98));
+  background: var(--gradient-surface-soft);
   box-shadow: 0 14px 28px rgba(15, 29, 58, 0.05);
   transition:
     transform var(--transition-base),
@@ -289,21 +289,21 @@ onMounted(load);
 
 .notifications-table :deep(tbody td) {
   padding: var(--space-5) var(--space-4);
-  border-top: 1px solid rgba(15, 29, 58, 0.08);
-  border-bottom: 1px solid rgba(15, 29, 58, 0.08);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(246, 249, 253, 0.98));
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--gradient-surface-soft);
   vertical-align: middle;
 }
 
 .notifications-table :deep(tbody td:first-child) {
   padding-left: var(--space-5);
-  border-left: 1px solid rgba(15, 29, 58, 0.08);
+  border-left: 1px solid var(--color-border);
   border-radius: var(--radius-lg) 0 0 var(--radius-lg);
 }
 
 .notifications-table :deep(tbody td:last-child) {
   padding-right: var(--space-5);
-  border-right: 1px solid rgba(15, 29, 58, 0.08);
+  border-right: 1px solid var(--color-border);
   border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
 }
 

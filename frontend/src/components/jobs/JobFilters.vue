@@ -53,9 +53,9 @@ defineEmits<{
         @update:model-value="$emit('update:freshness', $event === 'all' ? 'all' : Number($event) || 'all')"
       />
       <AppInput
-        :model-value="minScore"
+        :model-value="minScore || ''"
         type="number"
-        placeholder="Match >= 90"
+        placeholder="Min match %"
         :min="0"
         :max="100"
         @update:model-value="$emit('update:minScore', Number($event) || 0)"
@@ -89,7 +89,7 @@ defineEmits<{
 .job-filters :deep(.app-select) {
   min-height: 3.35rem;
   border-radius: 1rem;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.68);
+  box-shadow: inset 0 1px 0 var(--color-inset-highlight);
 }
 
 .job-filters :deep(.app-input:hover),

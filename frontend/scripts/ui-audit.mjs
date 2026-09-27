@@ -12,6 +12,7 @@ const auditedRoutes = [
   },
   { label: "Dashboard", paths: ["/user/dashboard"], file: "src/views/user/UserDashboardView.vue" },
   { label: "Jobs", paths: ["/user/jobs"], file: "src/views/user/UserJobsView.vue" },
+  { label: "Applications", paths: ["/user/applications"], file: "src/views/user/UserApplicationsView.vue" },
   { label: "Preferences", paths: ["/user/preferences"], file: "src/views/user/UserPreferencesView.vue" },
   { label: "Profile", paths: ["/user/profile"], file: "src/views/user/UserProfileView.vue" },
   { label: "Resumes", paths: ["/user/resumes"], file: "src/views/user/UserResumesView.vue" },

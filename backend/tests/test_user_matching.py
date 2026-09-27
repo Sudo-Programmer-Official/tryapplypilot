@@ -115,6 +115,33 @@ class UserMatchingTests(unittest.TestCase):
         self.assertEqual(filter_reason_for_user(_job(company="Databricks", location="Seattle, WA"), user, settings), "company")
         self.assertEqual(filter_reason_for_user(_job(company="Microsoft", location="New York, NY"), user, settings), "location")
 
+    def test_work_arrangement_checkboxes_override_remote_preference_dropdown(self) -> None:
+        settings = get_settings()
+        user = _user(
+            locations=["Seattle"],
+            companies=["Stripe"],
+            roles=["Senior Software Engineer"],
+            preferences={"remote_preference": "mostly_remote", "work_arrangements": ["Remote", "Hybrid", "Onsite"]},
+        )
+        onsite_job = _job(company="Stripe", location="Seattle, WA", remote_policy="Onsite")
+        self.assertIsNone(filter_reason_for_user(onsite_job, user, settings))
+
+        dropdown_only = _user(
+            locations=["Seattle"],
+            companies=["Stripe"],
+            roles=["Senior Software Engineer"],
+            preferences={"remote_preference": "mostly_remote", "work_arrangements": []},
+        )
+        self.assertEqual(filter_reason_for_user(onsite_job, dropdown_only, settings), "work_arrangement")
+
+    def test_remote_location_variants_match_remote_jobs(self) -> None:
+        settings = get_settings()
+        user = _user(locations=["Remote (US)"], companies=["Coinbase"], roles=["Senior Software Engineer"])
+        remote_job = _job(company="Coinbase", location="Remote - USA", remote_policy="Remote")
+        self.assertIsNone(filter_reason_for_user(remote_job, user, settings))
+        onsite_job = _job(company="Coinbase", location="New York, NY", remote_policy="Onsite")
+        self.assertEqual(filter_reason_for_user(onsite_job, user, settings), "location")
+
     def test_filter_reason_for_user_respects_selected_country(self) -> None:
         settings = get_settings()
         user = _user(

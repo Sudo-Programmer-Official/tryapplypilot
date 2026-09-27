@@ -3,6 +3,9 @@ import type { SidebarItem } from "../types";
 export const userNavigation: SidebarItem[] = [
   { label: "Dashboard", to: "/user/dashboard", icon: "LayoutDashboard" },
   { label: "Jobs", to: "/user/jobs", icon: "BriefcaseBusiness" },
+  { label: "Applications", to: "/user/applications", icon: "Send" },
+  { label: "Interviews", to: "/user/interviews", icon: "CalendarDays" },
+  { label: "Recruiter", to: "/user/recruiter", icon: "Mail" },
   { label: "Notifications", to: "/user/notifications", icon: "Bell" },
   { label: "Resumes", to: "/user/resumes", icon: "FileText" },
   { label: "Companies", to: "/user/companies", icon: "Building2" },

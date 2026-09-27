@@ -16,6 +16,8 @@ const props = defineProps<{
 
 defineEmits<{
   (event: "toggle-save", jobId: string): void;
+  (event: "review-resume", jobId: string): void;
+  (event: "apply", jobId: string): void;
 }>();
 
 const freshnessTone = computed(() => {
@@ -82,7 +84,15 @@ const decisionLabel = computed(() => {
           <AppIconButton size="sm" :label="saved ? 'Remove saved job' : 'Save job'" @click="$emit('toggle-save', job.id)">
             <Bookmark :fill="saved ? 'currentColor' : 'none'" />
           </AppIconButton>
-          <AppButton size="sm" :href="job.apply_url" target="_blank" rel="noreferrer">
+          <AppButton
+            v-if="job.decision !== 'IGNORE'"
+            size="sm"
+            variant="secondary"
+            @click="$emit('review-resume', job.id)"
+          >
+            Review resume
+          </AppButton>
+          <AppButton size="sm" :href="job.apply_url" target="_blank" rel="noreferrer" @click="$emit('apply', job.id)">
             <span class="job-row__apply-link">
               Apply
               <ExternalLink />
@@ -122,7 +132,7 @@ const decisionLabel = computed(() => {
   border-radius: 1rem;
   font-weight: 700;
   flex-shrink: 0;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  box-shadow: inset 0 1px 0 var(--color-inset-highlight);
 }
 
 .job-row__copy {
@@ -189,7 +199,7 @@ const decisionLabel = computed(() => {
   min-width: 5.5rem;
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(34, 179, 91, 0.12), rgba(255, 255, 255, 0.96));
+  background: linear-gradient(180deg, rgba(34, 179, 91, 0.12), var(--color-surface-tint-end));
   border: 1px solid rgba(34, 179, 91, 0.14);
 }
 

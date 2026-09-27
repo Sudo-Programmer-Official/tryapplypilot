@@ -9,7 +9,7 @@ import AppBadge from "../../components/ui/AppBadge.vue";
 import AppButton from "../../components/ui/AppButton.vue";
 import AppCard from "../../components/ui/AppCard.vue";
 import AppEmptyState from "../../components/ui/AppEmptyState.vue";
-import { fetchUserResumes, uploadUserResume } from "../../api/resumes.api";
+import { deleteUserResume, fetchUserResumes, uploadUserResume } from "../../api/resumes.api";
 import { useAuth } from "../../composables/useAuth";
 import { useToast } from "../../composables/useToast";
 import type { ResumeAsset } from "../../types";
@@ -22,6 +22,8 @@ const resumes = ref<ResumeAsset[]>([]);
 const loading = ref(true);
 const uploading = ref(false);
 const error = ref<string | null>(null);
+const confirmingDeleteId = ref<string | null>(null);
+const deletingId = ref<string | null>(null);
 
 const uploadedLabel = computed(() => {
   if (uploading.value) {
@@ -63,6 +65,22 @@ async function handleFileChange(event: Event): Promise<void> {
   }
 }
 
+async function handleDelete(resume: ResumeAsset): Promise<void> {
+  deletingId.value = resume.id;
+  try {
+    const payload = await deleteUserResume(resume.id);
+    auth.setUser(payload.user);
+    resumes.value = resumes.value.filter((item) => item.id !== resume.id);
+    pushToast("Resume deleted", `${resume.display_name} was removed from your library.`, "success");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Delete failed.";
+    pushToast("Resume delete failed", message, "error");
+  } finally {
+    deletingId.value = null;
+    confirmingDeleteId.value = null;
+  }
+}
+
 onMounted(load);
 </script>
 
@@ -77,7 +95,7 @@ onMounted(load);
           <AppButton type="button" :disabled="uploading">
             {{ uploading ? "Uploading..." : "Upload resume" }}
           </AppButton>
-          <input type="file" accept=".pdf,.doc,.docx,.txt" :disabled="uploading" @change="handleFileChange" />
+          <input type="file" accept=".pdf,.docx,.txt,.md" :disabled="uploading" @change="handleFileChange" />
         </label>
       </template>
     </PageHeader>
@@ -121,6 +139,18 @@ onMounted(load);
           </div>
           <div class="resume-card__preview-shell">
             <p class="resume-card__preview">{{ resume.extracted_text_preview || "Text extraction is still running." }}</p>
+          </div>
+          <div class="resume-card__actions">
+            <template v-if="confirmingDeleteId === resume.id">
+              <span class="resume-card__confirm">Delete this resume?</span>
+              <AppButton size="sm" variant="danger" :disabled="deletingId === resume.id" @click="handleDelete(resume)">
+                {{ deletingId === resume.id ? "Deleting..." : "Delete" }}
+              </AppButton>
+              <AppButton size="sm" variant="ghost" :disabled="deletingId === resume.id" @click="confirmingDeleteId = null">
+                Cancel
+              </AppButton>
+            </template>
+            <AppButton v-else size="sm" variant="ghost" @click="confirmingDeleteId = resume.id">Delete</AppButton>
           </div>
         </AppCard>
       </AppGrid>
@@ -228,10 +258,10 @@ onMounted(load);
 
 .resume-card__preview-shell {
   padding: var(--space-5);
-  border: 1px solid rgba(15, 29, 58, 0.08);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(246, 249, 253, 0.98));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  background: var(--gradient-surface-soft);
+  box-shadow: inset 0 1px 0 var(--color-inset-highlight);
 }
 
 .resume-card__preview {
@@ -271,5 +301,19 @@ onMounted(load);
   .resume-card__preview-shell {
     padding: var(--space-4);
   }
+}
+
+.resume-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.resume-card__confirm {
+  margin-right: auto;
+  color: var(--color-text-muted);
+  font-size: var(--type-small);
 }
 </style>

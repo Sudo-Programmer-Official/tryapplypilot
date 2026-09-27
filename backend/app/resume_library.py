@@ -6,18 +6,21 @@ from io import BytesIO
 import json
 from pathlib import Path
 import re
-from typing import Iterable
+from typing import TYPE_CHECKING, Any, Iterable
 from uuid import uuid4
 from xml.etree import ElementTree
 from zipfile import ZipFile
 
-from fastapi import UploadFile
-from pypdf import PdfReader
-
 from app.config import AppSettings, get_settings
-from app.db.client import connection
 from app.domain import ResumeAsset, UserAccount
-from app.user_accounts import get_user_by_id, update_user_profile_fields
+from app.logging_utils import get_logger
+
+logger = get_logger(__name__)
+
+if TYPE_CHECKING:
+    from fastapi import UploadFile
+else:
+    UploadFile = Any
 
 _ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
 _SKILL_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -55,6 +58,21 @@ class ResumeExtraction:
     role_focus: str
 
 
+@dataclass(frozen=True)
+class ResumeDocument:
+    id: str
+    user_id: str
+    display_name: str
+    original_filename: str
+    storage_path: str
+    mime_type: str
+    file_size_bytes: int
+    extracted_text: str
+    extracted_skills: list[str]
+    role_focus: str
+    created_at: str | None = None
+
+
 def _storage_root() -> Path:
     return Path(__file__).resolve().parents[1] / "uploads" / "resumes"
 
@@ -65,6 +83,8 @@ def _safe_filename(filename: str) -> str:
 
 
 def _extract_pdf_text(data: bytes) -> str:
+    from pypdf import PdfReader
+
     reader = PdfReader(BytesIO(data))
     return "\n".join((page.extract_text() or "").strip() for page in reader.pages).strip()
 
@@ -128,6 +148,23 @@ def _profile_resume_entry(resume: ResumeAsset) -> dict[str, object]:
 
 
 def _row_to_resume(row) -> ResumeAsset:
+    document = _row_to_resume_document(row)
+    return ResumeAsset(
+        id=document.id,
+        user_id=document.user_id,
+        display_name=document.display_name,
+        original_filename=document.original_filename,
+        storage_path=document.storage_path,
+        mime_type=document.mime_type,
+        file_size_bytes=document.file_size_bytes,
+        extracted_text_preview=_preview(document.extracted_text),
+        extracted_skills=document.extracted_skills,
+        role_focus=document.role_focus,
+        created_at=document.created_at,
+    )
+
+
+def _row_to_resume_document(row) -> ResumeDocument:
     metadata = row["metadata"]
     if isinstance(metadata, str):
         metadata = json.loads(metadata)
@@ -136,7 +173,7 @@ def _row_to_resume(row) -> ResumeAsset:
     created_at = row["created_at"]
     if created_at is not None and created_at.tzinfo is None:
         created_at = created_at.replace(tzinfo=timezone.utc)
-    return ResumeAsset(
+    return ResumeDocument(
         id=str(row["resume_id"]),
         user_id=str(row["user_id"]),
         display_name=str(row["display_name"]),
@@ -144,7 +181,7 @@ def _row_to_resume(row) -> ResumeAsset:
         storage_path=str(row["storage_path"]),
         mime_type=str(row["mime_type"]),
         file_size_bytes=int(row["file_size_bytes"]),
-        extracted_text_preview=_preview(str(row["extracted_text"])),
+        extracted_text=str(row["extracted_text"]),
         extracted_skills=[str(item) for item in metadata.get("skills", [])],
         role_focus=str(metadata.get("role_focus", "Backend")),
         created_at=created_at.isoformat() if created_at is not None else None,
@@ -162,6 +199,8 @@ async def _persist_resume_file(user_id: str, original_filename: str, data: bytes
 
 
 async def list_user_resumes(user_id: str, settings: AppSettings | None = None) -> list[ResumeAsset]:
+    from app.db.client import connection
+
     resolved_settings = settings or get_settings()
     if resolved_settings.radar.mode == "seed":
         return []
@@ -178,12 +217,35 @@ async def list_user_resumes(user_id: str, settings: AppSettings | None = None) -
     return [_row_to_resume(row) for row in rows]
 
 
+async def list_user_resume_documents(user_id: str, settings: AppSettings | None = None) -> list[ResumeDocument]:
+    from app.db.client import connection
+
+    resolved_settings = settings or get_settings()
+    if resolved_settings.radar.mode == "seed":
+        return []
+    async with connection() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT *
+            FROM resumes
+            WHERE user_id = $1
+            ORDER BY created_at DESC
+            """,
+            user_id,
+        )
+    return [_row_to_resume_document(row) for row in rows]
+
+
 async def upload_resume_for_user(
     user_id: str,
     file: UploadFile,
     *,
     settings: AppSettings | None = None,
 ) -> tuple[ResumeAsset, UserAccount]:
+    from app.db.client import connection
+    from app.knowledge_platform import build_knowledge_platform_service, ingest_resume_into_knowledge_platform
+    from app.user_accounts import get_user_by_id, update_user_profile_fields
+
     resolved_settings = settings or get_settings()
     if resolved_settings.radar.mode == "seed":
         raise ResumeUploadError("Resume uploads are unavailable in seed mode.")
@@ -241,6 +303,27 @@ async def upload_resume_for_user(
     assert row is not None
     resume = _row_to_resume(row)
 
+    # The resume row is already committed. If knowledge ingestion fails, still report the
+    # upload as successful; otherwise users retry and end up with duplicate resumes.
+    knowledge_fields: dict[str, object] = {}
+    try:
+        ingestion_result = await ingest_resume_into_knowledge_platform(
+            service=build_knowledge_platform_service(resolved_settings),
+            user_id=user_id,
+            resume=resume,
+            extracted_text=extracted_text,
+            actor_user_id=user_id,
+        )
+    except Exception:
+        logger.exception("Knowledge ingestion failed for resume %s", resume.id)
+    else:
+        knowledge_fields = {
+            "knowledge_completeness": ingestion_result.completeness,
+            "knowledge_completeness_report": ingestion_result.completeness_report,
+            "knowledge_entity_counts": ingestion_result.entity_counts,
+            "knowledge_merge_summary": ingestion_result.merge_summary,
+        }
+
     existing_library = user.profile.get("resume_library", [])
     if not isinstance(existing_library, list):
         existing_library = []
@@ -256,9 +339,70 @@ async def upload_resume_for_user(
             "resume_uploaded": True,
             "resume_library": retained_entries[:10],
             "resume_skill_keywords": sorted({skill for entry in retained_entries if isinstance(entry, dict) for skill in entry.get("skills", [])}),
+            **knowledge_fields,
         },
         settings=resolved_settings,
     )
     if updated_user is None:
         raise ResumeUploadError("Failed to update user resume profile.")
     return resume, updated_user
+
+
+async def delete_resume_for_user(
+    user_id: str,
+    resume_id: str,
+    *,
+    settings: AppSettings | None = None,
+) -> UserAccount | None:
+    """Delete one of the user's resumes; returns the updated user, or None if not found.
+
+    Tailored resume versions keep their own copies (source_resume_id becomes NULL), and
+    knowledge facts already extracted from the resume are kept.
+    """
+    from app.db.client import connection
+    from app.user_accounts import update_user_profile_fields
+
+    resolved_settings = settings or get_settings()
+    if resolved_settings.radar.mode == "seed":
+        raise ResumeUploadError("Resume management is unavailable in seed mode.")
+    async with connection() as conn:
+        async with conn.transaction():
+            storage_path = await conn.fetchval(
+                """
+                DELETE FROM resumes
+                WHERE resume_id = $1 AND user_id = $2
+                RETURNING storage_path
+                """,
+                resume_id,
+                user_id,
+            )
+            if storage_path is None:
+                return None
+            rows = await conn.fetch(
+                """
+                SELECT *
+                FROM resumes
+                WHERE user_id = $1
+                ORDER BY created_at DESC
+                """,
+                user_id,
+            )
+    remaining = [_row_to_resume(row) for row in rows]
+
+    path = Path(str(storage_path)).resolve()
+    if path.is_relative_to(_storage_root().resolve()):
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("Could not remove resume file %s", path)
+
+    library = [_profile_resume_entry(resume) for resume in remaining[:10]]
+    return await update_user_profile_fields(
+        user_id,
+        {
+            "resume_uploaded": bool(remaining),
+            "resume_library": library,
+            "resume_skill_keywords": sorted({skill for entry in library for skill in entry["skills"]}),
+        },
+        settings=resolved_settings,
+    )

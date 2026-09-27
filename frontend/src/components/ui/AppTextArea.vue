@@ -32,6 +32,7 @@ defineEmits<{
 
 <style scoped>
 .app-field {
+  min-width: 0;
   display: grid;
   gap: var(--field-gap);
 }
@@ -48,6 +49,8 @@ defineEmits<{
 }
 
 .app-textarea {
+  width: 100%;
+  min-width: 0;
   width: 100%;
   min-height: 3.25rem;
   padding: var(--input-padding-y) var(--input-padding-x);

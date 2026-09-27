@@ -104,6 +104,32 @@ def create_telegram_connect_token(user: UserAccount, settings: AppSettings | Non
     )
 
 
+def create_email_provider_state_token(
+    user: UserAccount,
+    *,
+    provider: str,
+    scopes: list[str] | None = None,
+    metadata: dict[str, object] | None = None,
+    settings: AppSettings | None = None,
+) -> tuple[str, int]:
+    resolved_settings = settings or get_settings()
+    ttl = timedelta(minutes=15)
+    payload = _base_claims(
+        user,
+        resolved_settings,
+        token_type="email_provider_state",
+        ttl=ttl,
+        token_id=str(uuid4()),
+    )
+    payload["provider"] = provider.strip().casefold()
+    payload["scopes"] = [item.strip() for item in (scopes or []) if item.strip()]
+    payload["metadata"] = dict(metadata or {})
+    return (
+        jwt.encode(payload, resolved_settings.auth.jwt_secret, algorithm="HS256"),
+        int(ttl.total_seconds()),
+    )
+
+
 def decode_token(token: str, *, expected_type: str, settings: AppSettings | None = None) -> dict[str, Any]:
     resolved_settings = settings or get_settings()
     payload = jwt.decode(

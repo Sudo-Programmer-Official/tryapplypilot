@@ -1,19 +1,20 @@
 from __future__ import annotations
 
 import os
+import importlib.util
 import sys
 import types
 import unittest
 from unittest.mock import patch
 
-if "asyncpg" not in sys.modules:
+if "asyncpg" not in sys.modules and importlib.util.find_spec("asyncpg") is None:
     asyncpg_stub = types.ModuleType("asyncpg")
     asyncpg_stub.Connection = object
     asyncpg_stub.Record = dict
     asyncpg_stub.connect = None
     sys.modules["asyncpg"] = asyncpg_stub
 
-if "jwt" not in sys.modules:
+if "jwt" not in sys.modules and importlib.util.find_spec("jwt") is None:
     jwt_stub = types.ModuleType("jwt")
 
     class _InvalidTokenError(Exception):
@@ -24,7 +25,7 @@ if "jwt" not in sys.modules:
     jwt_stub.decode = lambda token, secret, algorithms=None, issuer=None: {"type": "access"}
     sys.modules["jwt"] = jwt_stub
 
-if "argon2" not in sys.modules:
+if "argon2" not in sys.modules and importlib.util.find_spec("argon2") is None:
     argon2_stub = types.ModuleType("argon2")
     argon2_exceptions_stub = types.ModuleType("argon2.exceptions")
 

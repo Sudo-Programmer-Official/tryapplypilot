@@ -1,20 +1,21 @@
 from __future__ import annotations
 
 import os
+import importlib.util
 import sys
 import types
 import unittest
 from datetime import datetime, timezone
 from unittest.mock import patch
 
-if "asyncpg" not in sys.modules:
+if "asyncpg" not in sys.modules and importlib.util.find_spec("asyncpg") is None:
     asyncpg_stub = types.ModuleType("asyncpg")
     asyncpg_stub.Connection = object
     asyncpg_stub.Record = dict
     asyncpg_stub.connect = None
     sys.modules["asyncpg"] = asyncpg_stub
 
-if "jwt" not in sys.modules:
+if "jwt" not in sys.modules and importlib.util.find_spec("jwt") is None:
     jwt_stub = types.ModuleType("jwt")
 
     class _InvalidTokenError(Exception):

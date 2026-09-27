@@ -15,6 +15,7 @@ import AdminRequestsView from "../views/admin/AdminRequestsView.vue";
 import AdminSettingsView from "../views/admin/AdminSettingsView.vue";
 import AdminUsersView from "../views/admin/AdminUsersView.vue";
 import AdminWatchlistsView from "../views/admin/AdminWatchlistsView.vue";
+import UserApplicationsView from "../views/user/UserApplicationsView.vue";
 import UserCompaniesView from "../views/user/UserCompaniesView.vue";
 import UserDashboardView from "../views/user/UserDashboardView.vue";
 import UserJobsView from "../views/user/UserJobsView.vue";
@@ -22,6 +23,8 @@ import UserLayout from "../views/user/UserLayout.vue";
 import UserNotificationsView from "../views/user/UserNotificationsView.vue";
 import UserPreferencesView from "../views/user/UserPreferencesView.vue";
 import UserProfileView from "../views/user/UserProfileView.vue";
+import UserInterviewsView from "../views/user/UserInterviewsView.vue";
+import UserRecruiterView from "../views/user/UserRecruiterView.vue";
 import UserResumesView from "../views/user/UserResumesView.vue";
 import UserWatchlistsView from "../views/user/UserWatchlistsView.vue";
 
@@ -69,6 +72,9 @@ const router = createRouter({
         { path: "", redirect: "/user/dashboard" },
         { path: "dashboard", component: UserDashboardView, meta: { requiresAuth: true, requiresUser: true, title: "Dashboard" } },
         { path: "jobs", component: UserJobsView, meta: { requiresAuth: true, requiresUser: true, title: "Jobs", headerSearch: false } },
+        { path: "applications", component: UserApplicationsView, meta: { requiresAuth: true, requiresUser: true, title: "Applications", headerSearch: false } },
+        { path: "interviews", component: UserInterviewsView, meta: { requiresAuth: true, requiresUser: true, title: "Interview Intelligence", headerSearch: false } },
+        { path: "recruiter", component: UserRecruiterView, meta: { requiresAuth: true, requiresUser: true, title: "Recruiter Intelligence", headerSearch: false } },
         { path: "notifications", component: UserNotificationsView, meta: { requiresAuth: true, requiresUser: true, title: "Notifications" } },
         { path: "resumes", component: UserResumesView, meta: { requiresAuth: true, requiresUser: true, title: "Resumes" } },
         { path: "companies", component: UserCompaniesView, meta: { requiresAuth: true, requiresUser: true, title: "Companies" } },

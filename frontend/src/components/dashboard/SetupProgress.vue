@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { RouterLink } from "vue-router";
 
 import AppCard from "../ui/AppCard.vue";
 import AppProgress from "../ui/AppProgress.vue";
@@ -11,6 +12,25 @@ const props = defineProps<{
 }>();
 
 const completedSteps = computed(() => props.steps.filter((step) => step.completed).length);
+
+// Tell new users exactly what finishes each step and take them there.
+const stepGuidance: Record<string, { to: string; action: string; hint: string }> = {
+  resume_uploaded: {
+    to: "/user/resumes",
+    action: "Upload resume",
+    hint: "Your resume powers matching and interview prep.",
+  },
+  preferences_set: {
+    to: "/user/preferences",
+    action: "Set preferences",
+    hint: "Add target roles and pick at least one company under Company priorities.",
+  },
+  telegram_connected: {
+    to: "/user/profile",
+    action: "Connect Telegram",
+    hint: "Get instant alerts for high-match jobs.",
+  },
+};
 </script>
 
 <template>
@@ -32,6 +52,16 @@ const completedSteps = computed(() => props.steps.filter((step) => step.complete
           <span class="setup-progress__copy">
             <span class="setup-progress__step-title">{{ step.label }}</span>
             <span class="setup-progress__step-state">{{ step.completed ? "Complete" : "Pending" }}</span>
+            <span v-if="!step.completed && stepGuidance[step.id]" class="setup-progress__hint">
+              {{ stepGuidance[step.id].hint }}
+            </span>
+            <RouterLink
+              v-if="!step.completed && stepGuidance[step.id]"
+              class="setup-progress__action"
+              :to="stepGuidance[step.id].to"
+            >
+              {{ stepGuidance[step.id].action }} →
+            </RouterLink>
           </span>
         </li>
       </ul>
@@ -81,9 +111,9 @@ const completedSteps = computed(() => props.steps.filter((step) => step.complete
   width: 100%;
   padding: var(--space-4);
   border-radius: calc(var(--radius-lg) + var(--space-1));
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(238, 243, 251, 0.92));
-  border: 1px solid rgba(15, 29, 58, 0.08);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  background: var(--gradient-surface-soft);
+  border: 1px solid var(--color-border);
+  box-shadow: inset 0 1px 0 var(--color-inset-highlight);
 }
 
 .setup-progress__summary {
@@ -106,9 +136,9 @@ const completedSteps = computed(() => props.steps.filter((step) => step.complete
   gap: var(--space-4);
   align-items: center;
   padding: var(--space-5);
-  border: 1px solid rgba(15, 29, 58, 0.09);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(246, 249, 253, 0.96));
+  background: var(--gradient-surface-soft);
   color: var(--color-text-muted);
   box-shadow: 0 14px 30px rgba(15, 29, 58, 0.05);
   transition:
@@ -136,7 +166,7 @@ const completedSteps = computed(() => props.steps.filter((step) => step.complete
 .setup-progress__step--done {
   color: var(--color-text);
   border-color: rgba(34, 179, 91, 0.16);
-  background: linear-gradient(180deg, rgba(34, 179, 91, 0.08), rgba(255, 255, 255, 0.96));
+  background: linear-gradient(180deg, rgba(34, 179, 91, 0.08), var(--color-surface-tint-end));
 }
 
 .setup-progress__step--done::before {
@@ -166,6 +196,23 @@ const completedSteps = computed(() => props.steps.filter((step) => step.complete
   font-size: 1.05rem;
   font-weight: 600;
   line-height: 1.35;
+}
+
+.setup-progress__hint {
+  color: var(--color-text-muted);
+  font-size: var(--type-small);
+  line-height: 1.45;
+}
+
+.setup-progress__action {
+  justify-self: start;
+  color: var(--color-primary);
+  font-size: var(--type-small);
+  font-weight: 600;
+}
+
+.setup-progress__action:hover {
+  text-decoration: underline;
 }
 
 .setup-progress__step-state {

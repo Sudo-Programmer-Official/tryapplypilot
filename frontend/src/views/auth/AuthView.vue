@@ -309,9 +309,9 @@ async function handleSubmit(): Promise<void> {
   display: grid;
   gap: var(--space-3);
   padding: var(--space-6) var(--space-6) var(--space-6) calc(var(--space-6) + var(--space-2));
-  border: 1px solid rgba(15, 29, 58, 0.08);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(238, 243, 251, 0.94));
+  background: var(--gradient-surface-soft);
   box-shadow: 0 16px 40px rgba(15, 29, 58, 0.06);
   transition:
     transform var(--transition-base),
@@ -390,7 +390,7 @@ async function handleSubmit(): Promise<void> {
   min-height: 3.5rem;
   border-radius: 1.125rem;
   padding-inline: 1.125rem;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 var(--color-inset-highlight);
 }
 
 .auth__form :deep(.app-input:hover) {
@@ -398,7 +398,7 @@ async function handleSubmit(): Promise<void> {
 }
 
 .auth__form :deep(.app-input:focus) {
-  background: rgba(255, 255, 255, 0.98);
+  background: var(--color-field-focus);
 }
 
 .auth__form :deep(.app-button) {

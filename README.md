@@ -1,41 +1,58 @@
 # AI Job Radar
 
-As of July 18, 2026, this repo is intentionally scoped to Phase 1 only: one agent that discovers new jobs, scores fit, and notifies quickly.
+As of July 21, 2026, this repo has completed the major product foundations through `Phase 5`, and `Phase 6` is now underway:
+
+- `Phase 1`: Discovery Engine
+- `Phase 2A`: Career Knowledge Platform
+- `Phase 2B`: AI Profile Evolution
+- `Phase 3`: Resume Intelligence
+- `Phase 4`: Application Intelligence
+- `Phase 5`: Recruiter Intelligence
+
+Current active phase:
+
+- `Phase 6`: Interview Intelligence
 
 - `backend/`: FastAPI service modeling the `Market Scout Agent`, supported sources, user settings, job scoring, and alerts.
 - `frontend/`: Vue 3 + TypeScript radar dashboard for configuration, live opportunities, source health, and notification previews.
-- `docs/`: MVP roadmap and architecture notes for the Phase 1 build.
+- `docs/`: roadmap, architecture, and implementation notes for the active platform phases.
+- [docs/codex-master-execution-prompt.md](docs/codex-master-execution-prompt.md): long-running implementation handoff prompt for Codex to continue the remaining phases with disciplined sequencing and verification.
 - [docs/ui-guardrails.md](docs/ui-guardrails.md): page-level UI and performance guardrails for every new user or admin screen.
 - [docs/connector-checklist.md](docs/connector-checklist.md): source-validation, runtime-wiring, and test checklist for every new connector.
 - [ROADMAP.md](ROADMAP.md): multi-phase product roadmap from Job Discovery to AI Career Operating System.
+- [EVALUATION.md](EVALUATION.md): shared evaluation, safety, and monitoring standard for every AI capability.
 
-## MVP philosophy
+## Product progression
 
-The product goal is narrow on purpose:
+The product started with a narrow goal on purpose:
 
 > Never miss a high-quality job again.
 
-Until this works reliably, nothing else matters. The system should:
+That foundation is now in place. The platform now spans workflow and intelligence layers:
 
-1. Poll configured sources every 5 minutes.
-2. Detect only newly posted jobs.
-3. Normalize and deduplicate them.
-4. Score them against the candidate profile.
-5. Notify only when a role clears the configured threshold.
+- market understanding through discovery, matching, and notifications
+- user understanding through the knowledge platform
+- continuous user understanding improvement through AI profile evolution
+- role-specific resume optimization through Resume Intelligence
+- canonical application workflow through Application Intelligence
+- recruiter-aware workflow enrichment through Recruiter Intelligence
+- canonical interview workspaces, evidence-backed preparation, versioned question banks, and evidence-backed Story Library workflows through Interview Intelligence Sprints 1-4
 
-No resume tailoring, cover letters, CRM, or application tracking are part of the active build target. The Version 1 boundary and the Version 2 roadmap live in [docs/v2.md](docs/v2.md).
-
-The broader product roadmap lives in [ROADMAP.md](ROADMAP.md). This repo is still executing the `Phase 1` slice of that plan.
+The next major user-facing milestone inside `Interview Intelligence` is Mock Interview on top of the implemented workspace, preparation, question-bank, and story-library layers. The broader roadmap lives in [ROADMAP.md](ROADMAP.md).
 
 ## What is implemented
 
-- One `Market Scout Agent` view with cadence, rollout focus, and last-run status
-- A prototype source rollout model centered on `one real connector first`
-- Company and role configuration models for the initial watchlist
-- Job feed built around `discover -> score -> notify`
-- A simple `Apply Now / Review / Ignore` priority queue
-- Notification history and high-match alert preview
-- A small dashboard focused on today's jobs, queue state, source health, and notification readiness
+- Discovery Engine: connectors, scheduler, matching, notifications, admin operations, job lifecycle
+- Career Knowledge Platform: canonical entities, evidence, versioning, merge logic, query SDK, timeline, health, audit, APIs
+- AI Profile Evolution: completeness analysis, guided follow-up questions, fact extraction, staged updates, review workflow, frontend review surface
+- Resume Intelligence: selection, gap analysis, evidence retrieval, structured changes, review workflow, versioning, PDF output
+- Application Intelligence: package builder, state machine, answer artifacts, notes, tasks, timeline, submission workspace
+- Recruiter Intelligence: canonical recruiter model, deterministic classification, conservative application matching, workflow intelligence, email integration platform
+- Interview Intelligence Sprint 1: canonical interview workspace, dedicated interview APIs, linked application timeline events, preparation checklist state, upcoming interview workspace
+- Interview Intelligence Sprint 2: versioned preparation plans, grounded focus-area detection, evidence retrieval from the knowledge platform, generated questions-to-ask, risk analysis, generate/regenerate APIs, and a preparation review workspace
+- Interview Intelligence Sprint 3: versioned interview question banks, deterministic category coverage, resume-claim deep dives, evidence-backed follow-up prompts, question-set APIs, and a review workspace for preparation status and notes
+- Interview Intelligence Sprint 4: canonical interview stories, deterministic story generation from approved evidence, gap prompts routed through Profile Evolution review, story quality scoring, version history, and Story Library APIs plus workspace UI
+- User and admin dashboards for jobs, notifications, resumes, companies, preferences, and connector operations
 
 ## Run locally
 
@@ -81,6 +98,14 @@ This frontend uses Vue Router history mode, so Vercel must rewrite deep links ba
 - `Output Directory`: `dist`
 - `vercel.json`: committed in `frontend/` with an SPA rewrite for `/user/*`, `/admin/*`, and `/auth/*` refreshes
 
+### Gmail recruiter sync
+
+Set these on the backend to enable Gmail connections:
+
+- `GMAIL_OAUTH_CLIENT_ID`, `GMAIL_OAUTH_CLIENT_SECRET`: from a Google Cloud OAuth client (web application)
+- `GMAIL_OAUTH_REDIRECT_URI`: the **frontend** recruiter page, e.g. `https://<frontend-host>/user/recruiter`. Register the same URL as an authorized redirect URI in Google Cloud. The page sends the returned `code` and `state` to the signed-in `POST /api/auth/me/recruiter/connect/gmail/complete` endpoint, which checks the state was issued to that user and accepts it only once.
+- `EMAIL_TOKEN_ENCRYPTION_KEY`: Fernet key used to encrypt stored Gmail tokens. Generate one with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. If unset, a key is derived from `JOB_RADAR_JWT_SECRET`, so rotating that secret makes stored Gmail tokens unreadable and users must reconnect.
+
 ## Verify
 
 Backend unit tests:
@@ -94,34 +119,42 @@ python3 -m unittest discover -s tests
 
 The full company roadmap is in [ROADMAP.md](ROADMAP.md). The sprint-level execution plan for the active phase remains in [docs/roadmap.md](docs/roadmap.md).
 
-`Phase 1` now starts with `Phase 1.0`: one real source end-to-end.
+Completed foundations:
 
-1. `Sprint 1`: PostgreSQL schema, `jobs`, `seen_jobs`, and `alerts` tables, connector framework, logging, and retry framework.
-2. `Sprint 2`: one real collector, with `Greenhouse` as the first priority, then Lever, then Ashby.
-3. `Sprint 3`: scheduler loop every 5 minutes to collect, normalize, persist, compare, and decide whether to notify.
-4. `Sprint 4`: Telegram as the first production notification channel.
-5. `Sprint 5`: LLM matching with structured JSON output and a simple priority queue:
-   `APPLY_NOW (>= 90)`, `REVIEW (75-89)`, `IGNORE (< 75)`.
+- `Phase 1`: Discovery Engine
+- `Phase 2A`: Career Knowledge Platform
+- `Phase 2B`: AI Profile Evolution
+- `Phase 3`: Resume Intelligence
+- `Phase 4`: Application Intelligence
 
-The system should not widen scope until these are true:
+Current active phase:
 
-1. Scheduler runs every 5 minutes.
-2. Jobs are collected from at least one real source.
-3. Jobs are stored in PostgreSQL.
-4. Duplicate jobs are prevented.
-5. Only new jobs generate alerts.
-6. Telegram notifications are received.
-7. The dashboard reflects live data.
-8. Collector retries work after transient failures.
-9. `/health` reports connector status.
+- `Phase 6`: Interview Intelligence
 
-Only after that is reliable:
+Next major phase:
 
-1. `Version 1.5`: Resume Intelligence
-2. `Version 2.0`: Application Copilot
-3. `Version 3.0`: Networking Intelligence
-4. `Version 4.0`: Career Intelligence Platform
+1. `Phase 7`: Career Intelligence
+2. `Phase 8`: Career Agent
+
+Recommended `Phase 6` sprint sequence:
+
+1. Interview Workspace
+   Implemented: canonical interview records, schedule metadata, checklist state, timeline history, dedicated APIs, and a user workspace.
+2. Personalized Preparation
+   Implemented: versioned preparation plans, focus-area detection, evidence retrieval, risk analysis, and a preparation review workspace.
+3. Question Generation
+   Implemented: versioned question banks, deterministic category coverage, grounded resume deep-dives, follow-up prompts, and question review APIs plus workspace UI.
+4. Story Builder
+   Implemented: canonical interview stories, deterministic evidence-backed story generation, profile-evolution gap prompts, quality scoring, version history, and Story Library UI.
+5. Mock Interview
+6. Feedback Engine
+
+Parallel tracks:
+
+1. `Market Intelligence`: hiring trends, emerging skills, recommendation freshness
+2. `Platform Intelligence`: evaluation, quality metrics, latency and cost monitoring, explainability, safety guardrails
 
 The full Version 1 scope freeze, exclusions, success metric, and dashboard readiness checklist are documented in [docs/v2.md](docs/v2.md).
 New page-level UX and performance rules are documented in [docs/ui-guardrails.md](docs/ui-guardrails.md).
 New connector delivery rules are documented in [docs/connector-checklist.md](docs/connector-checklist.md).
+The first Application Intelligence slice is documented in [docs/application-intelligence-v1.md](docs/application-intelligence-v1.md).

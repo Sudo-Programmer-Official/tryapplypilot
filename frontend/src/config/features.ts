@@ -1,5 +1,5 @@
 export const features = {
   applicationPackages: false,
   recruiterDiscovery: false,
-  interviewPreparation: false,
+  interviewPreparation: true,
 } as const;

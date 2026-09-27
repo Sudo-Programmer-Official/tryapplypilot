@@ -6,17 +6,24 @@ import JobFilters from "../../components/jobs/JobFilters.vue";
 import JobRow from "../../components/jobs/JobRow.vue";
 import AppPage from "../../components/layout/AppPage.vue";
 import PageSection from "../../components/layout/PageSection.vue";
+import ResumeReviewDrawer from "../../components/resume-intelligence/ResumeReviewDrawer.vue";
 import AppButton from "../../components/ui/AppButton.vue";
 import AppEmptyState from "../../components/ui/AppEmptyState.vue";
-import { fetchUserJobs } from "../../api/user.api";
+import { fetchUserJobs, fetchUserResumeIntelligenceAnalysis, trackUserJobApplication } from "../../api/user.api";
 import { useJobs } from "../../composables/useJobs";
-import type { JobOpportunity } from "../../types";
+import type { JobOpportunity, ResumeIntelligenceAnalysis } from "../../types";
+import { useToast } from "../../composables/useToast";
 
 const route = useRoute();
 const router = useRouter();
+const { pushToast } = useToast();
 const jobs = ref<JobOpportunity[]>([]);
 const loading = ref(true);
 const error = ref<string | null>(null);
+const resumeReviewOpen = ref(false);
+const resumeReviewLoading = ref(false);
+const resumeReviewError = ref<string | null>(null);
+const resumeReviewAnalysis = ref<ResumeIntelligenceAnalysis | null>(null);
 const loadMoreSentinel = ref<HTMLElement | null>(null);
 const batchSize = 20;
 const visibleCount = ref(batchSize);
@@ -57,6 +64,45 @@ function loadMore(): void {
 function disconnectLoadMoreObserver(): void {
   loadMoreObserver?.disconnect();
   loadMoreObserver = null;
+}
+
+// The apply link opens in a new tab; track the application alongside it so the user
+// can record the submission later without the resume-review detour.
+async function trackApplication(jobId: string): Promise<void> {
+  try {
+    const payload = await trackUserJobApplication(jobId);
+    if (payload.created) {
+      pushToast(
+        "Tracked in Applications",
+        `${payload.item.company} was added to Applications. Record your submission there once you apply.`,
+        "success",
+      );
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Could not track this application.";
+    pushToast("Application not tracked", message, "error");
+  }
+}
+
+async function openResumeReview(jobId: string): Promise<void> {
+  resumeReviewOpen.value = true;
+  resumeReviewLoading.value = true;
+  resumeReviewError.value = null;
+  resumeReviewAnalysis.value = null;
+  try {
+    const payload = await fetchUserResumeIntelligenceAnalysis(jobId);
+    resumeReviewAnalysis.value = payload.item;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to load resume analysis.";
+    resumeReviewError.value = message;
+    pushToast("Resume review unavailable", message, "error");
+  } finally {
+    resumeReviewLoading.value = false;
+  }
+}
+
+function closeResumeReview(): void {
+  resumeReviewOpen.value = false;
 }
 
 function syncLoadMoreObserver(): void {
@@ -190,6 +236,8 @@ onBeforeUnmount(disconnectLoadMoreObserver);
           :job="job"
           :saved="isSavedJob(job.id)"
           @toggle-save="toggleSavedJob"
+          @review-resume="openResumeReview"
+          @apply="trackApplication"
         />
       </div>
 
@@ -200,6 +248,14 @@ onBeforeUnmount(disconnectLoadMoreObserver);
         <div ref="loadMoreSentinel" class="jobs-load-more__trigger" aria-hidden="true" />
       </div>
     </PageSection>
+
+    <ResumeReviewDrawer
+      :open="resumeReviewOpen"
+      :loading="resumeReviewLoading"
+      :error="resumeReviewError"
+      :analysis="resumeReviewAnalysis"
+      @close="closeResumeReview"
+    />
   </AppPage>
 </template>
 
@@ -262,9 +318,9 @@ onBeforeUnmount(disconnectLoadMoreObserver);
   gap: var(--space-3);
   min-height: 2.75rem;
   padding: 0 var(--space-4);
-  border: 1px solid rgba(15, 29, 58, 0.08);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.76);
+  background: var(--color-surface-glass);
   color: var(--color-text-muted);
   cursor: pointer;
   transition:

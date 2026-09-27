@@ -1,19 +1,20 @@
 from __future__ import annotations
 
 import os
+import importlib.util
 import sys
 import types
 import unittest
 from unittest.mock import patch
 
-if "asyncpg" not in sys.modules:
+if "asyncpg" not in sys.modules and importlib.util.find_spec("asyncpg") is None:
     asyncpg_stub = types.ModuleType("asyncpg")
     asyncpg_stub.Connection = object
     asyncpg_stub.Record = dict
     asyncpg_stub.connect = None
     sys.modules["asyncpg"] = asyncpg_stub
 
-if "jwt" not in sys.modules:
+if "jwt" not in sys.modules and importlib.util.find_spec("jwt") is None:
     jwt_stub = types.ModuleType("jwt")
 
     class _InvalidTokenError(Exception):
@@ -46,6 +47,27 @@ class RuntimeInfrastructureTests(unittest.TestCase):
         self.assertIn("CREATE TABLE IF NOT EXISTS user_preferences", schema_sql)
         self.assertIn("CREATE TABLE IF NOT EXISTS saved_jobs", schema_sql)
         self.assertIn("CREATE TABLE IF NOT EXISTS user_watchlists", schema_sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS knowledge_entities", schema_sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS knowledge_evidence", schema_sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS knowledge_aliases", schema_sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS knowledge_timeline_events", schema_sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS knowledge_entity_versions", schema_sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS profile_evolution_sessions", schema_sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS interviews", schema_sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS interview_preparation_plans", schema_sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS interview_question_sets", schema_sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS interview_questions", schema_sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS interview_stories", schema_sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS recruiter_contacts", schema_sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS recruiter_threads", schema_sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS recruiter_messages", schema_sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS communication_events", schema_sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS recruiter_message_drafts", schema_sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS email_provider_connections", schema_sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS email_provider_token_secrets", schema_sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS email_sync_runs", schema_sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS email_synced_messages", schema_sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS email_synced_threads", schema_sql)
         self.assertIn("CREATE TABLE IF NOT EXISTS audit_logs", schema_sql)
         self.assertIn("inventory_complete BOOLEAN NOT NULL DEFAULT TRUE", schema_sql)
         self.assertIn("pages_scanned INTEGER NOT NULL DEFAULT 1", schema_sql)
