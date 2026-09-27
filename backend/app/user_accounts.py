@@ -6,6 +6,7 @@ from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
 from asyncpg import Record
+import jwt
 
 from app.auth import hash_password, hash_refresh_token, issue_auth_tokens, onboarding_status_for_user, verify_password
 from app.config import AppSettings, get_settings
@@ -363,7 +364,10 @@ async def rotate_refresh_token(
     resolved_settings = settings or get_settings()
     if resolved_settings.radar.mode == "seed":
         return None, None
-    payload = decode_token(raw_refresh_token, expected_type="refresh", settings=resolved_settings)
+    try:
+        payload = decode_token(raw_refresh_token, expected_type="refresh", settings=resolved_settings)
+    except jwt.PyJWTError:
+        return None, None
     refresh_token_id = str(payload["jti"])
     token_hash = hash_refresh_token(raw_refresh_token)
     async with connection() as conn:
@@ -397,7 +401,11 @@ async def revoke_refresh_token(raw_refresh_token: str, settings: AppSettings | N
     resolved_settings = settings or get_settings()
     if resolved_settings.radar.mode == "seed":
         return
-    payload = decode_token(raw_refresh_token, expected_type="refresh", settings=resolved_settings)
+    try:
+        payload = decode_token(raw_refresh_token, expected_type="refresh", settings=resolved_settings)
+    except jwt.PyJWTError:
+        # An expired or foreign token has no live session to revoke; logout still succeeds.
+        return
     await ensure_super_admin(resolved_settings)
     async with connection() as conn:
         await conn.execute(

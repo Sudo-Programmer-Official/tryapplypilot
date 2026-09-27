@@ -372,11 +372,15 @@ def domain_interest_signals(user: UserAccount) -> list[str]:
 
 
 def preferred_work_arrangements(user: UserAccount, settings: AppSettings) -> tuple[str, ...]:
+    # The explicit work-arrangement checkboxes win; the remote-preference dropdown is only a
+    # fallback. Otherwise a ticked "Onsite" box was silently ignored under "Mostly Remote".
+    values = _string_list(_user_preferences(user).get("work_arrangements"))
+    if values:
+        return tuple(values)
     remote_value = remote_preference(user)
     if remote_value in _REMOTE_WORK_ARRANGEMENTS:
         return _REMOTE_WORK_ARRANGEMENTS[remote_value]
-    values = _string_list(_user_preferences(user).get("work_arrangements"))
-    return tuple(values) or settings.radar.preferred_work_arrangements
+    return settings.radar.preferred_work_arrangements
 
 
 def preferred_experience_levels(user: UserAccount, settings: AppSettings) -> tuple[str, ...]:
@@ -449,7 +453,8 @@ def location_matches(job: NormalizedJobRecord, user: UserAccount) -> bool:
     remote_policy = job.remote_policy.strip().casefold()
     for location in locations:
         normalized = location.casefold()
-        if normalized in {"remote", "anywhere"} and remote_policy.startswith("remote"):
+        # "Remote (US)", "Remote - USA" etc. mean remote work; the country filter handles region.
+        if ("remote" in normalized or normalized == "anywhere") and remote_policy.startswith("remote"):
             return True
         if normalized and normalized in haystack:
             return True

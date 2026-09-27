@@ -13,6 +13,9 @@ from zipfile import ZipFile
 
 from app.config import AppSettings, get_settings
 from app.domain import ResumeAsset, UserAccount
+from app.logging_utils import get_logger
+
+logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from fastapi import UploadFile
@@ -300,14 +303,26 @@ async def upload_resume_for_user(
     assert row is not None
     resume = _row_to_resume(row)
 
-    knowledge_service = build_knowledge_platform_service(resolved_settings)
-    ingestion_result = await ingest_resume_into_knowledge_platform(
-        service=knowledge_service,
-        user_id=user_id,
-        resume=resume,
-        extracted_text=extracted_text,
-        actor_user_id=user_id,
-    )
+    # The resume row is already committed. If knowledge ingestion fails, still report the
+    # upload as successful; otherwise users retry and end up with duplicate resumes.
+    knowledge_fields: dict[str, object] = {}
+    try:
+        ingestion_result = await ingest_resume_into_knowledge_platform(
+            service=build_knowledge_platform_service(resolved_settings),
+            user_id=user_id,
+            resume=resume,
+            extracted_text=extracted_text,
+            actor_user_id=user_id,
+        )
+    except Exception:
+        logger.exception("Knowledge ingestion failed for resume %s", resume.id)
+    else:
+        knowledge_fields = {
+            "knowledge_completeness": ingestion_result.completeness,
+            "knowledge_completeness_report": ingestion_result.completeness_report,
+            "knowledge_entity_counts": ingestion_result.entity_counts,
+            "knowledge_merge_summary": ingestion_result.merge_summary,
+        }
 
     existing_library = user.profile.get("resume_library", [])
     if not isinstance(existing_library, list):
@@ -324,10 +339,7 @@ async def upload_resume_for_user(
             "resume_uploaded": True,
             "resume_library": retained_entries[:10],
             "resume_skill_keywords": sorted({skill for entry in retained_entries if isinstance(entry, dict) for skill in entry.get("skills", [])}),
-            "knowledge_completeness": ingestion_result.completeness,
-            "knowledge_completeness_report": ingestion_result.completeness_report,
-            "knowledge_entity_counts": ingestion_result.entity_counts,
-            "knowledge_merge_summary": ingestion_result.merge_summary,
+            **knowledge_fields,
         },
         settings=resolved_settings,
     )

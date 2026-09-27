@@ -1908,8 +1908,9 @@ def _match_application(
         return explicit, 1.0, "message import explicitly provided the application_id"
 
     combined_text = _normalize_text(" ".join([item.subject, item.body_text, item.company, item.job_title]))
-    recruiter_email = item.recruiter_email.strip().casefold()
-    recruiter_name = item.recruiter_name.strip().casefold()
+    # A plain email only has a sender; treat the sender as the recruiter, as the import does.
+    recruiter_email = (item.recruiter_email.strip() or item.sender_email.strip()).casefold()
+    recruiter_name = (item.recruiter_name.strip() or item.sender_name.strip()).casefold()
     scored: list[tuple[float, ApplicationRecord, str]] = []
 
     for application in applications:

@@ -227,6 +227,31 @@ class RecruiterIntelligenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(communication["summary"]["waiting_on"], "candidate")
         self.assertTrue(any(item["action_type"] == "reply_to_recruiter" for item in communication["suggestions"]))
 
+    async def test_plain_email_links_to_application_by_sender_address(self) -> None:
+        record = await self.application_service.build_application_package("user-1", "job-1", resume_version_id="rv_1")
+        await self.application_service.update_application_metadata(
+            "user-1",
+            record.application_id,
+            updates={"recruiter_name": "Avery Chen", "recruiter_email": "avery@example.com"},
+        )
+
+        items = await self.recruiter_service.import_messages(
+            "user-1",
+            [
+                RecruiterMessageImportRecord(
+                    sender_email="Avery@Example.com",
+                    sender_name="Avery Chen",
+                    recipients=["user@example.com"],
+                    subject="Next steps",
+                    body_text="Thanks for applying. Could you share a few times for a phone screen?",
+                    received_at="2026-07-21T16:00:00+00:00",
+                )
+            ],
+        )
+
+        self.assertEqual(items[0].application_id, record.application_id)
+        self.assertIn("recruiter email", items[0].match_reason)
+
     async def test_low_confidence_messages_remain_unattached(self) -> None:
         record = await self.application_service.build_application_package("user-1", "job-2", resume_version_id="rv_2")
         before = await self.application_service.get_application("user-1", record.application_id)

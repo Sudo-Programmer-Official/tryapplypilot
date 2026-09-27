@@ -22,7 +22,7 @@ def _iso_now() -> str:
 
 
 def _storage_root() -> Path:
-    return Path(__file__).resolve().parents[1] / "uploads" / "resume_versions"
+    return Path(__file__).resolve().parents[2] / "uploads" / "resume_versions"
 
 
 def _safe_segment(value: str) -> str:

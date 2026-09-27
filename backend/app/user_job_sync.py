@@ -22,6 +22,7 @@ from app.user_matching import (
     build_user_matching_settings,
     filter_reason_for_user,
     minimum_match_score,
+    preferred_companies,
 )
 
 BACKFILL_ALERT_BUDGET = 5
@@ -228,15 +229,23 @@ async def sync_recent_jobs_for_user(user: UserAccount, settings: AppSettings | N
     logger = get_logger("app.user_job_sync")
     remaining_alert_budget = BACKFILL_ALERT_BUDGET
 
+    # Only the user's chosen companies can pass the company filter, so select from those
+    # first. Taking the newest jobs across all companies left new users with an empty feed.
+    company_keys = sorted({company.lower() for company in preferred_companies(user)})
+    if not company_keys:
+        return
+
     async with connection() as conn:
         rows = await conn.fetch(
             """
             SELECT *
             FROM jobs
             WHERE COALESCE(published_at, first_seen_at) >= NOW() - INTERVAL '14 days'
+              AND LOWER(company) = ANY($1::text[])
             ORDER BY COALESCE(published_at, first_seen_at) DESC
             LIMIT 100
-            """
+            """,
+            company_keys,
         )
 
         for row in rows:
