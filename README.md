@@ -98,6 +98,14 @@ This frontend uses Vue Router history mode, so Vercel must rewrite deep links ba
 - `Output Directory`: `dist`
 - `vercel.json`: committed in `frontend/` with an SPA rewrite for `/user/*`, `/admin/*`, and `/auth/*` refreshes
 
+### Gmail recruiter sync
+
+Set these on the backend to enable Gmail connections:
+
+- `GMAIL_OAUTH_CLIENT_ID`, `GMAIL_OAUTH_CLIENT_SECRET`: from a Google Cloud OAuth client (web application)
+- `GMAIL_OAUTH_REDIRECT_URI`: the **frontend** recruiter page, e.g. `https://<frontend-host>/user/recruiter`. Register the same URL as an authorized redirect URI in Google Cloud. The page sends the returned `code` and `state` to the signed-in `POST /api/auth/me/recruiter/connect/gmail/complete` endpoint, which checks the state was issued to that user and accepts it only once.
+- `EMAIL_TOKEN_ENCRYPTION_KEY`: Fernet key used to encrypt stored Gmail tokens. Generate one with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. If unset, a key is derived from `JOB_RADAR_JWT_SECRET`, so rotating that secret makes stored Gmail tokens unreadable and users must reconnect.
+
 ## Verify
 
 Backend unit tests:

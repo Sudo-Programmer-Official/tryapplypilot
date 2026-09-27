@@ -390,6 +390,11 @@ class RecruiterProviderConnectPayload(BaseModel):
     metadata: dict[str, object] = Field(default_factory=dict)
 
 
+class RecruiterProviderOAuthCompletePayload(BaseModel):
+    code: str = Field(min_length=1)
+    state: str = Field(min_length=1)
+
+
 class RecruiterProviderOAuthStartPayload(BaseModel):
     scopes: list[str] = Field(default_factory=list)
     login_hint: str = ""
@@ -2118,27 +2123,22 @@ async def start_connect_current_user_gmail(
     return {"item": item.to_dict()}
 
 
-@app.get("/api/auth/recruiter/connect/gmail/callback")
+@app.post("/api/auth/me/recruiter/connect/gmail/complete")
 async def complete_connect_current_user_gmail(
-    code: str = Query(default=""),
-    state: str = Query(default=""),
-    error: str = Query(default=""),
-    error_description: str = Query(default=""),
+    payload: RecruiterProviderOAuthCompletePayload,
+    user: UserAccount = Depends(_current_user),
 ) -> dict[str, object]:
-    if error.strip():
-        detail = error_description.strip() or error.strip()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Gmail OAuth failed: {detail}")
-    if not code.strip() or not state.strip():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Gmail OAuth callback requires both code and state.")
     try:
-        item = await _email_integration_service().complete_provider_oauth("gmail", state_token=state, code=code)
+        item = await _email_integration_service().complete_provider_oauth(
+            "gmail",
+            user_id=user.id,
+            state_token=payload.state,
+            code=payload.code,
+        )
     except jwt.PyJWTError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired Gmail OAuth state token.") from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    user = await get_user_by_id(item.user_id)
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown user for Gmail OAuth callback.")
     await record_audit_event(
         actor_user=user,
         event_type="recruiter.provider_connected",

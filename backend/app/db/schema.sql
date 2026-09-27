@@ -849,6 +849,16 @@ CREATE TABLE IF NOT EXISTS email_provider_token_secrets (
 
 CREATE INDEX IF NOT EXISTS email_provider_token_secrets_user_provider_idx ON email_provider_token_secrets (user_id, provider);
 
+CREATE TABLE IF NOT EXISTS email_provider_oauth_states (
+    state_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
+    provider TEXT NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    consumed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS email_provider_oauth_states_expires_idx ON email_provider_oauth_states (expires_at);
+
 CREATE TABLE IF NOT EXISTS email_sync_runs (
     sync_run_id TEXT PRIMARY KEY,
     connection_id TEXT NOT NULL REFERENCES email_provider_connections (connection_id) ON DELETE CASCADE,

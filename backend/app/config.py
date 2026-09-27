@@ -179,6 +179,7 @@ class GmailSettings:
     redirect_uri: str | None
     auth_base_url: str
     token_url: str
+    revoke_url: str
     api_base_url: str
     scopes: tuple[str, ...]
     timeout_seconds: int
@@ -201,6 +202,7 @@ class AuthSettings:
     super_admin_email: str | None
     super_admin_password: str | None
     super_admin_name: str
+    provider_token_encryption_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -444,6 +446,7 @@ def get_settings() -> AppSettings:
             redirect_uri=os.getenv("GMAIL_OAUTH_REDIRECT_URI"),
             auth_base_url=os.getenv("GMAIL_OAUTH_AUTH_BASE_URL", "https://accounts.google.com/o/oauth2/v2/auth"),
             token_url=os.getenv("GMAIL_OAUTH_TOKEN_URL", "https://oauth2.googleapis.com/token"),
+            revoke_url=os.getenv("GMAIL_OAUTH_REVOKE_URL", "https://oauth2.googleapis.com/revoke"),
             api_base_url=os.getenv("GMAIL_API_BASE_URL", "https://gmail.googleapis.com/gmail/v1"),
             scopes=_read_csv("GMAIL_OAUTH_SCOPES", ("https://www.googleapis.com/auth/gmail.readonly",)),
             timeout_seconds=_read_int("GMAIL_API_TIMEOUT_SECONDS", _read_int("JOB_RADAR_CONNECTOR_TIMEOUT_SECONDS", 20)),
@@ -460,6 +463,7 @@ def get_settings() -> AppSettings:
             super_admin_email=os.getenv("JOB_RADAR_SUPER_ADMIN_EMAIL"),
             super_admin_password=os.getenv("JOB_RADAR_SUPER_ADMIN_PASSWORD"),
             super_admin_name=os.getenv("JOB_RADAR_SUPER_ADMIN_NAME", "Super Admin"),
+            provider_token_encryption_key=os.getenv("EMAIL_TOKEN_ENCRYPTION_KEY"),
         ),
         lifecycle=JobLifecycleSettings(
             stale_after_missed_syncs=_read_int("JOB_RADAR_JOB_STALE_AFTER_MISSED_SYNCS", 2),

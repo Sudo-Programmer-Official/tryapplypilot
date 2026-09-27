@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import base64
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+import hashlib
 import json
 from typing import Protocol
 from uuid import NAMESPACE_URL, uuid5
+
+from cryptography.fernet import Fernet, InvalidToken
 
 from app.config import AppSettings, get_settings
 from app.db.client import connection
@@ -77,7 +81,41 @@ def build_token_reference(user_id: str, provider: str) -> str:
     return f"vault://email-provider/{provider.strip().casefold()}/{opaque_id}"
 
 
-def _row_to_token_secret(row) -> EmailProviderTokenSecret:
+ENCRYPTED_TOKEN_PREFIX = "fernet:v1:"
+
+
+class ProviderTokenCipher:
+    """Encrypts provider OAuth tokens at rest.
+
+    Uses EMAIL_TOKEN_ENCRYPTION_KEY (a Fernet key) when configured, otherwise a key
+    derived from the JWT secret so tokens are never stored in plain text.
+    """
+
+    def __init__(self, settings: AppSettings) -> None:
+        configured_key = (settings.auth.provider_token_encryption_key or "").strip()
+        if configured_key:
+            key = configured_key.encode("utf-8")
+        else:
+            digest = hashlib.sha256(f"email-provider-token:{settings.auth.jwt_secret}".encode("utf-8")).digest()
+            key = base64.urlsafe_b64encode(digest)
+        self._fernet = Fernet(key)
+
+    def encrypt(self, value: str) -> str:
+        if not value:
+            return ""
+        return ENCRYPTED_TOKEN_PREFIX + self._fernet.encrypt(value.encode("utf-8")).decode("ascii")
+
+    def decrypt(self, value: str) -> str:
+        if not value.startswith(ENCRYPTED_TOKEN_PREFIX):
+            # Rows written before encryption was introduced are stored in plain text.
+            return value
+        try:
+            return self._fernet.decrypt(value[len(ENCRYPTED_TOKEN_PREFIX):].encode("ascii")).decode("utf-8")
+        except InvalidToken as exc:
+            raise ValueError("Stored email provider token could not be decrypted; check EMAIL_TOKEN_ENCRYPTION_KEY.") from exc
+
+
+def _row_to_token_secret(row, cipher: ProviderTokenCipher) -> EmailProviderTokenSecret:
     expires_at = row["expires_at"]
     created_at = row["created_at"]
     updated_at = row["updated_at"]
@@ -92,8 +130,8 @@ def _row_to_token_secret(row) -> EmailProviderTokenSecret:
         user_id=str(row["user_id"]),
         provider=str(row["provider"]),
         account_email=str(row["account_email"] or ""),
-        access_token=str(row["access_token"] or ""),
-        refresh_token=str(row["refresh_token"] or ""),
+        access_token=cipher.decrypt(str(row["access_token"] or "")),
+        refresh_token=cipher.decrypt(str(row["refresh_token"] or "")),
         expires_at=expires_at.isoformat() if expires_at is not None else None,
         scope=str(row["scope"] or ""),
         token_type=str(row["token_type"] or "Bearer"),
@@ -125,6 +163,9 @@ class InMemoryEmailProviderTokenStore:
 
 
 class PostgresEmailProviderTokenStore:
+    def __init__(self, settings: AppSettings | None = None) -> None:
+        self._cipher = ProviderTokenCipher(settings or get_settings())
+
     async def save_token(self, token: EmailProviderTokenSecret) -> EmailProviderTokenSecret:
         async with connection() as conn:
             row = await conn.fetchrow(
@@ -163,8 +204,8 @@ class PostgresEmailProviderTokenStore:
                 token.user_id,
                 token.provider,
                 token.account_email,
-                token.access_token,
-                token.refresh_token,
+                self._cipher.encrypt(token.access_token),
+                self._cipher.encrypt(token.refresh_token),
                 token.expires_at,
                 token.scope,
                 token.token_type,
@@ -173,7 +214,7 @@ class PostgresEmailProviderTokenStore:
                 token.updated_at,
             )
         assert row is not None
-        return _row_to_token_secret(row)
+        return _row_to_token_secret(row, self._cipher)
 
     async def get_token(self, token_reference: str) -> EmailProviderTokenSecret | None:
         async with connection() as conn:
@@ -185,7 +226,7 @@ class PostgresEmailProviderTokenStore:
                 """,
                 token_reference,
             )
-        return _row_to_token_secret(row) if row is not None else None
+        return _row_to_token_secret(row, self._cipher) if row is not None else None
 
     async def delete_token(self, token_reference: str) -> None:
         async with connection() as conn:
@@ -202,4 +243,4 @@ def build_email_provider_token_store(settings: AppSettings | None = None) -> Ema
     resolved_settings = settings or get_settings()
     if resolved_settings.radar.mode == "seed":
         return InMemoryEmailProviderTokenStore()
-    return PostgresEmailProviderTokenStore()
+    return PostgresEmailProviderTokenStore(resolved_settings)

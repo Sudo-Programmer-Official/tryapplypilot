@@ -554,6 +554,16 @@ export function startUserRecruiterGmailConnect(payload: {
   });
 }
 
+export function completeUserRecruiterGmailConnect(payload: {
+  code: string;
+  state: string;
+}): Promise<{ item: EmailProviderConnection }> {
+  return requestJson<{ item: EmailProviderConnection }>("/api/auth/me/recruiter/connect/gmail/complete", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function disconnectUserRecruiterGmail(): Promise<{ item: EmailProviderConnection }> {
   return requestJson<{ item: EmailProviderConnection }>("/api/auth/me/recruiter/connect/gmail", {
     method: "DELETE",

@@ -28,7 +28,7 @@ if "jwt" not in sys.modules:
     jwt_stub.PyJWTError = _PyJWTError
     jwt_stub.InvalidTokenError = _PyJWTError
     jwt_stub.encode = lambda payload, secret, algorithm=None: "stub-token"
-    jwt_stub.decode = lambda token, secret, algorithms=None, issuer=None: {"type": "email_provider_state", "sub": "user-1", "provider": "gmail"}
+    jwt_stub.decode = lambda token, secret, algorithms=None, issuer=None: {"type": "email_provider_state", "sub": "user-1", "provider": "gmail", "jti": "state-1", "exp": 4102444800}
     sys.modules["jwt"] = jwt_stub
 
 if "argon2" not in sys.modules:
@@ -128,6 +128,7 @@ if "fastapi" not in sys.modules:
 
 from app.application_intelligence import ApplicationIntelligenceService, ApplicationJobSnapshot, InMemoryApplicationStore
 from app.config import get_settings
+from app.email_integration.tokens import ENCRYPTED_TOKEN_PREFIX, ProviderTokenCipher
 from app.domain import OnboardingStatus, UserAccount
 from app.email_integration import (
     EmailIntegrationService,
@@ -352,8 +353,12 @@ class EmailIntegrationTests(unittest.IsolatedAsyncioTestCase):
             settings = get_settings()
 
         token_store = InMemoryEmailProviderTokenStore()
+        revoked_tokens: list[str] = []
 
         def request_json_stub(method, url, *, headers=None, body=None, form_body=None, timeout_seconds=None, tls=None):
+            if url == settings.gmail.revoke_url and method == "POST":
+                revoked_tokens.append(str((form_body or {}).get("token") or ""))
+                return {}
             if url == settings.gmail.token_url and method == "POST":
                 grant_type = str((form_body or {}).get("grant_type") or "")
                 if grant_type == "authorization_code":
@@ -431,7 +436,7 @@ class EmailIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("accounts.google.com", oauth_request.authorization_url)
         self.assertEqual(oauth_request.provider, "gmail")
         state_token = parse_qs(urlsplit(oauth_request.authorization_url).query)["state"][0]
-        connection = await service.complete_provider_oauth("gmail", state_token=state_token, code="oauth-code")
+        connection = await service.complete_provider_oauth("gmail", user_id="user-1", state_token=state_token, code="oauth-code")
         self.assertEqual(connection.provider, "gmail")
         self.assertEqual(connection.account_email, "user@example.com")
         self.assertTrue(connection.to_dict()["token_configured"])
@@ -472,6 +477,45 @@ class EmailIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
         state = await self.recruiter_service.get_application_conversation_state("user-1", record.application_id)
         self.assertEqual(state.state, "waiting_for_recruiter")
+
+        with self.assertRaisesRegex(ValueError, "already been used"):
+            await service.complete_provider_oauth("gmail", user_id="user-1", state_token=state_token, code="oauth-code")
+
+        second_request = await service.begin_provider_oauth(user, "gmail")
+        second_state = parse_qs(urlsplit(second_request.authorization_url).query)["state"][0]
+        with self.assertRaisesRegex(ValueError, "different account"):
+            await service.complete_provider_oauth("gmail", user_id="user-2", state_token=second_state, code="oauth-code")
+
+        with self.assertRaisesRegex(ValueError, "not valid for this account"):
+            await service.connect_provider(
+                "user-2",
+                "gmail",
+                account_email="attacker@example.com",
+                token_reference=connection.token_reference,
+            )
+
+        disconnected = await service.disconnect_provider("user-1", "gmail")
+        self.assertEqual(disconnected.status, "disconnected")
+        self.assertEqual(revoked_tokens, ["gmail-refresh-token"])
+        self.assertIsNone(await token_store.get_token(connection.token_reference))
+
+    def test_provider_token_cipher_encrypts_and_reads_legacy_plaintext(self) -> None:
+        cipher = ProviderTokenCipher(get_settings())
+        encrypted = cipher.encrypt("gmail-refresh-token")
+        self.assertTrue(encrypted.startswith(ENCRYPTED_TOKEN_PREFIX))
+        self.assertNotIn("gmail-refresh-token", encrypted)
+        self.assertEqual(cipher.decrypt(encrypted), "gmail-refresh-token")
+        self.assertEqual(cipher.decrypt("legacy-plaintext-token"), "legacy-plaintext-token")
+        self.assertEqual(cipher.encrypt(""), "")
+
+    def test_provider_token_cipher_rejects_tokens_from_another_key(self) -> None:
+        with patch.dict(os.environ, {"EMAIL_TOKEN_ENCRYPTION_KEY": "4Wq9XVh8bq3m6aPpjk1hBEJmWjWbXzA8y3kJYyC1dC4="}, clear=False):
+            get_settings.cache_clear()
+            other_cipher = ProviderTokenCipher(get_settings())
+        get_settings.cache_clear()
+        encrypted = other_cipher.encrypt("gmail-access-token")
+        with self.assertRaisesRegex(ValueError, "could not be decrypted"):
+            ProviderTokenCipher(get_settings()).decrypt(encrypted)
 
     async def test_disconnect_and_missing_sync_paths(self) -> None:
         connection = await self.service.connect_provider(

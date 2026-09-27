@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 import {
+  completeUserRecruiterGmailConnect,
   disconnectUserRecruiterGmail,
   fetchUserRecruiterDrafts,
   fetchUserRecruiterMessageSummary,
@@ -51,6 +52,7 @@ const generatingDraft = ref(false);
 const savingDraft = ref(false);
 
 const workspaceError = ref<string | null>(null);
+const providerError = ref<string | null>(null);
 const detailError = ref<string | null>(null);
 const draftError = ref<string | null>(null);
 
@@ -329,6 +331,7 @@ async function loadWorkspace(): Promise<void> {
 async function connectGmail(): Promise<void> {
   connectingProvider.value = true;
   workspaceError.value = null;
+  providerError.value = null;
   try {
     const payload = await startUserRecruiterGmailConnect();
     if (typeof window !== "undefined") {
@@ -336,6 +339,50 @@ async function connectGmail(): Promise<void> {
     }
   } catch (err) {
     workspaceError.value = err instanceof Error ? err.message : "Failed to start Gmail connection.";
+  } finally {
+    connectingProvider.value = false;
+  }
+}
+
+function queryString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+// Google redirects back here with ?code&state (or ?error). The signed-in user finishes
+// the exchange so the backend can check the state was issued to this same account.
+async function completeGmailOAuthFromQuery(): Promise<void> {
+  const code = queryString(route.query.code);
+  const state = queryString(route.query.state);
+  const oauthError = queryString(route.query.error);
+  if (!code && !state && !oauthError) {
+    return;
+  }
+  const nextQuery = { ...route.query };
+  delete nextQuery.code;
+  delete nextQuery.state;
+  delete nextQuery.error;
+  delete nextQuery.error_description;
+  delete nextQuery.scope;
+  delete nextQuery.authuser;
+  delete nextQuery.prompt;
+  const errorDescription = queryString(route.query.error_description);
+  await router.replace({ query: nextQuery });
+
+  if (oauthError) {
+    providerError.value = oauthError === "access_denied"
+      ? "Gmail access was not granted."
+      : `Gmail connection failed: ${errorDescription || oauthError}`;
+    return;
+  }
+  if (!code || !state) {
+    providerError.value = "Gmail connection could not be completed. Please try connecting again.";
+    return;
+  }
+  connectingProvider.value = true;
+  try {
+    await completeUserRecruiterGmailConnect({ code, state });
+  } catch (err) {
+    providerError.value = err instanceof Error ? err.message : "Failed to complete Gmail connection.";
   } finally {
     connectingProvider.value = false;
   }
@@ -427,8 +474,9 @@ watch(
   },
 );
 
-onMounted(() => {
-  void loadWorkspace();
+onMounted(async () => {
+  await completeGmailOAuthFromQuery();
+  await loadWorkspace();
 });
 </script>
 
@@ -496,6 +544,7 @@ onMounted(() => {
           </div>
         </template>
 
+        <div v-if="providerError" class="recruiter-inline-error">{{ providerError }}</div>
         <div class="recruiter-provider-grid">
           <div v-if="providerStatuses.length === 0" class="recruiter-provider-empty">
             <p>No provider is connected yet. The workspace still supports imported recruiter messages, and live Gmail sync can be added when you are ready.</p>

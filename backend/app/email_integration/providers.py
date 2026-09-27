@@ -11,6 +11,7 @@ from urllib.parse import urlencode
 
 from app.config import AppSettings, get_settings
 from app.http import HttpClientError, HttpTlsSettings, request_json
+from app.logging_utils import get_logger
 
 from .models import (
     EmailAttachmentReference,
@@ -22,6 +23,8 @@ from .models import (
     ProviderThreadSnapshot,
 )
 from .tokens import EmailProviderTokenSecret, EmailProviderTokenStore, build_email_provider_token_store, build_token_reference
+
+logger = get_logger(__name__)
 
 MailboxLoader = Callable[[EmailProviderConnection], Awaitable[list[dict[str, object]]] | list[dict[str, object]]]
 
@@ -385,8 +388,31 @@ class GmailProvider:
             form_body=form_body,
         )
 
-    async def _load_live_token(self, token_reference: str) -> EmailProviderTokenSecret | None:
-        return await self._token_store().get_token(token_reference)
+    async def _load_owned_token(self, connection: EmailProviderConnection) -> EmailProviderTokenSecret | None:
+        # Token references are client-visible and derivable, so only honour a token
+        # that was issued to this connection's user for this provider.
+        if not connection.token_reference.strip():
+            return None
+        token = await self._token_store().get_token(connection.token_reference)
+        if token is None or token.user_id != connection.user_id or token.provider != self.provider_name:
+            return None
+        return token
+
+    def _revoke_live_token(self, token: EmailProviderTokenSecret) -> None:
+        revocable = token.refresh_token.strip() or token.access_token.strip()
+        if not revocable:
+            return
+        try:
+            self._request_json(
+                "POST",
+                self._settings().gmail.revoke_url,
+                headers={"Accept": "application/json"},
+                form_body={"token": revocable},
+            )
+        except (HttpClientError, ValueError) as exc:
+            # Revocation is best effort: the local token is still deleted, and the user can
+            # remove access from their Google account settings.
+            logger.warning("Gmail token revocation failed for user %s: %s", token.user_id, exc)
 
     async def _save_live_token(self, token: EmailProviderTokenSecret) -> EmailProviderTokenSecret:
         return await self._token_store().save_token(token)
@@ -542,6 +568,8 @@ class GmailProvider:
             raise ValueError("Gmail connections require an account email.")
         if not connection.token_reference.strip():
             raise ValueError("Gmail connections require a secure token reference.")
+        if self._is_live_mode() and await self._load_owned_token(connection) is None:
+            raise ValueError("Gmail token reference is not valid for this account.")
         scopes = connection.scopes or _gmail_default_scopes()
         return EmailProviderConnection(
             connection_id=connection.connection_id,
@@ -560,8 +588,11 @@ class GmailProvider:
         )
 
     async def disconnect(self, connection: EmailProviderConnection) -> EmailProviderConnection:
-        if connection.token_reference.strip():
-            await self._token_store().delete_token(connection.token_reference)
+        token = await self._load_owned_token(connection)
+        if token is not None:
+            if self._is_live_mode():
+                self._revoke_live_token(token)
+            await self._token_store().delete_token(token.token_reference)
         return EmailProviderConnection(
             connection_id=connection.connection_id,
             user_id=connection.user_id,
@@ -580,7 +611,7 @@ class GmailProvider:
 
     async def refresh_state(self, connection: EmailProviderConnection) -> EmailProviderConnection:
         if self._is_live_mode():
-            token_secret = await self._load_live_token(connection.token_reference)
+            token_secret = await self._load_owned_token(connection)
             if token_secret is None:
                 status = "needs_reauth"
                 token_metadata = {}
@@ -622,7 +653,7 @@ class GmailProvider:
 
     async def sync_messages(self, connection: EmailProviderConnection) -> ProviderSyncBatch:
         if self._is_live_mode():
-            token_secret = await self._load_live_token(connection.token_reference)
+            token_secret = await self._load_owned_token(connection)
             if token_secret is None:
                 raise ValueError("Gmail connection requires re-authorization because no provider token was found.")
             token_secret = await self._refresh_live_token_if_needed(token_secret)

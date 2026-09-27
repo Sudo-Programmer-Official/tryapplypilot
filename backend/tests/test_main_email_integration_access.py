@@ -150,6 +150,7 @@ if "pypdf" not in sys.modules:
 from app.domain import OnboardingStatus, UserAccount
 from app.main import (
     RecruiterProviderConnectPayload,
+    RecruiterProviderOAuthCompletePayload,
     RecruiterProviderOAuthStartPayload,
     RecruiterSyncPayload,
     complete_connect_current_user_gmail,
@@ -238,7 +239,10 @@ class MainEmailIntegrationAccessTests(unittest.IsolatedAsyncioTestCase):
                 _user(),
             )
             started = await start_connect_current_user_gmail(RecruiterProviderOAuthStartPayload(), _user())
-            completed = await complete_connect_current_user_gmail(code="oauth-code", state="signed-state", error="", error_description="")
+            completed = await complete_connect_current_user_gmail(
+                RecruiterProviderOAuthCompletePayload(code="oauth-code", state="signed-state"),
+                _user(),
+            )
             disconnected = await disconnect_current_user_gmail(_user())
             providers = await current_user_recruiter_providers(_user())
             statuses = await current_user_recruiter_provider_status(_user())
@@ -247,6 +251,12 @@ class MainEmailIntegrationAccessTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(connected["item"]["provider"], "gmail")
         self.assertIn("accounts.google.com", started["item"]["authorization_url"])
         self.assertEqual(completed["item"]["connection_id"], "conn-1")
+        service.complete_provider_oauth.assert_awaited_once_with(
+            "gmail",
+            user_id=_user().id,
+            state_token="signed-state",
+            code="oauth-code",
+        )
         self.assertEqual(disconnected["item"]["account_email"], "user@example.com")
         self.assertEqual(providers["items"][0]["connection_id"], "conn-1")
         self.assertEqual(statuses["items"][0]["last_imported_count"], 1)

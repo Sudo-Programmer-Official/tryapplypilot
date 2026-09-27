@@ -266,6 +266,10 @@ class EmailIntegrationStore(Protocol):
     async def save_synced_thread(self, item: EmailSyncedThread) -> EmailSyncedThread:
         ...
 
+    async def consume_oauth_state(self, state_id: str, *, user_id: str, provider: str, expires_at: datetime) -> bool:
+        """Record an OAuth state as used; return False if it was already consumed."""
+        ...
+
 
 @dataclass
 class InMemoryEmailIntegrationStore:
@@ -273,8 +277,10 @@ class InMemoryEmailIntegrationStore:
     sync_runs: dict[str, EmailSyncRun] | None = None
     synced_messages: dict[str, EmailSyncedMessage] | None = None
     synced_threads: dict[str, EmailSyncedThread] | None = None
+    consumed_oauth_states: set[str] | None = None
 
     def __post_init__(self) -> None:
+        self.consumed_oauth_states = set() if self.consumed_oauth_states is None else self.consumed_oauth_states
         self.connections = {} if self.connections is None else self.connections
         self.sync_runs = {} if self.sync_runs is None else self.sync_runs
         self.synced_messages = {} if self.synced_messages is None else self.synced_messages
@@ -345,8 +351,32 @@ class InMemoryEmailIntegrationStore:
         self.synced_threads[item.sync_thread_id] = item
         return item
 
+    async def consume_oauth_state(self, state_id: str, *, user_id: str, provider: str, expires_at: datetime) -> bool:
+        assert self.consumed_oauth_states is not None
+        if state_id in self.consumed_oauth_states:
+            return False
+        self.consumed_oauth_states.add(state_id)
+        return True
+
 
 class PostgresEmailIntegrationStore:
+    async def consume_oauth_state(self, state_id: str, *, user_id: str, provider: str, expires_at: datetime) -> bool:
+        async with connection() as conn:
+            await conn.execute("DELETE FROM email_provider_oauth_states WHERE expires_at < NOW()")
+            consumed = await conn.fetchval(
+                """
+                INSERT INTO email_provider_oauth_states (state_id, user_id, provider, expires_at)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (state_id) DO NOTHING
+                RETURNING state_id
+                """,
+                state_id,
+                user_id,
+                provider,
+                expires_at,
+            )
+        return consumed is not None
+
     async def save_connection(self, item: EmailProviderConnection) -> EmailProviderConnection:
         async with connection() as conn:
             row = await conn.fetchrow(
@@ -694,6 +724,7 @@ class EmailIntegrationService:
         self,
         provider: str,
         *,
+        user_id: str,
         state_token: str,
         code: str,
     ) -> EmailProviderConnection:
@@ -702,18 +733,33 @@ class EmailIntegrationService:
         state_provider = str(payload.get("provider") or "").strip().casefold()
         if state_provider != normalized_provider:
             raise ValueError("OAuth callback provider does not match the signed state token.")
+        # Binding the state to the signed-in user stops a victim's mailbox from being
+        # attached to an attacker's account via a crafted consent link.
+        if str(payload.get("sub") or "").strip() != user_id:
+            raise ValueError("OAuth state was issued to a different account.")
+        state_id = str(payload.get("jti") or "").strip()
+        if not state_id:
+            raise ValueError("OAuth state token is missing its identifier.")
+        expires_at = datetime.fromtimestamp(int(payload.get("exp") or 0), tz=timezone.utc)
+        if not await self._store().consume_oauth_state(
+            state_id,
+            user_id=user_id,
+            provider=normalized_provider,
+            expires_at=expires_at,
+        ):
+            raise ValueError("OAuth state has already been used; start the connection again.")
         raw_scopes = payload.get("scopes")
         scopes = [str(item).strip() for item in raw_scopes if str(item).strip()] if isinstance(raw_scopes, list) else []
         state_metadata = payload.get("metadata")
         metadata = dict(state_metadata) if isinstance(state_metadata, dict) else {}
         result = await self._providers().get(normalized_provider).complete_authorization(
-            str(payload.get("sub") or "").strip(),
+            user_id,
             code=code,
             scopes=scopes or None,
             metadata=metadata,
         )
         return await self.connect_provider(
-            str(payload.get("sub") or "").strip(),
+            user_id,
             normalized_provider,
             account_email=result.account_email,
             scopes=result.scopes,
