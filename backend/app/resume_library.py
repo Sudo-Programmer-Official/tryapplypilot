@@ -346,3 +346,63 @@ async def upload_resume_for_user(
     if updated_user is None:
         raise ResumeUploadError("Failed to update user resume profile.")
     return resume, updated_user
+
+
+async def delete_resume_for_user(
+    user_id: str,
+    resume_id: str,
+    *,
+    settings: AppSettings | None = None,
+) -> UserAccount | None:
+    """Delete one of the user's resumes; returns the updated user, or None if not found.
+
+    Tailored resume versions keep their own copies (source_resume_id becomes NULL), and
+    knowledge facts already extracted from the resume are kept.
+    """
+    from app.db.client import connection
+    from app.user_accounts import update_user_profile_fields
+
+    resolved_settings = settings or get_settings()
+    if resolved_settings.radar.mode == "seed":
+        raise ResumeUploadError("Resume management is unavailable in seed mode.")
+    async with connection() as conn:
+        async with conn.transaction():
+            storage_path = await conn.fetchval(
+                """
+                DELETE FROM resumes
+                WHERE resume_id = $1 AND user_id = $2
+                RETURNING storage_path
+                """,
+                resume_id,
+                user_id,
+            )
+            if storage_path is None:
+                return None
+            rows = await conn.fetch(
+                """
+                SELECT *
+                FROM resumes
+                WHERE user_id = $1
+                ORDER BY created_at DESC
+                """,
+                user_id,
+            )
+    remaining = [_row_to_resume(row) for row in rows]
+
+    path = Path(str(storage_path)).resolve()
+    if path.is_relative_to(_storage_root().resolve()):
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("Could not remove resume file %s", path)
+
+    library = [_profile_resume_entry(resume) for resume in remaining[:10]]
+    return await update_user_profile_fields(
+        user_id,
+        {
+            "resume_uploaded": bool(remaining),
+            "resume_library": library,
+            "resume_skill_keywords": sorted({skill for entry in library for skill in entry["skills"]}),
+        },
+        settings=resolved_settings,
+    )

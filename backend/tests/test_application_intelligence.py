@@ -177,6 +177,41 @@ class ApplicationIntelligenceTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(duplicate.application_id, record.application_id)
 
+    async def test_track_job_application_creates_once_then_reuses(self) -> None:
+        calls = 0
+
+        async def current_resume_version():
+            nonlocal calls
+            calls += 1
+            return self.resume_version
+
+        first, created = await self.service.track_job_application(
+            "user-1", "job-1", resume_version_factory=current_resume_version
+        )
+        second, created_again = await self.service.track_job_application(
+            "user-1", "job-1", resume_version_factory=current_resume_version
+        )
+
+        self.assertTrue(created)
+        self.assertFalse(created_again)
+        self.assertEqual(first.application_id, second.application_id)
+        self.assertEqual(first.resume_version_id, "rv_1")
+        self.assertEqual(calls, 1)
+        self.assertEqual(len(await self.service.list_applications("user-1")), 1)
+
+    async def test_track_job_application_reuses_tailored_package(self) -> None:
+        tailored = await self.service.build_application_package("user-1", "job-1", resume_version_id="rv_1")
+
+        async def must_not_run():
+            raise AssertionError("an existing application should be reused")
+
+        record, created = await self.service.track_job_application(
+            "user-1", "job-1", resume_version_factory=must_not_run
+        )
+
+        self.assertFalse(created)
+        self.assertEqual(record.application_id, tailored.application_id)
+
     async def test_metadata_answers_artifacts_and_submit_build_complete_record(self) -> None:
         record = await self.service.build_application_package("user-1", "job-1", resume_version_id="rv_1")
         record = await self.service.update_application_metadata(

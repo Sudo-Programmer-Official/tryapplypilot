@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import json
-from typing import Protocol
+from typing import Awaitable, Callable, Protocol
 from uuid import NAMESPACE_URL, uuid5
 
 from app.config import AppSettings, get_settings
@@ -788,6 +788,33 @@ class ApplicationIntelligenceService:
 
     async def get_application(self, user_id: str, application_id: str) -> ApplicationRecord | None:
         return await self._store().get(application_id, user_id=user_id)
+
+    async def track_job_application(
+        self,
+        user_id: str,
+        job_id: str,
+        *,
+        resume_version_factory: Callable[[], Awaitable[ResumeVersionRecord]],
+    ) -> tuple[ApplicationRecord, bool]:
+        """Track a job the user is applying to; returns (application, created).
+
+        Reuses any existing application for the job so a tailored package is never
+        duplicated; otherwise packages the version produced by resume_version_factory.
+        """
+        existing = next(
+            (application for application in await self.list_applications(user_id) if application.job_id == job_id),
+            None,
+        )
+        if existing is not None:
+            return existing, False
+        resume_version = await resume_version_factory()
+        record = await self.build_application_package(
+            user_id,
+            job_id,
+            resume_version_id=resume_version.version_id,
+            notes="Tracked when the apply link was opened.",
+        )
+        return record, True
 
     async def record_recruiter_communication(
         self,

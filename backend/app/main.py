@@ -42,7 +42,7 @@ from app.repositories.postgres import (
     list_user_jobs,
     list_user_missed_jobs,
 )
-from app.resume_library import ResumeUploadError, list_user_resumes, upload_resume_for_user
+from app.resume_library import ResumeUploadError, delete_resume_for_user, list_user_resumes, upload_resume_for_user
 from app.maintenance_service import MaintenanceService, get_maintenance_service, set_maintenance_service
 from app.knowledge_platform import KnowledgeChangeConflictError, build_knowledge_platform_service
 from app.profile_evolution import ProfileEvolutionQuestion, build_profile_evolution_service
@@ -1856,6 +1856,35 @@ async def build_current_user_application_package(
     return {"item": record.to_dict()}
 
 
+@app.post("/api/auth/me/applications/jobs/{job_id}/track")
+async def track_current_user_job_application(
+    job_id: str,
+    user: UserAccount = Depends(_current_user),
+) -> dict[str, object]:
+    async def current_resume_version():
+        # No reviewed changes: package the user's best-matching resume as-is.
+        return await _resume_intelligence_service().finalize_review(user.id, job_id, reviews=[])
+
+    try:
+        record, created = await _application_intelligence_service().track_job_application(
+            user.id,
+            job_id,
+            resume_version_factory=current_resume_version,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if created:
+        await record_audit_event(
+            actor_user=user,
+            event_type="application.tracked_from_apply",
+            subject_type="application",
+            subject_id=record.application_id,
+            message=f"Tracked application for {record.company} - {record.title}.",
+            metadata={"job_id": record.job_id, "resume_version_id": record.resume_version_id},
+        )
+    return {"item": record.to_dict(), "created": created}
+
+
 @app.post("/api/auth/me/applications/{application_id}/submit")
 async def submit_current_user_application(
     application_id: str,
@@ -2426,6 +2455,29 @@ async def current_user_application_communication_health(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return {"item": item.to_dict()}
+
+
+@app.delete("/api/auth/me/resumes/{resume_id}")
+async def delete_current_user_resume(
+    resume_id: str,
+    user: UserAccount = Depends(_current_user),
+) -> dict[str, object]:
+    try:
+        updated_user = await delete_resume_for_user(user.id, resume_id, settings=get_app_settings())
+    except ResumeUploadError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if updated_user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown resume.")
+    await record_audit_event(
+        actor_user=updated_user,
+        event_type="resume.deleted",
+        subject_type="resume",
+        subject_id=resume_id,
+        message=f"{updated_user.email} deleted a resume.",
+        metadata={"resume_id": resume_id},
+        settings=get_app_settings(),
+    )
+    return {"user": updated_user.to_dict()}
 
 
 @app.post("/api/auth/me/resumes")
