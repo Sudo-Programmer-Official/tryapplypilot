@@ -478,7 +478,14 @@ async def update_user_profile_fields(
         )
     if row is None:
         return None
-    return _row_to_user(row)
+    updated = _row_to_user(row)
+    from app.knowledge_platform import build_knowledge_platform_service, sync_profile_snapshot_to_knowledge_platform
+
+    await sync_profile_snapshot_to_knowledge_platform(
+        service=build_knowledge_platform_service(resolved_settings),
+        user=updated,
+    )
+    return updated
 
 
 async def update_user_profile(
@@ -524,7 +531,14 @@ async def update_user_profile(
         )
     if row is None:
         return None
-    return _row_to_user(row)
+    updated = _row_to_user(row)
+    from app.knowledge_platform import build_knowledge_platform_service, sync_profile_snapshot_to_knowledge_platform
+
+    await sync_profile_snapshot_to_knowledge_platform(
+        service=build_knowledge_platform_service(resolved_settings),
+        user=updated,
+    )
+    return updated
 
 
 async def update_user_preferences(

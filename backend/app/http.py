@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import ssl
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 try:
@@ -41,12 +42,18 @@ def _request_text(
     tls: HttpTlsSettings,
     headers: dict[str, str] | None = None,
     body: dict[str, object] | list[object] | None = None,
+    form_body: dict[str, object] | None = None,
 ) -> str:
+    if body is not None and form_body is not None:
+        raise ValueError("HTTP requests cannot send both a JSON body and a form body.")
     payload_bytes = None
     request_headers = dict(headers or {})
     if body is not None:
         payload_bytes = json.dumps(body).encode("utf-8")
         request_headers.setdefault("Content-Type", "application/json")
+    elif form_body is not None:
+        payload_bytes = urlencode(form_body, doseq=True).encode("utf-8")
+        request_headers.setdefault("Content-Type", "application/x-www-form-urlencoded")
 
     request = Request(url, data=payload_bytes, headers=request_headers, method=method.upper())
     try:
@@ -71,6 +78,7 @@ def request_text(
     tls: HttpTlsSettings,
     headers: dict[str, str] | None = None,
     body: dict[str, object] | list[object] | None = None,
+    form_body: dict[str, object] | None = None,
 ) -> str:
     return _request_text(
         method,
@@ -79,6 +87,7 @@ def request_text(
         tls=tls,
         headers=headers,
         body=body,
+        form_body=form_body,
     )
 
 
@@ -90,6 +99,7 @@ def request_json(
     tls: HttpTlsSettings,
     headers: dict[str, str] | None = None,
     body: dict[str, object] | list[object] | None = None,
+    form_body: dict[str, object] | None = None,
 ) -> object:
     response_body = _request_text(
         method,
@@ -98,6 +108,7 @@ def request_json(
         tls=tls,
         headers=headers,
         body=body,
+        form_body=form_body,
     )
     try:
         return json.loads(response_body)

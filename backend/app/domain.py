@@ -12,6 +12,28 @@ MatchDecision = Literal["APPLY_NOW", "REVIEW", "IGNORE"]
 NotificationChannelName = Literal["telegram", "email", "slack", "desktop"]
 UserRole = Literal["super_admin", "admin", "user"]
 CompanyRequestStatus = Literal["pending", "approved", "rejected"]
+KnowledgeEntityType = Literal[
+    "user",
+    "experience",
+    "project",
+    "skill",
+    "technology",
+    "achievement",
+    "leadership",
+    "education",
+    "certification",
+    "award",
+    "resume",
+    "resume_variant",
+    "application",
+    "recruiter",
+    "interview",
+    "learning_goal",
+    "career_goal",
+]
+KnowledgeEvidenceSourceType = Literal["resume", "profile", "project", "conversation", "manual_entry"]
+KnowledgeChangeStatus = Literal["suggested", "approved", "rejected"]
+KnowledgeMergeAction = Literal["added", "updated", "unchanged", "removed", "conflict"]
 
 
 @dataclass(frozen=True)
@@ -184,6 +206,38 @@ class ResumeAsset:
 
 
 @dataclass(frozen=True)
+class KnowledgeAlias:
+    id: str
+    user_id: str
+    entity_type: KnowledgeEntityType
+    alias_value: str
+    normalized_alias: str
+    canonical_name: str
+    confidence: float = 1.0
+    is_manual_override: bool = False
+    created_at: str | None = None
+    updated_at: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class KnowledgeTimelineEvent:
+    id: str
+    user_id: str
+    event_type: str
+    title: str
+    entity_id: str | None = None
+    evidence_id: str | None = None
+    payload: dict[str, object] = field(default_factory=dict)
+    created_at: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
 class CompanyRequest:
     id: str
     user_id: str
@@ -303,6 +357,63 @@ class ScoutSettings:
     initial_alert_window_hours: int = 24
     initial_sync_openai_job_limit: int = 20
     initial_sync_max_alerts: int = 5
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class KnowledgeEntity:
+    id: str
+    user_id: str
+    entity_type: KnowledgeEntityType
+    canonical_name: str
+    content: dict[str, object] = field(default_factory=dict)
+    source: str = ""
+    confidence: float = 1.0
+    evidence_ids: list[str] = field(default_factory=list)
+    version: int = 0
+    status: KnowledgeChangeStatus = "approved"
+    created_at: str | None = None
+    updated_at: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class KnowledgeEvidence:
+    id: str
+    user_id: str
+    source_type: KnowledgeEvidenceSourceType
+    source_id: str
+    excerpt: str
+    metadata: dict[str, object] = field(default_factory=dict)
+    created_at: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class KnowledgeEntityVersion:
+    id: str
+    entity_id: str
+    user_id: str
+    version_number: int
+    status: KnowledgeChangeStatus
+    source: str
+    reason: str
+    actor_user_id: str | None = None
+    reviewed_by_user_id: str | None = None
+    agent_name: str = ""
+    confidence: float = 1.0
+    evidence_ids: list[str] = field(default_factory=list)
+    previous_content: dict[str, object] = field(default_factory=dict)
+    new_content: dict[str, object] = field(default_factory=dict)
+    created_at: str | None = None
+    reviewed_at: str | None = None
+    review_notes: str = ""
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
