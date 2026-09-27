@@ -78,13 +78,13 @@ const classes = computed(() => [
 }
 
 .app-button--primary {
-  background: var(--color-primary);
+  background: var(--color-primary-strong);
   color: white;
   box-shadow: 0 12px 28px rgba(37, 99, 255, 0.22);
 }
 
 .app-button--primary:hover:not(:disabled) {
-  background: var(--color-primary-hover);
+  background: var(--color-primary-strong-hover);
 }
 
 .app-button--secondary {

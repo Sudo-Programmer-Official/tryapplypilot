@@ -10,6 +10,10 @@
   --color-primary: #5c8dff;
   --color-primary-hover: #77a0ff;
   --color-primary-soft: rgba(92, 141, 255, 0.18);
+  --color-primary-strong: #3563e0;
+  --color-primary-strong-hover: #2f5bd6;
+  --color-primary-text: #8fb0ff;
+  --color-success-text: #36ca79;
   --color-success: #36ca79;
   --color-success-soft: rgba(54, 202, 121, 0.18);
   --color-warning: #ffb74c;
