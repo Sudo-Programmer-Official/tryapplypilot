@@ -342,7 +342,7 @@ onMounted(load);
   min-height: 3.5rem;
   border-radius: 1.125rem;
   padding-inline: 1.125rem;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 var(--color-inset-highlight);
 }
 
 .companies-panel :deep(.app-textarea) {
@@ -359,7 +359,7 @@ onMounted(load);
 .companies-panel :deep(.app-input:focus),
 .companies-panel :deep(.app-select:focus),
 .companies-panel :deep(.app-textarea:focus) {
-  background: rgba(255, 255, 255, 0.98);
+  background: var(--color-field-focus);
 }
 
 .company-list {
@@ -373,9 +373,9 @@ onMounted(load);
   align-items: center;
   gap: var(--space-4);
   padding: var(--space-5);
-  border: 1px solid rgba(15, 29, 58, 0.08);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(246, 249, 253, 0.96));
+  background: var(--gradient-surface-soft);
   box-shadow: 0 12px 26px rgba(15, 29, 58, 0.04);
   transition:
     transform var(--transition-fast),
@@ -391,7 +391,7 @@ onMounted(load);
 
 .company-row--active {
   border-color: rgba(37, 99, 255, 0.16);
-  background: linear-gradient(180deg, rgba(37, 99, 255, 0.08), rgba(255, 255, 255, 0.96));
+  background: linear-gradient(180deg, rgba(37, 99, 255, 0.08), var(--color-surface-tint-end));
 }
 
 .company-row__toggle {
@@ -439,21 +439,21 @@ onMounted(load);
 
 .companies-request-table :deep(tbody td) {
   padding: var(--space-5) var(--space-4);
-  border-top: 1px solid rgba(15, 29, 58, 0.08);
-  border-bottom: 1px solid rgba(15, 29, 58, 0.08);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(246, 249, 253, 0.98));
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--gradient-surface-soft);
   vertical-align: middle;
 }
 
 .companies-request-table :deep(tbody td:first-child) {
   padding-left: var(--space-5);
-  border-left: 1px solid rgba(15, 29, 58, 0.08);
+  border-left: 1px solid var(--color-border);
   border-radius: var(--radius-lg) 0 0 var(--radius-lg);
 }
 
 .companies-request-table :deep(tbody td:last-child) {
   padding-right: var(--space-5);
-  border-right: 1px solid rgba(15, 29, 58, 0.08);
+  border-right: 1px solid var(--color-border);
   border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
 }
 

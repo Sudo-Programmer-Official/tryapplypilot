@@ -36,9 +36,9 @@ defineProps<{
   gap: var(--space-4);
   align-items: center;
   padding: var(--space-5) var(--space-5) var(--space-5) var(--space-6);
-  border: 1px solid rgba(15, 29, 58, 0.08);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(246, 249, 253, 0.98));
+  background: var(--gradient-surface-soft);
   box-shadow: 0 14px 28px rgba(15, 29, 58, 0.05);
   transition:
     transform var(--transition-base),
@@ -56,7 +56,7 @@ defineProps<{
   width: 1rem;
   height: 1rem;
   border-radius: 50%;
-  box-shadow: 0 0 0 8px rgba(255, 255, 255, 0.84);
+  box-shadow: 0 0 0 8px var(--color-surface-elevated);
 }
 
 .activity-list__copy {

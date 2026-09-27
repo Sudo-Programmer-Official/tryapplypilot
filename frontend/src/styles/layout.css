@@ -259,7 +259,7 @@
   }
 
   .page-section {
-    padding: var(--space-6);
+    padding: var(--space-5) 0;
   }
 
   .app-grid {

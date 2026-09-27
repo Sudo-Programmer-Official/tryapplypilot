@@ -299,9 +299,9 @@ onBeforeUnmount(disconnectLoadMoreObserver);
   gap: var(--space-3);
   min-height: 2.75rem;
   padding: 0 var(--space-4);
-  border: 1px solid rgba(15, 29, 58, 0.08);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.76);
+  background: var(--color-surface-glass);
   color: var(--color-text-muted);
   cursor: pointer;
   transition:

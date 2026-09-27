@@ -545,7 +545,7 @@ async function buildApplicationPackage(): Promise<void> {
 .resume-review-dimension,
 .resume-review-change-card,
 .resume-review-evidence__card {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(246, 249, 253, 0.96));
+  background: var(--gradient-surface-soft);
 }
 
 .resume-review-hero__header,
@@ -656,7 +656,7 @@ async function buildApplicationPackage(): Promise<void> {
 .resume-review-dimension,
 .resume-review-change-card,
 .resume-review-evidence__card {
-  border: 1px solid rgba(15, 29, 58, 0.08);
+  border: 1px solid var(--color-border);
   border-radius: 1.5rem;
   padding: var(--space-5);
   box-shadow: 0 12px 26px rgba(15, 29, 58, 0.04);
@@ -721,7 +721,7 @@ async function buildApplicationPackage(): Promise<void> {
   padding: var(--space-4);
   border-radius: 1.25rem;
   background: rgba(247, 249, 252, 0.9);
-  border: 1px solid rgba(15, 29, 58, 0.08);
+  border: 1px solid var(--color-border);
 }
 
 .resume-review-change-card__panel--suggested {

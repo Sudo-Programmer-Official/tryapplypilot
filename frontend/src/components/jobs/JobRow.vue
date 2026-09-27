@@ -131,7 +131,7 @@ const decisionLabel = computed(() => {
   border-radius: 1rem;
   font-weight: 700;
   flex-shrink: 0;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  box-shadow: inset 0 1px 0 var(--color-inset-highlight);
 }
 
 .job-row__copy {
@@ -198,7 +198,7 @@ const decisionLabel = computed(() => {
   min-width: 5.5rem;
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(34, 179, 91, 0.12), rgba(255, 255, 255, 0.96));
+  background: linear-gradient(180deg, rgba(34, 179, 91, 0.12), var(--color-surface-tint-end));
   border: 1px solid rgba(34, 179, 91, 0.14);
 }
 

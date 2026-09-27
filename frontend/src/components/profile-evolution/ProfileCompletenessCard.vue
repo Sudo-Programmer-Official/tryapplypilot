@@ -48,9 +48,9 @@ function formatTopicName(value: string): string {
 
 .profile-evolution-summary__metric {
   padding: var(--space-5);
-  border: 1px solid rgba(15, 29, 58, 0.08);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(246, 249, 253, 0.96));
+  background: var(--gradient-surface-soft);
   box-shadow: 0 12px 26px rgba(15, 29, 58, 0.04);
 }
 

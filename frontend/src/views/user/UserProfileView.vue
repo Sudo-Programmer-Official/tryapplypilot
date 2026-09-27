@@ -412,7 +412,7 @@ onMounted(() => {
   min-height: 3.5rem;
   border-radius: 1.125rem;
   padding-inline: 1.125rem;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 var(--color-inset-highlight);
 }
 
 .profile-panel :deep(.app-textarea) {
@@ -427,7 +427,7 @@ onMounted(() => {
 
 .profile-panel :deep(.app-input:focus),
 .profile-panel :deep(.app-textarea:focus) {
-  background: rgba(255, 255, 255, 0.98);
+  background: var(--color-field-focus);
 }
 
 .profile-panel :deep(.app-button) {
@@ -448,9 +448,9 @@ onMounted(() => {
   align-items: center;
   min-height: 2.5rem;
   padding: 0 var(--space-4);
-  border: 1px solid rgba(15, 29, 58, 0.08);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--color-surface-glass);
   color: var(--color-text-muted);
   font-size: 0.95rem;
 }
@@ -467,9 +467,9 @@ onMounted(() => {
 .profile-evolution-summary__metric,
 .profile-review-card {
   padding: var(--space-5);
-  border: 1px solid rgba(15, 29, 58, 0.08);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(246, 249, 253, 0.96));
+  background: var(--gradient-surface-soft);
   box-shadow: 0 12px 26px rgba(15, 29, 58, 0.04);
 }
 

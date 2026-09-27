@@ -88,7 +88,7 @@ const classes = computed(() => [
 }
 
 .app-button--secondary {
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--color-surface-glass);
   border-color: var(--color-border);
   color: var(--color-text);
 }

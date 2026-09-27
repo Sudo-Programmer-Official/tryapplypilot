@@ -447,9 +447,9 @@ onMounted(load);
   display: grid;
   gap: var(--space-3);
   padding: var(--space-5);
-  border: 1px solid rgba(15, 29, 58, 0.08);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(246, 249, 253, 0.98));
+  background: var(--gradient-surface-soft);
 }
 
 .admin-catalog-loading__title {

@@ -19,6 +19,11 @@
   --color-info: #56c4ff;
   --color-info-soft: rgba(86, 196, 255, 0.2);
   --color-ring: rgba(92, 141, 255, 0.28);
+  --color-field-focus: #182a4d;
+  --color-surface-glass: rgba(19, 32, 58, 0.78);
+  --color-surface-tint-end: rgba(14, 26, 50, 0.96);
+  --color-inset-highlight: rgba(255, 255, 255, 0.04);
+  --gradient-surface-soft: linear-gradient(180deg, rgba(19, 32, 58, 0.92), rgba(14, 26, 50, 0.96));
   --gradient-page: radial-gradient(circle at top left, rgba(37, 99, 255, 0.16), transparent 24%),
     radial-gradient(circle at top right, rgba(86, 196, 255, 0.12), transparent 26%),
     linear-gradient(180deg, #071122 0%, #08152b 100%);

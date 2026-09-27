@@ -234,7 +234,7 @@ onMounted(load);
   min-height: 18rem;
   border-style: dashed;
   box-shadow: none;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.95));
+  background: var(--gradient-surface-soft);
 }
 
 @media (max-width: 1023px) {

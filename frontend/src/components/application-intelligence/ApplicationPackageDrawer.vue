@@ -480,8 +480,8 @@ async function handleNoteSave(): Promise<void> {
   gap: var(--space-3);
   padding: var(--space-4);
   border-radius: 1.25rem;
-  border: 1px solid rgba(15, 29, 58, 0.08);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(246, 249, 253, 0.96));
+  border: 1px solid var(--color-border);
+  background: var(--gradient-surface-soft);
 }
 
 .application-drawer__task-copy {

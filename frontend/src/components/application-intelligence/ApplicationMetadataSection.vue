@@ -180,7 +180,7 @@ async function saveMetadata(): Promise<void> {
   padding: var(--space-4);
   border-radius: 1.25rem;
   background: rgba(247, 249, 252, 0.9);
-  border: 1px solid rgba(15, 29, 58, 0.08);
+  border: 1px solid var(--color-border);
 }
 
 .metadata-summary__item span {

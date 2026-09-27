@@ -81,9 +81,9 @@ const completedSteps = computed(() => props.steps.filter((step) => step.complete
   width: 100%;
   padding: var(--space-4);
   border-radius: calc(var(--radius-lg) + var(--space-1));
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(238, 243, 251, 0.92));
-  border: 1px solid rgba(15, 29, 58, 0.08);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  background: var(--gradient-surface-soft);
+  border: 1px solid var(--color-border);
+  box-shadow: inset 0 1px 0 var(--color-inset-highlight);
 }
 
 .setup-progress__summary {
@@ -106,9 +106,9 @@ const completedSteps = computed(() => props.steps.filter((step) => step.complete
   gap: var(--space-4);
   align-items: center;
   padding: var(--space-5);
-  border: 1px solid rgba(15, 29, 58, 0.09);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(246, 249, 253, 0.96));
+  background: var(--gradient-surface-soft);
   color: var(--color-text-muted);
   box-shadow: 0 14px 30px rgba(15, 29, 58, 0.05);
   transition:
@@ -136,7 +136,7 @@ const completedSteps = computed(() => props.steps.filter((step) => step.complete
 .setup-progress__step--done {
   color: var(--color-text);
   border-color: rgba(34, 179, 91, 0.16);
-  background: linear-gradient(180deg, rgba(34, 179, 91, 0.08), rgba(255, 255, 255, 0.96));
+  background: linear-gradient(180deg, rgba(34, 179, 91, 0.08), var(--color-surface-tint-end));
 }
 
 .setup-progress__step--done::before {

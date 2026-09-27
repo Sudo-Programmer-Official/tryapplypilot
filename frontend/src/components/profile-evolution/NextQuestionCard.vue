@@ -147,14 +147,14 @@ function knowledgeGainEntries() {
 
 .profile-evolution-insight {
   border: 1px solid rgba(17, 166, 131, 0.16);
-  background: linear-gradient(180deg, rgba(241, 253, 249, 0.98), rgba(255, 255, 255, 0.96));
+  background: linear-gradient(180deg, rgba(34, 179, 91, 0.08), var(--color-surface-tint-end));
 }
 
 .profile-evolution-question {
   border: 1px solid rgba(37, 99, 255, 0.12);
   background:
     radial-gradient(circle at top right, rgba(37, 99, 255, 0.1), transparent 38%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(243, 247, 255, 0.98));
+    var(--gradient-surface-soft);
 }
 
 .profile-evolution-insight__header,

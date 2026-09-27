@@ -444,7 +444,7 @@ onMounted(load);
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.74);
+  background: var(--color-surface-glass);
   color: var(--color-text);
   font: inherit;
   cursor: pointer;
@@ -490,7 +490,7 @@ onMounted(load);
   border-radius: 1rem;
   font-weight: 700;
   flex-shrink: 0;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  box-shadow: inset 0 1px 0 var(--color-inset-highlight);
 }
 
 .application-card__copy {
@@ -526,7 +526,7 @@ onMounted(load);
   padding: var(--space-4);
   border-radius: 1.25rem;
   background: rgba(247, 249, 252, 0.9);
-  border: 1px solid rgba(15, 29, 58, 0.08);
+  border: 1px solid var(--color-border);
 }
 
 .application-card__meta strong,
@@ -543,8 +543,8 @@ onMounted(load);
 .application-card__workflow-section {
   padding: var(--space-4);
   border-radius: 1.25rem;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(246, 249, 253, 0.96));
-  border: 1px solid rgba(15, 29, 58, 0.08);
+  background: var(--gradient-surface-soft);
+  border: 1px solid var(--color-border);
 }
 
 .application-card__task-list {

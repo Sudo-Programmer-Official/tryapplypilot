@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { computed, useSlots } from "vue";
 
-const props = defineProps<{
-  title?: string;
-  subtitle?: string;
-  padded?: boolean;
-}>();
+// Vue casts an omitted boolean prop to false, so the padded default must be explicit.
+const props = withDefaults(
+  defineProps<{
+    title?: string;
+    subtitle?: string;
+    padded?: boolean;
+  }>(),
+  { padded: true },
+);
 
 const slots = useSlots();
 
@@ -15,7 +19,7 @@ const hasNamedBody = computed(() => Boolean(slots.body));
 </script>
 
 <template>
-  <section class="app-card surface-card" :class="{ 'app-card--padded': padded !== false }">
+  <section class="app-card surface-card" :class="{ 'app-card--padded': props.padded }">
     <template v-if="hasStructuredSlots">
       <slot name="header" />
       <slot v-if="hasNamedBody" name="body" />
@@ -69,7 +73,7 @@ const hasNamedBody = computed(() => Boolean(slots.body));
   min-width: 0;
 }
 
-.app-card--padded .app-card__header {
+:where(.app-card--padded) .app-card__header {
   padding: var(--card-padding) var(--card-padding) 0;
 }
 
@@ -94,11 +98,11 @@ const hasNamedBody = computed(() => Boolean(slots.body));
   padding-top: var(--card-padding);
 }
 
-.app-card--padded .app-card__body {
+:where(.app-card--padded) .app-card__body {
   padding-top: var(--card-body-padding-top);
 }
 
-.app-card--padded .app-card__body--standalone {
+:where(.app-card--padded) .app-card__body--standalone {
   padding-top: var(--card-padding);
 }
 

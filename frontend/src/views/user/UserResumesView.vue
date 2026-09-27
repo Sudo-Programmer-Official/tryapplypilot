@@ -228,10 +228,10 @@ onMounted(load);
 
 .resume-card__preview-shell {
   padding: var(--space-5);
-  border: 1px solid rgba(15, 29, 58, 0.08);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(246, 249, 253, 0.98));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  background: var(--gradient-surface-soft);
+  box-shadow: inset 0 1px 0 var(--color-inset-highlight);
 }
 
 .resume-card__preview {
