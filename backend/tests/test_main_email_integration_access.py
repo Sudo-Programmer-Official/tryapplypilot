@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import importlib.util
 import sys
 import types
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-if "asyncpg" not in sys.modules:
+if "asyncpg" not in sys.modules and importlib.util.find_spec("asyncpg") is None:
     asyncpg_stub = types.ModuleType("asyncpg")
 
     class _UniqueViolationError(Exception):
@@ -18,7 +19,7 @@ if "asyncpg" not in sys.modules:
     asyncpg_stub.connect = None
     sys.modules["asyncpg"] = asyncpg_stub
 
-if "jwt" not in sys.modules:
+if "jwt" not in sys.modules and importlib.util.find_spec("jwt") is None:
     jwt_stub = types.ModuleType("jwt")
 
     class _PyJWTError(Exception):
@@ -30,7 +31,7 @@ if "jwt" not in sys.modules:
     jwt_stub.decode = lambda token, secret, algorithms=None, issuer=None: {"type": "access", "sub": "user-1"}
     sys.modules["jwt"] = jwt_stub
 
-if "fastapi" not in sys.modules:
+if "fastapi" not in sys.modules and importlib.util.find_spec("fastapi") is None:
     fastapi_stub = types.ModuleType("fastapi")
 
     class _HTTPException(Exception):
@@ -104,7 +105,7 @@ if "fastapi" not in sys.modules:
     security_stub.HTTPBearer = _HTTPBearer
     sys.modules["fastapi.security"] = security_stub
 
-if "pydantic" not in sys.modules:
+if "pydantic" not in sys.modules and importlib.util.find_spec("pydantic") is None:
     pydantic_stub = types.ModuleType("pydantic")
 
     class _BaseModel:
@@ -116,7 +117,7 @@ if "pydantic" not in sys.modules:
     pydantic_stub.Field = lambda default=None, **kwargs: default
     sys.modules["pydantic"] = pydantic_stub
 
-if "argon2" not in sys.modules:
+if "argon2" not in sys.modules and importlib.util.find_spec("argon2") is None:
     argon2_stub = types.ModuleType("argon2")
 
     class _PasswordHasher:
@@ -137,7 +138,7 @@ if "argon2" not in sys.modules:
     argon2_exceptions_stub.VerifyMismatchError = _VerifyMismatchError
     sys.modules["argon2.exceptions"] = argon2_exceptions_stub
 
-if "pypdf" not in sys.modules:
+if "pypdf" not in sys.modules and importlib.util.find_spec("pypdf") is None:
     pypdf_stub = types.ModuleType("pypdf")
 
     class _PdfReader:
@@ -272,7 +273,7 @@ class MainEmailIntegrationAccessTests(unittest.IsolatedAsyncioTestCase):
         with patch("app.main.build_email_integration_service", return_value=service):
             with self.assertRaises(Exception) as connect_error:
                 await connect_current_user_gmail(
-                    RecruiterProviderConnectPayload(account_email="user@example.com", token_reference=""),
+                    RecruiterProviderConnectPayload(account_email="user@example.com", token_reference="vault://unknown"),
                     _user(),
                 )
             with self.assertRaises(Exception) as disconnect_error:

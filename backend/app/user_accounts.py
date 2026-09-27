@@ -12,6 +12,9 @@ from app.config import AppSettings, get_settings
 from app.db.client import connection
 from app.domain import AuthTokens, UserAccount, UserRole
 from app.job_metadata import normalize_supported_country
+from app.logging_utils import get_logger
+
+logger = get_logger(__name__)
 
 
 def _json_object(value: object) -> dict[str, object]:
@@ -449,6 +452,20 @@ async def set_user_telegram_chat(
     return _row_to_user(row)
 
 
+async def _sync_profile_to_knowledge_platform(user: UserAccount, settings: AppSettings) -> None:
+    # The profile row is already committed; a knowledge-platform failure must not turn a
+    # successful save into an error. The next profile save re-syncs the snapshot.
+    from app.knowledge_platform import build_knowledge_platform_service, sync_profile_snapshot_to_knowledge_platform
+
+    try:
+        await sync_profile_snapshot_to_knowledge_platform(
+            service=build_knowledge_platform_service(settings),
+            user=user,
+        )
+    except Exception:
+        logger.exception("Knowledge platform profile sync failed for user %s", user.id)
+
+
 async def update_user_profile_fields(
     user_id: str,
     profile_updates: dict[str, object],
@@ -479,12 +496,7 @@ async def update_user_profile_fields(
     if row is None:
         return None
     updated = _row_to_user(row)
-    from app.knowledge_platform import build_knowledge_platform_service, sync_profile_snapshot_to_knowledge_platform
-
-    await sync_profile_snapshot_to_knowledge_platform(
-        service=build_knowledge_platform_service(resolved_settings),
-        user=updated,
-    )
+    await _sync_profile_to_knowledge_platform(updated, resolved_settings)
     return updated
 
 
@@ -532,12 +544,7 @@ async def update_user_profile(
     if row is None:
         return None
     updated = _row_to_user(row)
-    from app.knowledge_platform import build_knowledge_platform_service, sync_profile_snapshot_to_knowledge_platform
-
-    await sync_profile_snapshot_to_knowledge_platform(
-        service=build_knowledge_platform_service(resolved_settings),
-        user=updated,
-    )
+    await _sync_profile_to_knowledge_platform(updated, resolved_settings)
     return updated
 
 

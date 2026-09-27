@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import importlib.util
 import sys
 import types
 import unittest
 
-if "asyncpg" not in sys.modules:
+if "asyncpg" not in sys.modules and importlib.util.find_spec("asyncpg") is None:
     asyncpg_stub = types.ModuleType("asyncpg")
 
     class _UniqueViolationError(Exception):
@@ -16,7 +17,7 @@ if "asyncpg" not in sys.modules:
     asyncpg_stub.connect = None
     sys.modules["asyncpg"] = asyncpg_stub
 
-if "fastapi" not in sys.modules:
+if "fastapi" not in sys.modules and importlib.util.find_spec("fastapi") is None:
     fastapi_stub = types.ModuleType("fastapi")
 
     class _HTTPException(Exception):

@@ -109,3 +109,15 @@ class KnowledgePlatformStore(Protocol):
 
     async def update_version(self, version: KnowledgeEntityVersion) -> KnowledgeEntityVersion:
         ...
+
+    async def review_version(
+        self,
+        version: KnowledgeEntityVersion,
+        entity: KnowledgeEntity | None = None,
+    ) -> tuple[KnowledgeEntityVersion, KnowledgeEntity | None]:
+        """Atomically record a review decision on a suggested version and save the entity.
+
+        Raises KnowledgeChangeConflictError if the version is no longer suggested or, for an
+        approval, if a newer version has already been applied to the entity.
+        """
+        ...

@@ -1,17 +1,18 @@
 from __future__ import annotations
 
+import importlib.util
 import sys
 import types
 import unittest
 
-if "asyncpg" not in sys.modules:
+if "asyncpg" not in sys.modules and importlib.util.find_spec("asyncpg") is None:
     asyncpg_stub = types.ModuleType("asyncpg")
     asyncpg_stub.Connection = object
     asyncpg_stub.Record = dict
     asyncpg_stub.connect = None
     sys.modules["asyncpg"] = asyncpg_stub
 
-if "jwt" not in sys.modules:
+if "jwt" not in sys.modules and importlib.util.find_spec("jwt") is None:
     jwt_stub = types.ModuleType("jwt")
 
     class _InvalidTokenError(Exception):
@@ -521,6 +522,136 @@ class KnowledgePlatformTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any(item.event_type == "KnowledgeUpdated" for item in timeline))
         self.assertEqual(evidence_rows[0].id, evidence.id)
         self.assertEqual(schema_info["version"], 1)
+
+
+
+class ProfileKnowledgeSyncTests(unittest.IsolatedAsyncioTestCase):
+    async def test_profile_sync_failure_does_not_fail_the_profile_save(self) -> None:
+        from unittest.mock import AsyncMock, patch
+
+        from app.config import get_settings
+        from app.domain import OnboardingStatus, UserAccount
+        from app.user_accounts import _sync_profile_to_knowledge_platform
+
+        user = UserAccount(
+            id="user-1",
+            email="user@example.com",
+            role="user",
+            full_name="Demo User",
+            onboarding=OnboardingStatus(progress_percent=0, steps=[]),
+        )
+        failing_sync = AsyncMock(side_effect=RuntimeError("knowledge store unavailable"))
+        with patch("app.knowledge_platform.sync_profile_snapshot_to_knowledge_platform", failing_sync), patch(
+            "app.knowledge_platform.build_knowledge_platform_service",
+            return_value=object(),
+        ), self.assertLogs("app.user_accounts", level="ERROR") as logs:
+            await _sync_profile_to_knowledge_platform(user, get_settings())
+
+        failing_sync.assert_awaited_once()
+        self.assertIn("user-1", logs.output[0])
+
+
+
+class _FakeReviewConnection:
+    def __init__(self, *, current_version: int, version_still_suggested: bool) -> None:
+        self.current_version = current_version
+        self.version_still_suggested = version_still_suggested
+        self.in_transaction = False
+        self.transaction_rolled_back = False
+        self.statements: list[tuple[str, bool]] = []
+
+    def transaction(self):
+        conn = self
+
+        class _Transaction:
+            async def __aenter__(self_inner):
+                conn.in_transaction = True
+
+            async def __aexit__(self_inner, exc_type, exc, tb):
+                conn.in_transaction = False
+                conn.transaction_rolled_back = exc_type is not None
+                return False
+
+        return _Transaction()
+
+    async def fetchval(self, query: str, *args):
+        self.statements.append(("select_for_update", self.in_transaction))
+        return self.current_version
+
+    async def fetchrow(self, query: str, *args):
+        if "UPDATE knowledge_entity_versions" in query:
+            self.statements.append(("update_version", self.in_transaction))
+            if not self.version_still_suggested:
+                return None
+            return {
+                "version_id": args[0], "entity_id": "entity-1", "user_id": "user-1", "version_number": 2,
+                "status": args[1], "source": "manual", "reason": "", "actor_user_id": None,
+                "reviewed_by_user_id": args[2], "agent_name": "", "confidence": 1.0, "evidence": "[]",
+                "previous_content": "{}", "new_content": "{}", "created_at": None, "reviewed_at": None,
+                "review_notes": args[4],
+            }
+        self.statements.append(("save_entity", self.in_transaction))
+        return {
+            "entity_id": args[0], "user_id": args[1], "entity_type": args[2], "canonical_name": args[3],
+            "content": args[4], "source": args[6], "confidence": args[7], "evidence": args[8],
+            "current_version": args[9], "approval_status": args[10], "created_at": None, "updated_at": None,
+        }
+
+
+class PostgresKnowledgeReviewTests(unittest.IsolatedAsyncioTestCase):
+    def _version_and_entity(self):
+        from app.domain import KnowledgeEntityVersion
+
+        version = KnowledgeEntityVersion(
+            id="version-2", entity_id="entity-1", user_id="user-1", version_number=2, status="approved",
+            source="manual", reason="", reviewed_by_user_id="user-1",
+        )
+        entity = KnowledgeEntity(
+            id="entity-1", user_id="user-1", entity_type="project", canonical_name="Payments API",
+            content={"summary": "v2"}, version=2, status="approved",
+        )
+        return version, entity
+
+    async def _review(self, conn):
+        from contextlib import asynccontextmanager
+        from unittest.mock import patch
+
+        from app.knowledge_platform.store import PostgresKnowledgePlatformStore
+
+        @asynccontextmanager
+        async def fake_connection():
+            yield conn
+
+        version, entity = self._version_and_entity()
+        with patch("app.knowledge_platform.store.connection", fake_connection):
+            return await PostgresKnowledgePlatformStore().review_version(version, entity)
+
+    async def test_approval_updates_version_and_entity_in_one_transaction(self) -> None:
+        conn = _FakeReviewConnection(current_version=1, version_still_suggested=True)
+        saved_version, saved_entity = await self._review(conn)
+
+        self.assertEqual(saved_version.status, "approved")
+        self.assertEqual(saved_entity.version, 2)
+        self.assertEqual(
+            conn.statements,
+            [("select_for_update", True), ("update_version", True), ("save_entity", True)],
+        )
+
+    async def test_concurrently_reviewed_change_rolls_back_without_saving_entity(self) -> None:
+        conn = _FakeReviewConnection(current_version=1, version_still_suggested=False)
+        with self.assertRaises(KnowledgeChangeConflictError):
+            await self._review(conn)
+
+        self.assertTrue(conn.transaction_rolled_back)
+        self.assertNotIn("save_entity", [name for name, _ in conn.statements])
+
+    async def test_superseded_approval_is_refused_inside_the_transaction(self) -> None:
+        conn = _FakeReviewConnection(current_version=3, version_still_suggested=True)
+        with self.assertRaisesRegex(KnowledgeChangeConflictError, "superseded"):
+            await self._review(conn)
+
+        self.assertEqual(conn.statements, [("select_for_update", True)])
+        self.assertTrue(conn.transaction_rolled_back)
 
 
 if __name__ == "__main__":

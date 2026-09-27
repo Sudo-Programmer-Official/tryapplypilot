@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import os
+import importlib.util
 import sys
 import types
 import unittest
 from urllib.parse import parse_qs, urlsplit
 from unittest.mock import patch
 
-if "asyncpg" not in sys.modules:
+if "asyncpg" not in sys.modules and importlib.util.find_spec("asyncpg") is None:
     asyncpg_stub = types.ModuleType("asyncpg")
 
     class _UniqueViolationError(Exception):
@@ -19,7 +20,7 @@ if "asyncpg" not in sys.modules:
     asyncpg_stub.connect = None
     sys.modules["asyncpg"] = asyncpg_stub
 
-if "jwt" not in sys.modules:
+if "jwt" not in sys.modules and importlib.util.find_spec("jwt") is None:
     jwt_stub = types.ModuleType("jwt")
 
     class _PyJWTError(Exception):
@@ -31,7 +32,7 @@ if "jwt" not in sys.modules:
     jwt_stub.decode = lambda token, secret, algorithms=None, issuer=None: {"type": "email_provider_state", "sub": "user-1", "provider": "gmail", "jti": "state-1", "exp": 4102444800}
     sys.modules["jwt"] = jwt_stub
 
-if "argon2" not in sys.modules:
+if "argon2" not in sys.modules and importlib.util.find_spec("argon2") is None:
     argon2_stub = types.ModuleType("argon2")
 
     class _PasswordHasher:
@@ -52,7 +53,7 @@ if "argon2" not in sys.modules:
     argon2_exceptions_stub.VerifyMismatchError = _VerifyMismatchError
     sys.modules["argon2.exceptions"] = argon2_exceptions_stub
 
-if "fastapi" not in sys.modules:
+if "fastapi" not in sys.modules and importlib.util.find_spec("fastapi") is None:
     fastapi_stub = types.ModuleType("fastapi")
 
     class _HTTPException(Exception):

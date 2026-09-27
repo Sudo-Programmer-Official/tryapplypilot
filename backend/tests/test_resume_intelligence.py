@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import importlib.util
 import sys
 import tempfile
 import types
 import unittest
 from pathlib import Path
 
-if "asyncpg" not in sys.modules:
+if "asyncpg" not in sys.modules and importlib.util.find_spec("asyncpg") is None:
     asyncpg_stub = types.ModuleType("asyncpg")
 
     class _UniqueViolationError(Exception):
@@ -18,7 +19,7 @@ if "asyncpg" not in sys.modules:
     asyncpg_stub.connect = None
     sys.modules["asyncpg"] = asyncpg_stub
 
-if "fastapi" not in sys.modules:
+if "fastapi" not in sys.modules and importlib.util.find_spec("fastapi") is None:
     fastapi_stub = types.ModuleType("fastapi")
 
     class _HTTPException(Exception):
@@ -92,7 +93,7 @@ if "fastapi" not in sys.modules:
     security_stub.HTTPBearer = _HTTPBearer
     sys.modules["fastapi.security"] = security_stub
 
-if "pypdf" not in sys.modules:
+if "pypdf" not in sys.modules and importlib.util.find_spec("pypdf") is None:
     pypdf_stub = types.ModuleType("pypdf")
 
     class _PdfReader:

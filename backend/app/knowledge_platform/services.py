@@ -20,7 +20,6 @@ from app.domain import (
 
 from .errors import (
     AuditRecorder,
-    KnowledgeChangeConflictError,
     KnowledgeEntityNotFoundError,
     KnowledgeEvidenceError,
     KnowledgePlatformError,
@@ -517,13 +516,9 @@ class KnowledgePlatformService:
         version = await self.store.get_version(version_id)
         if version is None:
             raise KnowledgeEntityNotFoundError("Unknown knowledge change.")
-        if version.status != "suggested":
-            raise KnowledgeChangeConflictError(f"Knowledge change is already {version.status}.")
         entity = await self.store.get_entity(version.entity_id)
         if entity is None:
             raise KnowledgeEntityNotFoundError("Unknown knowledge entity.")
-        if version.version_number <= entity.version:
-            raise KnowledgeChangeConflictError("Knowledge change has been superseded by a newer approved version.")
         now = isoformat(datetime.now(timezone.utc))
         approved_version = replace(
             version,
@@ -532,7 +527,6 @@ class KnowledgePlatformService:
             reviewed_at=now,
             review_notes=review_notes.strip(),
         )
-        await self.store.update_version(approved_version)
         approved_entity = replace(
             entity,
             content=version.new_content,
@@ -543,7 +537,8 @@ class KnowledgePlatformService:
             status="approved",
             updated_at=now,
         )
-        saved_entity = await self.store.save_entity(approved_entity)
+        _, saved_entity = await self.store.review_version(approved_version, approved_entity)
+        assert saved_entity is not None
         await self.audit_recorder(
             event_type="knowledge.change_approved",
             subject_type="knowledge_entity",
@@ -645,8 +640,6 @@ class KnowledgePlatformService:
         version = await self.store.get_version(version_id)
         if version is None:
             raise KnowledgeEntityNotFoundError("Unknown knowledge change.")
-        if version.status != "suggested":
-            raise KnowledgeChangeConflictError(f"Knowledge change is already {version.status}.")
         entity = await self.store.get_entity(version.entity_id)
         if entity is None:
             raise KnowledgeEntityNotFoundError("Unknown knowledge entity.")
@@ -658,9 +651,10 @@ class KnowledgePlatformService:
             reviewed_at=now,
             review_notes=review_notes.strip(),
         )
-        saved_version = await self.store.update_version(rejected_version)
-        if entity.version == 0:
-            await self.store.save_entity(replace(entity, status="rejected", updated_at=now))
+        saved_version, _ = await self.store.review_version(
+            rejected_version,
+            replace(entity, status="rejected", updated_at=now) if entity.version == 0 else None,
+        )
         await self.audit_recorder(
             event_type="knowledge.change_rejected",
             subject_type="knowledge_entity",

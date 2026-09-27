@@ -16,6 +16,7 @@ from app.domain import (
     KnowledgeEvidenceSourceType,
 )
 
+from .errors import KnowledgeChangeConflictError
 from .interfaces import KnowledgePlatformStore
 from .utils import content_search_text, isoformat, json_list, json_object, normalize_name
 
@@ -189,6 +190,21 @@ class InMemoryKnowledgePlatformStore:
         self.versions[version.id] = version
         return version
 
+    async def review_version(
+        self,
+        version: KnowledgeEntityVersion,
+        entity: KnowledgeEntity | None = None,
+    ) -> tuple[KnowledgeEntityVersion, KnowledgeEntity | None]:
+        current = self.versions.get(version.id)
+        if current is None or current.status != "suggested":
+            raise KnowledgeChangeConflictError("Knowledge change is no longer awaiting review.")
+        stored_entity = self.entities.get(version.entity_id)
+        if version.status == "approved" and stored_entity is not None and stored_entity.version >= version.version_number:
+            raise KnowledgeChangeConflictError("Knowledge change has been superseded by a newer approved version.")
+        self.versions[version.id] = version
+        saved_entity = await self.save_entity(entity) if entity is not None else None
+        return version, saved_entity
+
 
 def _row_to_entity(row) -> KnowledgeEntity:
     return KnowledgeEntity(
@@ -357,50 +373,53 @@ class PostgresKnowledgePlatformStore:
 
     async def save_entity(self, entity: KnowledgeEntity) -> KnowledgeEntity:
         async with connection() as conn:
-            row = await conn.fetchrow(
-                """
-                INSERT INTO knowledge_entities (
-                    entity_id,
-                    user_id,
-                    entity_type,
-                    canonical_name,
-                    content,
-                    search_text,
-                    source,
-                    confidence,
-                    evidence,
-                    current_version,
-                    approval_status,
-                    created_at,
-                    updated_at
-                )
-                VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9::jsonb, $10, $11, COALESCE($12::timestamptz, NOW()), COALESCE($13::timestamptz, NOW()))
-                ON CONFLICT (entity_id) DO UPDATE SET
-                    canonical_name = EXCLUDED.canonical_name,
-                    content = EXCLUDED.content,
-                    search_text = EXCLUDED.search_text,
-                    source = EXCLUDED.source,
-                    confidence = EXCLUDED.confidence,
-                    evidence = EXCLUDED.evidence,
-                    current_version = EXCLUDED.current_version,
-                    approval_status = EXCLUDED.approval_status,
-                    updated_at = COALESCE(EXCLUDED.updated_at, NOW())
-                RETURNING *
-                """,
-                entity.id,
-                entity.user_id,
-                entity.entity_type,
-                entity.canonical_name,
-                json.dumps(entity.content),
-                content_search_text(entity.canonical_name, entity.content),
-                entity.source,
-                entity.confidence,
-                json.dumps(entity.evidence_ids),
-                entity.version,
-                entity.status,
-                entity.created_at,
-                entity.updated_at,
+            return await self._save_entity(conn, entity)
+
+    async def _save_entity(self, conn, entity: KnowledgeEntity) -> KnowledgeEntity:
+        row = await conn.fetchrow(
+            """
+            INSERT INTO knowledge_entities (
+                entity_id,
+                user_id,
+                entity_type,
+                canonical_name,
+                content,
+                search_text,
+                source,
+                confidence,
+                evidence,
+                current_version,
+                approval_status,
+                created_at,
+                updated_at
             )
+            VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9::jsonb, $10, $11, COALESCE($12::timestamptz, NOW()), COALESCE($13::timestamptz, NOW()))
+            ON CONFLICT (entity_id) DO UPDATE SET
+                canonical_name = EXCLUDED.canonical_name,
+                content = EXCLUDED.content,
+                search_text = EXCLUDED.search_text,
+                source = EXCLUDED.source,
+                confidence = EXCLUDED.confidence,
+                evidence = EXCLUDED.evidence,
+                current_version = EXCLUDED.current_version,
+                approval_status = EXCLUDED.approval_status,
+                updated_at = COALESCE(EXCLUDED.updated_at, NOW())
+            RETURNING *
+            """,
+            entity.id,
+            entity.user_id,
+            entity.entity_type,
+            entity.canonical_name,
+            json.dumps(entity.content),
+            content_search_text(entity.canonical_name, entity.content),
+            entity.source,
+            entity.confidence,
+            json.dumps(entity.evidence_ids),
+            entity.version,
+            entity.status,
+            entity.created_at,
+            entity.updated_at,
+        )
         assert row is not None
         return _row_to_entity(row)
 
@@ -686,22 +705,45 @@ class PostgresKnowledgePlatformStore:
 
     async def update_version(self, version: KnowledgeEntityVersion) -> KnowledgeEntityVersion:
         async with connection() as conn:
-            row = await conn.fetchrow(
-                """
-                UPDATE knowledge_entity_versions
-                SET
-                    status = $2,
-                    reviewed_by_user_id = $3,
-                    reviewed_at = $4::timestamptz,
-                    review_notes = $5
-                WHERE version_id = $1
-                RETURNING *
-                """,
-                version.id,
-                version.status,
-                version.reviewed_by_user_id,
-                version.reviewed_at,
-                version.review_notes,
-            )
+            row = await self._update_version(conn, version)
         assert row is not None
         return _row_to_version(row)
+
+    async def _update_version(self, conn, version: KnowledgeEntityVersion, *, only_if_suggested: bool = False):
+        return await conn.fetchrow(
+            f"""
+            UPDATE knowledge_entity_versions
+            SET
+                status = $2,
+                reviewed_by_user_id = $3,
+                reviewed_at = $4::timestamptz,
+                review_notes = $5
+            WHERE version_id = $1
+              {"AND status = 'suggested'" if only_if_suggested else ""}
+            RETURNING *
+            """,
+            version.id,
+            version.status,
+            version.reviewed_by_user_id,
+            version.reviewed_at,
+            version.review_notes,
+        )
+
+    async def review_version(
+        self,
+        version: KnowledgeEntityVersion,
+        entity: KnowledgeEntity | None = None,
+    ) -> tuple[KnowledgeEntityVersion, KnowledgeEntity | None]:
+        async with connection() as conn:
+            async with conn.transaction():
+                current_version = await conn.fetchval(
+                    "SELECT current_version FROM knowledge_entities WHERE entity_id = $1 FOR UPDATE",
+                    version.entity_id,
+                )
+                if version.status == "approved" and current_version is not None and int(current_version) >= version.version_number:
+                    raise KnowledgeChangeConflictError("Knowledge change has been superseded by a newer approved version.")
+                row = await self._update_version(conn, version, only_if_suggested=True)
+                if row is None:
+                    raise KnowledgeChangeConflictError("Knowledge change is no longer awaiting review.")
+                saved_entity = await self._save_entity(conn, entity) if entity is not None else None
+        return _row_to_version(row), saved_entity
